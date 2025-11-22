@@ -29,4 +29,8 @@ jobs:
         with:
           package-roots: .
           publish-base: .
-          pnpm-install-args: --frozen-lockfile --prefer-offline
+          # Don't use --frozen-lockfile because:
+          # 1. Chatbots repo may not have pnpm-lock.yaml
+          # 2. The runtime is hydrated from pluxel-template with its own dependencies
+          # 3. Install happens in .pluxel/runtime with dynamically merged package.json
+          pnpm-install-args: --prefer-offline
