@@ -1,0 +1,15 @@
+{
+	"name": "pluxel-plugin-kook",
+	"version": "0.1.0",
+	"type": "module",
+	"files": [
+		"dist",
+		"!**/*.map"
+	],
+	"main": "./src/telegram.ts",
+	"scripts": {
+		"build": "pluxel build"
+	},
+	"peerDependencies": {},
+	"devDependencies": {}
+}

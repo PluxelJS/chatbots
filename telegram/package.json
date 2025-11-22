@@ -1,0 +1,28 @@
+{
+  "name": "pluxel-plugin-telegram",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "!**/*.map"
+  ],
+  "main": "./dist/telegram.mjs",
+  "scripts": {
+    "build": "pluxel build --debug"
+  },
+  "module": "./dist/telegram.mjs",
+  "types": "./dist/telegram.d.mts",
+  "exports": {
+    ".": {
+      "@pluxel/source": "./src/telegram.ts",
+      "default": "./dist/telegram.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/telegram.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

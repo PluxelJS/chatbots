@@ -1,0 +1,29 @@
+name: Release (Pluxel template)
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout chatbots repo
+        uses: actions/checkout@v4
+
+      - name: Setup Pluxel toolchain
+        uses: PluxelJS/template/.github/actions/setup-pluxel@main
+
+      - name: Publish via template action
+        uses: PluxelJS/template/.github/actions/release-plugins@main
+        with:
+          package-roots: .
+          publish-base: .
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
