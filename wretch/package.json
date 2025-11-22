@@ -1,14 +1,34 @@
 {
 	"name": "pluxel-plugin-wretch",
 	"version": "0.1.0",
-	"description": "Pluxel KOOK 插件。",
-	"main": "./src/wretch.ts",
+	"description": "Wretch 插件。",
+	"main": "./dist/wretch.mjs",
+	"files": [
+		"dist",
+		"!**/*.map"
+	],
 	"scripts": {
-		"dev": "bun src/index.js",
-		"new": "bunx pluxel new plugin"
+		"build": "pluxel build",
+		"prepublish": "pluxel build",
+		"publish": "pluxel publish"
 	},
 	"peerDependencies": {},
 	"dependencies": {
 		"wretch": "^3.0.2"
+	},
+	"module": "./dist/wretch.mjs",
+	"types": "./dist/wretch.d.mts",
+	"exports": {
+		".": {
+			"@pluxel/hmr": "./src/wretch.ts",
+			"default": "./dist/wretch.mjs"
+		},
+		"./package.json": "./package.json"
+	},
+	"publishConfig": {
+		"exports": {
+			".": "./dist/wretch.mjs",
+			"./package.json": "./package.json"
+		}
 	}
 }

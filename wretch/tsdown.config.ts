@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-	entry: './src/telegram.ts',
+	entry: './src/wretch.ts',
 	dts: {
 		sourcemap: true,
 	},

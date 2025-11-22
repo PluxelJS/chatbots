@@ -8,13 +8,15 @@
   ],
   "main": "./dist/telegram.mjs",
   "scripts": {
-    "build": "pluxel build --debug"
+    "build": "pluxel build",
+    "prepublish": "pluxel build",
+    "publish": "pluxel publish"
   },
   "module": "./dist/telegram.mjs",
   "types": "./dist/telegram.d.mts",
   "exports": {
     ".": {
-      "@pluxel/source": "./src/telegram.ts",
+      "@pluxel/hmr": "./src/telegram.ts",
       "default": "./dist/telegram.mjs"
     },
     "./package.json": "./package.json"

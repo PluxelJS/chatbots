@@ -1,7 +1,7 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-	entry: './src/telegram.ts',
+	entry: './src/kook.ts',
 	dts: {
 		sourcemap: true,
 	},
@@ -13,5 +13,6 @@ export default defineConfig({
 	clean: true,
 	minify: true,
 	treeshake: true,
+	// 供 pluxel-cli build 覆盖
 	external: [],
 })

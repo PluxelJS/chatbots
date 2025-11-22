@@ -1,15 +1,45 @@
 {
-	"name": "pluxel-plugin-kook",
-	"version": "0.1.0",
-	"type": "module",
-	"files": [
-		"dist",
-		"!**/*.map"
-	],
-	"main": "./src/telegram.ts",
-	"scripts": {
-		"build": "pluxel build"
-	},
-	"peerDependencies": {},
-	"devDependencies": {}
+  "name": "pluxel-plugin-kook",
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@pluxel/hmr": "./src/kook.ts",
+      "default": "./dist/kook.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/kook.mjs",
+  "module": "./dist/kook.mjs",
+  "types": "./dist/kook.d.mts",
+  "files": [
+    "dist",
+    "!**/*.map"
+  ],
+  "scripts": {
+    "build": "pluxel build",
+    "prepublish": "pluxel build",
+    "publish": "pluxel publish"
+  },
+  "devDependencies": {},
+  "peerDependencies": {
+    "pluxel-plugin-wretch": "*"
+  },
+  "optionalDependencies": {
+    "pluxel-plugin-wretch": "*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/kook.mjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "pluxel": {
+    "dependOn": {
+      "required": [
+        "pluxel-plugin-wretch"
+      ],
+      "optional": []
+    }
+  }
 }
