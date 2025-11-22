@@ -8,9 +8,7 @@
   ],
   "main": "./dist/telegram.mjs",
   "scripts": {
-    "build": "pluxel build",
-    "prepublish": "pluxel build",
-    "publish": "pluxel publish"
+    "build": "pluxel build"
   },
   "module": "./dist/telegram.mjs",
   "types": "./dist/telegram.d.mts",

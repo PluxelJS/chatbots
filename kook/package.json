@@ -17,9 +17,7 @@
     "!**/*.map"
   ],
   "scripts": {
-    "build": "pluxel build",
-    "prepublish": "pluxel build",
-    "publish": "pluxel publish"
+    "build": "pluxel build"
   },
   "devDependencies": {},
   "peerDependencies": {
