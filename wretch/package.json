@@ -1,6 +1,6 @@
 {
 	"name": "pluxel-plugin-wretch",
-	"version": "0.1.2",
+	"version": "0.1.4",
 	"description": "Wretch 插件。",
 	"main": "./dist/wretch.mjs",
 	"files": [
