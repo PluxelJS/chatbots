@@ -30,14 +30,15 @@ jobs:
           npm -v
           pnpm -v
 
-      - name: Check npm auth env
+      - name: Debug npm OIDC
         run: |
           echo "ACTIONS_ID_TOKEN_REQUEST_URL=${ACTIONS_ID_TOKEN_REQUEST_URL:+present}"
           echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN=${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+present}"
           echo "NODE_AUTH_TOKEN=${NODE_AUTH_TOKEN:+present}"
-          echo "NPM tokens (NPM_AUTH_TOKEN/NPM_TOKEN/npm_config__authToken)=$( [ -n \"$NPM_AUTH_TOKEN$NPM_TOKEN$npm_config__authToken\" ] && echo present || echo missing )"
-          echo "//registry.npmjs.org/:_authToken from npm config:"
-          npm config get //registry.npmjs.org/:_authToken || true
+          npm config get //registry.npmjs.org/:_authToken || echo "no authToken in config"
+      
+          # 看看 whoami 是否走 auth
+          npm --loglevel verbose whoami || echo "whoami failed"
 
       - name: Publish via template action
         uses: PluxelJS/pluxel-template/.github/actions/release-plugins@main
