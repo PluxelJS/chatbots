@@ -27,6 +27,8 @@
 		"exports": {
 			".": "./dist/wretch.mjs",
 			"./package.json": "./package.json"
-		}
+		},
+		"access": "public",
+		"provenance": true
 	}
 }

@@ -30,7 +30,9 @@
     "exports": {
       ".": "./dist/kook.mjs",
       "./package.json": "./package.json"
-    }
+    },
+    "access": "public",
+    "provenance": true
   },
   "pluxel": {
     "dependOn": {
