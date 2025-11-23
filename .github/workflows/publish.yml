@@ -40,3 +40,28 @@ jobs:
           # 2. The runtime is hydrated from pluxel-template with its own dependencies
           # 3. Install happens in .pluxel/runtime with dynamically merged package.json
           pnpm-install-args: --prefer-offline
+
+      - name: Dump latest npm debug log on failure
+        run: |
+          set -euo pipefail
+      
+          LOG_DIR="$HOME/.npm/_logs"
+      
+          echo "Looking for debug logs in $LOG_DIR"
+          ls -ltr "$LOG_DIR" || echo "no log dir"
+      
+          LAST_LOG="$(ls -t "$LOG_DIR"/*-debug-*.log 2>/dev/null | head -n 1 || true)"
+      
+          if [ -n "$LAST_LOG" ]; then
+            echo "===== BEGIN npm debug log: $LAST_LOG ====="
+            cat "$LAST_LOG"
+            echo "===== END npm debug log ====="
+      
+            echo
+            echo "===== OIDC-related lines (grep oidc / exchange / token) ====="
+            grep -Ei 'oidc|exchange|token' "$LAST_LOG" || echo "no oidc-related lines found"
+            echo "============================================================="
+          else
+            echo "No npm debug log found under $LOG_DIR"
+          fi
+        shell: bash
