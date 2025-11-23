@@ -42,6 +42,7 @@ jobs:
           pnpm-install-args: --prefer-offline
 
       - name: Dump latest npm debug log on failure
+        if: failure()
         run: |
           set -euo pipefail
       
