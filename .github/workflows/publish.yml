@@ -17,7 +17,7 @@ jobs:
       - name: Checkout chatbots repo
         uses: actions/checkout@v4
 
-      - name: Setup Pluxel toolchain
+      - name: Setup toolchain
         uses: PluxelJS/pluxel-template/.github/actions/setup-pluxel@main
         with:
           node-version: 'lts/*'
@@ -39,12 +39,23 @@ jobs:
           echo "//registry.npmjs.org/:_authToken from npm config:"
           npm config get //registry.npmjs.org/:_authToken || true
 
-      - name: Publish via template action
-        uses: PluxelJS/pluxel-template/.github/actions/release-plugins@main
-        with:
-          package-roots: .
-          # Don't use --frozen-lockfile because:
-          # 1. Chatbots repo may not have pnpm-lock.yaml
-          # 2. The runtime is hydrated from pluxel-template with its own dependencies
-          # 3. Install happens in .pluxel/runtime with dynamically merged package.json
-          pnpm-install-args: --prefer-offline
+      - name: Install Pluxel CLI
+        run: pnpm add -g @pluxel/cli@latest
+
+      - name: Install dependencies and build packages
+        run: |
+          set -e
+          for pkg in chatbots/wretch chatbots/kook; do
+            echo "Installing and building $pkg"
+            (cd "$pkg" && pnpm install --no-frozen-lockfile && pnpm run build)
+          done
+
+      - name: Publish packages via npm (OIDC)
+        env:
+          NPM_CONFIG_PROVENANCE: true
+        run: |
+          set -e
+          for pkg in chatbots/wretch chatbots/kook; do
+            echo "Publishing $pkg"
+            (cd "$pkg" && npm publish --access public)
+          done
