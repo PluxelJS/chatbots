@@ -1,4 +1,5 @@
 {
+  "$schema": "https://market.pluxel.dev/schema/package.json",
   "name": "pluxel-plugin-kook",
   "version": "0.1.2",
   "type": "module",
