@@ -45,7 +45,7 @@ jobs:
       - name: Install dependencies and build packages
         run: |
           set -e
-          for pkg in chatbots/wretch chatbots/kook; do
+          for pkg in wretch kook; do
             echo "Installing and building $pkg"
             (cd "$pkg" && pnpm install --no-frozen-lockfile && pnpm run build)
           done
@@ -55,7 +55,7 @@ jobs:
           NPM_CONFIG_PROVENANCE: true
         run: |
           set -e
-          for pkg in chatbots/wretch chatbots/kook; do
+          for pkg in wretch kook; do
             echo "Publishing $pkg"
             (cd "$pkg" && npm publish --access public)
           done
