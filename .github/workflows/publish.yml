@@ -24,11 +24,19 @@ jobs:
           pnpm-version: 'latest'
           bun-version: '1.3.3'
 
+      - name: Check npm auth env
+        run: |
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL=${ACTIONS_ID_TOKEN_REQUEST_URL:+present}"
+          echo "ACTIONS_ID_TOKEN_REQUEST_TOKEN=${ACTIONS_ID_TOKEN_REQUEST_TOKEN:+present}"
+          echo "NODE_AUTH_TOKEN=${NODE_AUTH_TOKEN:+present}"
+          echo "NPM tokens (NPM_AUTH_TOKEN/NPM_TOKEN/npm_config__authToken)=$( [ -n \"$NPM_AUTH_TOKEN$NPM_TOKEN$npm_config__authToken\" ] && echo present || echo missing )"
+          echo "//registry.npmjs.org/:_authToken from npm config:"
+          npm config get //registry.npmjs.org/:_authToken || true
+
       - name: Publish via template action
         uses: PluxelJS/pluxel-template/.github/actions/release-plugins@main
         with:
           package-roots: .
-          publish-base: .
           # Don't use --frozen-lockfile because:
           # 1. Chatbots repo may not have pnpm-lock.yaml
           # 2. The runtime is hydrated from pluxel-template with its own dependencies
