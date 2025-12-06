@@ -1,15 +1,16 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-	entry: './src/wretch.ts',
+	entry: {
+		index: './src/telegram.ts',
+		api: './src/api/index.ts'
+	},
 	dts: {
 		sourcemap: true,
 	},
 	format: ['esm'],
 	env: {},
-	copy: [
-		// 'assets/**'
-	],
+	copy: [],
 	clean: true,
 	minify: true,
 	treeshake: true,

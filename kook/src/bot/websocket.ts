@@ -1,5 +1,11 @@
 import { inflateRawSync, inflateSync } from 'node:zlib'
-import WebSocket, { type RawData } from 'ws'
+import type {
+	ManagedWebSocket,
+	RawData,
+	WebSocketFactory,
+	WebSocketLike,
+} from 'pluxel-plugin-websocket'
+import { WSReadyState } from 'pluxel-plugin-websocket'
 
 /** —— 信令 —— */
 enum Sig {
@@ -129,7 +135,8 @@ export class KookGatewayClient {
 			| 'onDebug'
 		>
 
-	private ws?: WebSocket
+	private ws?: WebSocketLike
+	private wsHandle?: ManagedWebSocket
 	private state: GatewayState = 'idle'
 	private running = false
 	private connecting = false
@@ -166,8 +173,9 @@ export class KookGatewayClient {
 	private resumeAckTimer?: NodeJS.Timeout
 
 	private hbMode: HeartbeatMode
+	private readonly createSocket: WebSocketFactory
 
-	constructor(options: KookGatewayClientOptions) {
+	constructor(options: KookGatewayClientOptions, socketFactory: WebSocketFactory) {
 		this.opt = {
 			compress: options.compress ?? 1, // 性能优先
 			heartbeatMode: options.heartbeatMode ?? 'strict',
@@ -186,6 +194,7 @@ export class KookGatewayClient {
 			onDebug: options.onDebug,
 			persistence: options.persistence,
 		}
+		this.createSocket = socketFactory
 		this.hbMode = this.opt.heartbeatMode
 	}
 
@@ -234,14 +243,15 @@ export class KookGatewayClient {
 		this.emitState('closed', { reason: 'stop()' })
 		this.clearTimers()
 		try {
-			this.ws?.close()
+			this.wsHandle?.close()
 		} catch {}
 		this.ws = undefined
+		this.wsHandle = undefined
 	}
 
 	send(data: any) {
 		const s = this.ws
-		if (!s || s.readyState !== WebSocket.OPEN) throw new Error('WebSocket is not open')
+		if (!s || s.readyState !== WSReadyState.OPEN) throw new Error('WebSocket is not open')
 		s.send(typeof data === 'string' ? data : JSON.stringify(data))
 	}
 
@@ -251,7 +261,7 @@ export class KookGatewayClient {
 			return
 		}
 		try {
-			this.ws?.close()
+			this.wsHandle?.close()
 		} catch {}
 	}
 
@@ -269,7 +279,7 @@ export class KookGatewayClient {
 			return
 		}
 		try {
-			this.ws?.close()
+			this.wsHandle?.close()
 		} catch {}
 	}
 
@@ -353,7 +363,14 @@ export class KookGatewayClient {
 		this.counters.connectAttempts++
 
 		try {
-			const ws = new WebSocket(url, { perMessageDeflate: false })
+			const handle = this.createSocket(url, {
+				clientOptions: { perMessageDeflate: false },
+				description: resumed ? 'kook-gateway-resume' : 'kook-gateway',
+				trackToCaller: true,
+				closeOnStop: true,
+			})
+			const ws = handle.socket
+			this.wsHandle = handle
 			this.ws = ws
 			this.emitState('handshaking', { url })
 
@@ -422,6 +439,7 @@ export class KookGatewayClient {
 			this.connecting = false
 			this.clearTimers()
 			this.ws = undefined
+			this.wsHandle = undefined
 			this.helloResolve = this.helloReject = undefined
 			this.resumeAckResolve = this.resumeAckReject = undefined
 			this.phase = 'awaitingHello'
@@ -505,7 +523,7 @@ export class KookGatewayClient {
 				this.sessionId = undefined
 				if (action?.clear) void this.opt.persistence?.clear?.().catch(() => {})
 				try {
-					this.ws?.close()
+					this.wsHandle?.close()
 				} catch {}
 				return
 			}
@@ -569,7 +587,7 @@ export class KookGatewayClient {
 
 	private sendPing() {
 		const s = this.ws
-		if (!s || s.readyState !== WebSocket.OPEN) return
+		if (!s || s.readyState !== WSReadyState.OPEN) return
 		s.send(JSON.stringify({ s: Sig.PING, sn: this.lastSn }))
 		this.counters.pingSent++
 		this.marks.lastPingAt = Date.now()
@@ -601,12 +619,12 @@ export class KookGatewayClient {
 			}
 			await this.sleep(ms)
 			const s = this.ws
-			if (!s || s.readyState !== WebSocket.OPEN) break
+			if (!s || s.readyState !== WSReadyState.OPEN) break
 			s.send(JSON.stringify({ s: Sig.PING, sn: this.lastSn }))
 			this.debug('probe.ping', { wait: this.opt.pongTimeoutMs })
 		}
 		try {
-			this.ws?.close()
+			this.wsHandle?.close()
 		} catch {}
 	}
 

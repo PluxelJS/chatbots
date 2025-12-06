@@ -1,68 +1,177 @@
 import type { Context } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import { internalWebhook } from '../event-trigger'
-import type { Bots } from '../kook'
+import type { KookChannel } from '../events'
 import type { User } from '../types'
 import { AbstractBot } from './api'
-import { KookGatewayClient } from './websocket'
-import type { KookChannel } from '../events'
+import { createInitialStatus, type KookBotStatus } from './status'
+import { KookGatewayClient, type GatewayState } from './websocket'
 
 export class Bot extends AbstractBot {
-	public selfInfo!: User
+	public selfInfo?: User
 	client?: KookGatewayClient
+	public readonly instanceId: string
+	private status: KookBotStatus
+	private readonly mode: 'gateway' | 'webhook' | 'api'
+	private readonly onStatusChange?: (status: KookBotStatus) => void
+
+	private static seq = 0
 
 	constructor(
-		public http: HttpClient,
-		private bots: Bots,
-		private ctx: Context,
-		private events: KookChannel,
+		public readonly http: HttpClient,
+		private readonly ctx: Context,
+		private readonly events: KookChannel,
+		private readonly websocket: WebSocketPlugin,
+		mode: 'gateway' | 'webhook' | 'api' = 'gateway',
+		onStatusChange?: (status: KookBotStatus) => void,
 	) {
-		super()
-
-		this.start()
-			.then((id) => {
-				this.bots[id] = this
-			})
-			.catch((e) => {
-				ctx.logger.error(e, '机器人启动失败')
-				this.stop().catch()
-			})
+		super(http)
+		this.instanceId = `kook-bot-${++Bot.seq}`
+		this.status = createInitialStatus(this.instanceId)
+		this.mode = mode
+		this.onStatusChange = onStatusChange
 	}
 
-	private async start() {
-		const res = await this.getUserMe()
-		if (res.ok ===false) throw new Error(res.message)
-			this.selfInfo = res.data
-		const client = new KookGatewayClient({
-			compress: 0,
-			getGatewayUrl: async ({ resume, sn, session_id, compress }) => {
-				const gateway = await this.getGateway({ compress })
-				if (gateway.ok === false) throw new Error(gateway.message)
-				const u = new URL(gateway.data.url)
-				if (resume) {
-					u.searchParams.set('resume', '1')
-					u.searchParams.set('sn', String(sn ?? 0))
-					if (session_id) u.searchParams.set('session_id', session_id)
-				}
-				return u.toString()
-			},
-			onEvent: (sn, data) => {
-				/* 你自己的业务处理（已按 SN 有序） */
-				internalWebhook(this.events, this.ctx, this, data)
-			},
-			onError: (e) => this.ctx.logger.error(e),
-			onStateChange: (prev, next, meta) => {
-				this.ctx.logger.info(meta, `[state] ${prev} -> ${next}`) // ← 明确看到每一步
-			},
+	private updateStatus(patch: Partial<KookBotStatus>) {
+		this.status = {
+			...this.status,
+			...patch,
+			updatedAt: Date.now(),
+		}
+		this.onStatusChange?.(this.status)
+	}
+
+	getStatusSnapshot(): KookBotStatus {
+		return {
+			...this.status,
+			gateway: this.client?.getSnapshot() ?? this.status.gateway,
+		}
+	}
+
+	async start(): Promise<string> {
+		this.updateStatus({
+			state: 'fetching_profile',
+			stateMessage: '正在获取机器人资料',
 		})
-		await client.start()
+		const res = await this.getUserMe()
+		if (res.ok === false) {
+			const err = new Error(res.message)
+			this.updateStatus({ state: 'error', lastError: err.message, stateMessage: '获取资料失败' })
+			throw err
+		}
+
+		this.selfInfo = res.data
+		const displayName = res.data.nickname || res.data.username
+		this.updateStatus({
+			botId: res.data.id,
+			username: res.data.username,
+			displayName,
+		})
+
+		if (this.mode === 'api') {
+			this.updateStatus({
+				state: 'api_only',
+				stateMessage: 'API 模式（不连接网关）',
+			})
+			return res.data.id
+		}
+
+		if (this.mode === 'webhook') {
+			this.updateStatus({
+				state: 'webhook',
+				stateMessage: 'Webhook 模式（不连接网关）',
+			})
+			return res.data.id
+		}
+
+		this.updateStatus({
+			state: 'registering_gateway',
+			stateMessage: '等待网关握手',
+		})
+
+		const client = this.createGatewayClient()
 		this.client = client
-		return this.selfInfo.id
+		this.updateStatus({
+			state: 'connecting',
+			stateMessage: '正在连接 KOOK 网关',
+			gateway: client.getSnapshot(),
+		})
+
+		void client.start().catch((error) => {
+			const message = error instanceof Error ? error.message : String(error)
+			this.updateStatus({
+				state: 'error',
+				lastError: message,
+				stateMessage: '网关启动失败',
+			})
+			this.ctx.logger.error(error, 'KOOK 网关启动失败')
+		})
+
+		return res.data.id
+	}
+
+	private createGatewayClient() {
+		return new KookGatewayClient(
+			{
+				compress: 0,
+				getGatewayUrl: async ({ resume, sn, session_id, compress }) => {
+					const gateway = await this.getGateway({ compress })
+					if (gateway.ok === false) throw new Error(gateway.message)
+					const u = new URL(gateway.data.url)
+					if (resume) {
+						u.searchParams.set('resume', '1')
+						u.searchParams.set('sn', String(sn ?? 0))
+						if (session_id) u.searchParams.set('session_id', session_id)
+					}
+					return u.toString()
+				},
+				onEvent: (sn, data) => {
+					this.updateStatus({
+						lastEventAt: Date.now(),
+						lastSequence: sn,
+					})
+					internalWebhook(this.events, this.ctx, this, data)
+				},
+				onError: (e) => {
+					const msg = e instanceof Error ? e.message : String(e)
+					this.updateStatus({ lastError: msg, stateMessage: '网关异常' })
+					this.ctx.logger.error(e)
+				},
+				onStateChange: (prev, next, meta) => {
+					this.updateStatus({
+						state: next,
+						stateMessage: this.describeState(next, meta),
+						gateway: this.client?.getSnapshot(),
+					})
+					this.ctx.logger.info(meta, `[state] ${prev} -> ${next}`)
+				},
+			},
+			(url, options) =>
+				this.websocket.connect(url, {
+					...options,
+					description: 'kook-gateway',
+					trackToCaller: true,
+					clientOptions: { perMessageDeflate: false, ...options?.clientOptions },
+				}),
+		)
+	}
+
+	private describeState(state: GatewayState | KookBotStatus['state'], meta?: Record<string, any>) {
+		if (!meta) return state === 'online' ? '网关已连接' : undefined
+		if (typeof meta.reason === 'string') return meta.reason
+		if (typeof meta.stage === 'string') return `${state}: ${meta.stage}`
+		if (typeof meta.url === 'string') return meta.url
+		if (typeof meta.delay === 'number') return `${state} · 等待 ${meta.delay}ms`
+		if (meta.resumed) return 'resume 模式'
+		if (meta.resume) return '尝试恢复会话'
+		return state === 'online' ? '网关已连接' : undefined
 	}
 
 	async stop() {
+		this.updateStatus({ state: 'stopped', stateMessage: 'stop()' })
 		await this.client?.stop()
-		await this.offline()
+		await this.offline().catch(() => {})
 		this.ctx.logger.info('机器人已停止。')
 	}
 }

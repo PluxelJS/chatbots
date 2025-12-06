@@ -1,7 +1,8 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-	entry: './src/kook.ts',
+	entry: {
+index: './src/kook.ts', api: './src/api/index.ts'},
 	dts: {
 		sourcemap: true,
 	},

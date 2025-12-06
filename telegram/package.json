@@ -1,18 +1,19 @@
 {
   "$schema": "https://market.pluxel.dev/schema/package.json",
-  "name": "pluxel-plugin-kook",
-  "version": "0.1.2",
+  "name": "pluxel-plugin-telegram",
+  "version": "0.1.0",
+  "description": "Telegram bot SDK plugin with polling/webhook support, per-bot config, and EvtChannel events.",
   "type": "module",
   "exports": {
     ".": {
-      "@pluxel/hmr": "./src/kook.ts",
-      "default": "./dist/kook.mjs"
+      "@pluxel/hmr": "./src/telegram.ts",
+      "default": "./dist/telegram.mjs"
     },
     "./package.json": "./package.json"
   },
-  "main": "./dist/kook.mjs",
-  "module": "./dist/kook.mjs",
-  "types": "./dist/kook.d.mts",
+  "main": "./dist/telegram.mjs",
+  "module": "./dist/telegram.mjs",
+  "types": "./dist/telegram.d.mts",
   "files": [
     "dist",
     "!**/*.map"
@@ -21,15 +22,14 @@
     "build": "pluxel build"
   },
   "dependencies": {
-    "type-flag": "^4.0.2"
+    "@grammyjs/types": "^3.6.1"
   },
   "peerDependencies": {
-    "pluxel-plugin-websocket": "workspace:*",
     "pluxel-plugin-wretch": "workspace:*"
   },
   "publishConfig": {
     "exports": {
-      ".": "./dist/kook.mjs",
+      ".": "./dist/telegram.mjs",
       "./package.json": "./package.json"
     },
     "access": "public",
@@ -39,7 +39,6 @@
     "dependOn": {
       "required": [],
       "optional": [
-        "pluxel-plugin-websocket",
         "pluxel-plugin-wretch"
       ]
     }
