@@ -6,6 +6,16 @@ export type HttpMethod = 'GET' | 'POST'
 
 export type JsonLike = Record<string, unknown> | BodyInit | undefined
 
+export type TelegramBinaryLike = ArrayBuffer | ArrayBufferView | Blob
+
+export interface TelegramFileInput {
+	data: TelegramBinaryLike
+	filename?: string
+	contentType?: string
+}
+
+export type TelegramInputFile = string | TelegramBinaryLike | TelegramFileInput
+
 export type Ok<T> = { ok: true; data: T }
 export type Err = { ok: false; code: number; message: string }
 export type Result<T> = Ok<T> | Err
@@ -25,7 +35,7 @@ export type TelegramRequest = <T>(
 
 /* ------------------------ Derived API types ------------------------ */
 
-export type TgInputFile = unknown
+export type TgInputFile = TelegramInputFile
 
 export type Methods = ApiMethods<TgInputFile>
 export type MethodArgs<K extends keyof Methods> = Parameters<Methods[K]>[0]

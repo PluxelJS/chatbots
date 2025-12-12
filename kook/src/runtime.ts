@@ -3,15 +3,15 @@ import type { Config } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import { middlewares, WretchPlugin } from 'pluxel-plugin-wretch'
 import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
-import { BotManager, type KookBotPublic } from '../bot-manager'
-import { KookBotRegistry, type CreateBotInput, type UpdateBotInput } from './bot-registry'
-import { createCommandBus } from '../cmd'
-import { createCommandKit } from '../cmd/kit'
-import type { MessageSession } from '../types'
-import type { KookConfigType } from '../config'
-import { KOOKBotRpc } from './rpc'
-import { KookSseBridge, type KookSnapshot } from './sse'
-import type { KookChannel } from '../events'
+import { BotManager, type KookBotPublic } from './bot-manager'
+import { KookBotRegistry, type CreateBotInput, type UpdateBotInput } from './runtime/bot-registry'
+import { createCommandBus } from './cmd'
+import { createCommandKit } from './cmd/kit'
+import type { MessageSession } from './types'
+import type { KookConfigType } from './config'
+import { KOOKBotRpc } from './runtime/rpc'
+import { KookSseBridge, type KookSnapshot } from './runtime/sse'
+import type { KookChannel } from './events'
 
 type CMDCTX = MessageSession
 
@@ -27,8 +27,8 @@ export class KookRuntime {
 	private ctx!: Context
 	private config!: Config<KookConfigType>
 	private repo!: KookBotRegistry
-	private manager!: BotManager
-	private events!: KookChannel
+	public manager!: BotManager
+	public events!: KookChannel
 	private sseBridge: KookSseBridge | null = null
 	private disposeSse: (() => void) | null = null
 
@@ -53,6 +53,7 @@ export class KookRuntime {
 		this.registerRpc()
 		this.registerUi()
 		this.registerSse()
+		await this.autoConnectBots()
 	}
 
 	async teardown() {
@@ -150,6 +151,21 @@ export class KookRuntime {
 		this.ctx.extensionService.register({
 			entryPath: './ui/index.tsx',
 		})
+	}
+
+	private async autoConnectBots() {
+		if (this.config.autoConnect === false) return
+		const bots = this.repo.list(128)
+		if (bots.length === 0) return
+		await Promise.allSettled(
+			bots.map(async (b) => {
+				try {
+					await this.manager.connectBot(b.id)
+				} catch (e) {
+					this.ctx.logger.warn(e, `KOOK autoConnect failed for ${b.id}`)
+				}
+			}),
+		)
 	}
 }
 

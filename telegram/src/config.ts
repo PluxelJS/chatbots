@@ -12,6 +12,11 @@ export const TelegramConfig = v.object({
 		f.formMeta({ label: '自动同步指令', description: '启动时自动将注册的指令同步到 Telegram' }),
 		f.booleanMeta({ variant: 'switch' }),
 	),
+	autoConnect: v.pipe(
+		v.optional(v.boolean(), true),
+		f.formMeta({ label: '启动时自动连接已保存 Bot', description: '开启后会在 Telegram 插件启动时自动连接 registry 中所有 Bot' }),
+		f.booleanMeta({ variant: 'switch' }),
+	),
 })
 
 export type TelegramConfigType = typeof TelegramConfig

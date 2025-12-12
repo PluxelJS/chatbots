@@ -11,6 +11,8 @@ import type {
 	SendMessageOptions,
 	TelegramApi,
 	TelegramApiOptions,
+	TelegramBinaryLike,
+	TelegramInputFile,
 	TelegramRequest,
 } from './types'
 
@@ -72,12 +74,16 @@ function buildTelegramApi(request: TelegramRequest): TelegramApi {
 			request<R<'deleteMessage'>>('POST', 'deleteMessage', { chat_id: chatId, message_id: messageId }),
 
 		/** 发送照片 */
-		sendPhoto: (chatId: P<'sendPhoto'>['chat_id'], photo: P<'sendPhoto'>['photo'], options?: Omit<P<'sendPhoto'>, 'chat_id' | 'photo'>): Promise<Result<R<'sendPhoto'>>> =>
-			request<R<'sendPhoto'>>('POST', 'sendPhoto', { chat_id: chatId, photo, ...options }),
+		sendPhoto: (chatId: P<'sendPhoto'>['chat_id'], photo: P<'sendPhoto'>['photo'], options?: Omit<P<'sendPhoto'>, 'chat_id' | 'photo'>): Promise<Result<R<'sendPhoto'>>> => {
+			const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
+			return request<R<'sendPhoto'>>('POST', 'sendPhoto', buildInputFilePayload('photo', photo, payload))
+		},
 
 		/** 发送文档 */
-		sendDocument: (chatId: P<'sendDocument'>['chat_id'], document: P<'sendDocument'>['document'], options?: Omit<P<'sendDocument'>, 'chat_id' | 'document'>): Promise<Result<R<'sendDocument'>>> =>
-			request<R<'sendDocument'>>('POST', 'sendDocument', { chat_id: chatId, document, ...options }),
+		sendDocument: (chatId: P<'sendDocument'>['chat_id'], document: P<'sendDocument'>['document'], options?: Omit<P<'sendDocument'>, 'chat_id' | 'document'>): Promise<Result<R<'sendDocument'>>> => {
+			const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
+			return request<R<'sendDocument'>>('POST', 'sendDocument', buildInputFilePayload('document', document, payload))
+		},
 
 		/** 回复回调查询 */
 		answerCallbackQuery: (
@@ -367,11 +373,8 @@ function makeChatSession(
 		})
 
 	const sendPhoto: ChatSession['sendPhoto'] = async (photo, options) => {
-		const res = await request<MethodReturn<'sendPhoto'>>('POST', 'sendPhoto', {
-			chat_id: chatId,
-			photo,
-			...options,
-		})
+		const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
+		const res = await request<MethodReturn<'sendPhoto'>>('POST', 'sendPhoto', buildInputFilePayload('photo', photo, payload))
 		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
 			trackedId = (res.data as any).message_id
 		}
@@ -379,11 +382,8 @@ function makeChatSession(
 	}
 
 	const sendDocument: ChatSession['sendDocument'] = async (document, options) => {
-		const res = await request<MethodReturn<'sendDocument'>>('POST', 'sendDocument', {
-			chat_id: chatId,
-			document,
-			...options,
-		})
+		const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
+		const res = await request<MethodReturn<'sendDocument'>>('POST', 'sendDocument', buildInputFilePayload('document', document, payload))
 		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
 			trackedId = (res.data as any).message_id
 		}
@@ -501,6 +501,91 @@ function scheduleDelete(task: () => Promise<unknown>, ttlMs: number) {
 		void task().catch(() => {})
 	}, ttlMs)
 	;(timer as any).unref?.()
+}
+
+type NormalizedInputFile =
+	| { kind: 'text'; value: string }
+	| { kind: 'binary'; value: Blob; filename?: string }
+
+function buildInputFilePayload(fieldName: string, file: TelegramInputFile, payload: Record<string, unknown>): JsonLike {
+	const normalized = normalizeInputFile(file)
+	if (normalized.kind === 'text') {
+		return {
+			...payload,
+			[fieldName]: normalized.value,
+		}
+	}
+
+	const form = new FormData()
+	for (const [key, value] of Object.entries(payload)) {
+		appendFormField(form, key, value)
+	}
+	form.append(fieldName, normalized.value, normalized.filename)
+	return form
+}
+
+function normalizeInputFile(file: TelegramInputFile): NormalizedInputFile {
+	if (typeof file === 'string') {
+		return { kind: 'text', value: file }
+	}
+
+	if (isBinaryLike(file)) {
+		return { kind: 'binary', value: toBlob(file) }
+	}
+
+	if (isTelegramFileWrapper(file)) {
+		return {
+			kind: 'binary',
+			value: toBlob(file.data, file.contentType),
+			filename: file.filename,
+		}
+	}
+
+	throw new TypeError('Unsupported input file value for Telegram API')
+}
+
+function appendFormField(form: FormData, key: string, value: unknown) {
+	if (value === undefined || value === null) return
+	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+		form.append(key, String(value))
+		return
+	}
+	if (value instanceof Blob) {
+		form.append(key, value)
+		return
+	}
+	form.append(key, JSON.stringify(value))
+}
+
+function isBinaryLike(value: unknown): value is TelegramBinaryLike {
+	if (typeof Blob !== 'undefined' && value instanceof Blob) return true
+	if (value instanceof ArrayBuffer) return true
+	if (ArrayBuffer.isView(value)) return true
+	return false
+}
+
+function isTelegramFileWrapper(value: unknown): value is { data: TelegramBinaryLike; filename?: string; contentType?: string } {
+	if (typeof value !== 'object' || value === null) return false
+	if (!('data' in value)) return false
+	const data = (value as Record<string, unknown>).data
+	return isBinaryLike(data)
+}
+
+function toBlob(data: TelegramBinaryLike, contentType?: string): Blob {
+	if (typeof Blob === 'undefined') {
+		throw new TypeError('Blob is unavailable in this environment')
+	}
+	if (data instanceof Blob) {
+		if (!contentType || data.type === contentType) return data
+		return data.slice(0, data.size, contentType)
+	}
+	if (data instanceof ArrayBuffer) {
+		return new Blob([data], { type: contentType })
+	}
+	if (ArrayBuffer.isView(data)) {
+		return new Blob([data], { type: contentType })
+	}
+	throw new TypeError('Unsupported binary data')
 }
 
 export * from './types'

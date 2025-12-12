@@ -2,11 +2,13 @@ import { BasePlugin, Config, Plugin } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import { KookConfig, type KookConfigType } from './config'
-import { KookRuntime, type KookSnapshot } from './runtime/runtime'
+import { KookRuntime, type KookSnapshot } from './runtime'
+import { BotManager } from './bot-manager'
 import type { KOOKBotRpc } from './runtime/rpc'
 
 export * from './types'
 export type { KookSnapshot }
+export { BotManager }
 
 @Plugin({ name: 'KOOK' })
 export class KOOK extends BasePlugin {
@@ -37,6 +39,14 @@ export class KOOK extends BasePlugin {
 
 	getOverview() {
 		return this.runtime.getOverview()
+	}
+
+	get manager() {
+		return this.runtime.manager
+	}
+
+	get events() {
+		return this.runtime.events
 	}
 
 	getBotStatuses() {

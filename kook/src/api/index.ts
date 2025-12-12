@@ -1,5 +1,6 @@
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import type * as Kook from '../types'
+import { MessageType } from '../types'
 import type {
   HttpMethod,
   IBaseAPIResponse,
@@ -320,7 +321,19 @@ function makeConversation(
 
   const upsert: KookConversation['upsert'] = async (content, options) => {
     if (trackedId) {
-      const res = await edit(trackedId, content, options)
+      const editOptions = options
+        ? {
+            type:
+              options.type === MessageType.kmarkdown || options.type === MessageType.card
+                ? options.type
+                : undefined,
+            quote: options.quote,
+            template_id: options.template_id,
+            temp_target_id: options.temp_target_id,
+          }
+        : undefined
+
+      const res = await edit(trackedId, content, editOptions)
       if (res.ok) return res
       trackedId = undefined
     }
@@ -366,8 +379,8 @@ function makeConversation(
   }
 }
 
-function missingTracked() {
-  return { ok: false, code: -404, message: 'No tracked message to operate on' } as Result<never>
+function missingTracked(): Promise<Result<void>> {
+  return Promise.resolve({ ok: false, code: -404, message: 'No tracked message to operate on' } as Result<void>)
 }
 
 function scheduleDelete(task: () => Promise<unknown>, ttlMs: number) {

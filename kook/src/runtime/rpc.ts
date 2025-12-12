@@ -1,6 +1,6 @@
 import { RpcTarget } from '@pluxel/hmr/capnweb'
 import type { CreateBotInput, UpdateBotInput } from './bot-registry'
-import type { KookRuntime } from './runtime'
+import type { KookRuntime } from '../runtime'
 
 export class KOOKBotRpc extends RpcTarget {
 	constructor(private readonly runtime: KookRuntime) {

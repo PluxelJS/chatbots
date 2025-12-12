@@ -60,10 +60,12 @@ export class TelegramRuntime {
 		this.config = config
 
 		await this.setupRepoAndManager()
+		this.commands.onChange(() => this.syncCommandsToActiveBots())
 		this.registerPipelines()
 		this.registerRpc()
 		this.registerUi()
 		this.registerSse()
+		await this.autoConnectBots()
 	}
 
 	async teardown() {
@@ -109,14 +111,7 @@ export class TelegramRuntime {
 
 	async connectBot(id: string) {
 		const result = await this.manager.connectBot(id)
-		if (this.config.syncCommands) {
-			const bot = this.manager.getBot(id)
-			if (bot) {
-				await this.commands.syncCommands(bot).catch((e) => {
-					this.ctx.logger.warn(e, 'telegram: 同步指令菜单失败')
-				})
-			}
-		}
+		await this.syncCommandsToActiveBots()
 		return result
 	}
 
@@ -141,7 +136,7 @@ export class TelegramRuntime {
 	private registerPipelines() {
 		// 消息处理流水线 - 同步部分处理指令识别，异步部分单独处理
 		this.events.message.on((session, next) => {
-			const text = session.message.text
+			const text = (session.message.text ?? session.message.caption ?? '').trim()
 			if (!text) return next(session)
 
 			// 检查是否在对话中 - 异步处理
@@ -178,6 +173,38 @@ export class TelegramRuntime {
 		this.ctx.extensionService.register({
 			entryPath: './ui/index.tsx',
 		})
+	}
+
+	private async autoConnectBots() {
+		if (this.config.autoConnect === false) return
+		const bots = this.repo.list(128)
+		if (bots.length === 0) return
+		await Promise.allSettled(
+			bots.map(async (b) => {
+				try {
+					await this.manager.connectBot(b.id)
+				} catch (e) {
+					this.ctx.logger.warn(e, `telegram autoConnect failed for ${b.id}`)
+				}
+			}),
+		)
+		await this.syncCommandsToActiveBots()
+	}
+
+	private async syncCommandsToActiveBots() {
+		if (!this.config.syncCommands || !this.manager) return
+		const bots = this.manager.getConnectedBots()
+		if (bots.length === 0) return
+
+		await Promise.allSettled(
+			bots.map(async (bot) => {
+				try {
+					await this.commands.syncCommands(bot)
+				} catch (e) {
+					this.ctx.logger.warn(e, 'telegram: 同步指令菜单失败')
+				}
+			}),
+		)
 	}
 
 	private registerSse() {

@@ -32,6 +32,11 @@ export const common = v.object({
 })
 export const KookConfig = v.object({
 	common,
+	autoConnect: v.pipe(
+		v.optional(v.boolean(), true),
+		f.formMeta({ label: '启动时自动连接已保存 Bot', description: '开启后会在 KOOK 插件启动时自动连接 registry 中所有 Bot' }),
+		f.booleanMeta({ variant: 'switch' }),
+	),
 })
 
 export type KookConfigType = typeof KookConfig

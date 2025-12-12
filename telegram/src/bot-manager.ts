@@ -64,6 +64,10 @@ export class TelegramBotManager {
 		return this.botsById.values().next().value
 	}
 
+	getConnectedBots() {
+		return Array.from(this.botsById.values())
+	}
+
 	registerSseChannel(channel: SseChannel, limit = 64) {
 		const sendSnapshot = () => channel.emit('cursor', { type: 'cursor', ...this.getCursorPayload() })
 		channel.emit('ready', { type: 'ready', now: Date.now(), ...this.getCursorPayload() })

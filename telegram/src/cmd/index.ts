@@ -35,6 +35,8 @@ export interface CommandRegistry {
 	register(def: CommandDef): () => void
 	/** 批量注册 */
 	registerAll(defs: CommandDef[]): () => void
+	/** 监听指令变更（用于自动同步菜单） */
+	onChange(listener: (commands: BotCommand[]) => Awaitable<void>): void
 	/** 获取所有指令（用于 setMyCommands） */
 	getCommands(): BotCommand[]
 	/** 分发指令 */
@@ -45,6 +47,19 @@ export interface CommandRegistry {
 
 export function createCommandRegistry(): CommandRegistry {
 	const commands = new Map<string, RegisteredCommand>()
+	let onChange: ((commands: BotCommand[]) => Awaitable<void>) | null = null
+
+	const snapshot = () =>
+		Array.from(commands.values()).map((c) => ({
+			command: c.command,
+			description: c.description,
+		}))
+
+	const notifyChange = () => {
+		if (!onChange) return
+		const current = snapshot()
+		void Promise.resolve(onChange(current)).catch(() => {})
+	}
 
 	return {
 		register(def: CommandDef) {
@@ -54,9 +69,11 @@ export function createCommandRegistry(): CommandRegistry {
 				command: cmd,
 				unregister: () => {
 					commands.delete(cmd)
+					notifyChange()
 				},
 			}
 			commands.set(cmd, registered)
+			notifyChange()
 			return registered.unregister
 		},
 
@@ -65,11 +82,13 @@ export function createCommandRegistry(): CommandRegistry {
 			return () => unregisters.forEach((fn) => fn())
 		},
 
+		onChange(listener: (commands: BotCommand[]) => Awaitable<void>) {
+			onChange = listener
+			notifyChange()
+		},
+
 		getCommands(): BotCommand[] {
-			return Array.from(commands.values()).map((c) => ({
-				command: c.command,
-				description: c.description,
-			}))
+			return snapshot()
 		},
 
 		async dispatch(command: string, args: string, session: MessageSession) {
@@ -81,7 +100,11 @@ export function createCommandRegistry(): CommandRegistry {
 		async syncCommands(bot: Bot) {
 			const cmds = this.getCommands()
 			if (cmds.length === 0) return
-			await bot.setMyCommands({ commands: cmds })
+			const res = await bot.setMyCommands({ commands: cmds })
+			if (!res.ok) {
+				const msg = res.message ?? `code ${res.code ?? 'unknown'}`
+				throw new Error(`setMyCommands failed: ${msg}`)
+			}
 		},
 	}
 }
