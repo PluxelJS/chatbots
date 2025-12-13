@@ -30,8 +30,8 @@ export interface CommandKit<C> {
 }
 
 export function createCommandKit<C>(bus: {
- 	register: (cmd: Command<any, any, C, any>) => any
- 	list: () => Command<any, any, C, any>[]
+	register: (cmd: Command<any, any, C, any>) => any
+	list: () => Command<any, any, C, any>[]
 }): CommandKit<C> {
 	type AnyCmd = Command<any, any, C, any>
 	type Meta = { desc?: string; group?: string }
@@ -61,7 +61,10 @@ export function createCommandKit<C>(bus: {
 		return next
 	}
 
-	const wrap = <P extends string, F extends Flags, R>(full: CommandSpec<P, F, C, R>, local: LocalMeta<R>): Command<P, F, C, R> => {
+	const wrap = <P extends string, F extends Flags, R>(
+		full: CommandSpec<P, F, C, R>,
+		local: LocalMeta<R>,
+	): Command<P, F, C, R> => {
 		const origin = full.action
 		const chain = composeChain(local.mws, (argv, ctx) => origin(argv as any, ctx))
 		const cmd = defineCommand<P, F, C, R>({
@@ -77,10 +80,9 @@ export function createCommandKit<C>(bus: {
 	const kit: CommandKit<C> = {
 		reg<P extends string, F extends Flags = {}, R = unknown>(pattern: P, flags?: F, flagOptions?: TypeFlagOptions) {
 			const group = groupStack[groupStack.length - 1]
-			const pat = (group ? `${group} ${pattern}` : pattern) as P
 
 			const base = {
-				pattern: pat,
+				pattern,
 				flags: (flags ?? ({} as F)) as F,
 				flagOptions,
 				aliases: [] as string[],
@@ -132,16 +134,19 @@ export function createCommandKit<C>(bus: {
 		},
 
 		help() {
-		const lines: string[] = []
-		for (const [group, cmds] of buckets) {
-			if (cmds.length === 0) continue
-			if (group) lines.push(`\n# ${group}`)
-			for (const c of cmds) {
-				const m = meta.get(c) || {}
-				lines.push(`- ${c.toUsage()}${m.desc ? ` — ${m.desc}` : ''}`)
+			const lines: string[] = []
+			for (const [group, cmds] of buckets) {
+				if (cmds.length === 0) continue
+				if (group) {
+					if (lines.length) lines.push('')
+					lines.push(`# ${group}`)
+				}
+				for (const c of cmds) {
+					const m = meta.get(c) || {}
+					lines.push(`- ${c.toUsage()}${m.desc ? ` — ${m.desc}` : ''}`)
+				}
 			}
-		}
-		return lines.join('\n')
+			return lines.join('\n')
 		},
 	}
 

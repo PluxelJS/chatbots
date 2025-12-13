@@ -1,18 +1,19 @@
-import { BasePlugin, Config, Plugin } from '@pluxel/hmr'
+import { BasePlugin, Plugin } from '@pluxel/core'
+import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import { KookConfig, type KookConfigType } from './config'
 import { KookRuntime, type KookSnapshot } from './runtime'
 import { BotManager } from './bot-manager'
-import type { KOOKBotRpc } from './runtime/rpc'
+import { KOOKBotRpc } from './runtime/rpc'
 
 export * from './types'
 export type { KookSnapshot }
 export { BotManager }
 
-@Plugin({ name: 'KOOK' })
+@Plugin({ name: 'KOOK', type: 'service' })
 export class KOOK extends BasePlugin {
-	@Config(KookConfig) private config!: Config<KookConfigType>
+	@UseConfig(KookConfig) private config!: InferConfig<KookConfigType>
 
 	public readonly runtime: KookRuntime
 
@@ -21,11 +22,16 @@ export class KOOK extends BasePlugin {
 		this.runtime = new KookRuntime(wretch, websocket)
 	}
 
-	async init(_abort: AbortSignal): Promise<void> {
+	override async init(): Promise<void> {
 		await this.runtime.bootstrap(this.ctx, this.config)
+		this.ctx.extensionService.register({ entryPath: './ui/index.tsx' })
+		this.ctx.rpc.registerExtension(() => new KOOKBotRpc(this.runtime))
+		if (this.ctx.sse) {
+			this.ctx.sse.registerExtension(() => this.runtime.createSseHandler())
+		}
 	}
 
-	async stop(_abort: AbortSignal): Promise<void> {
+	override async stop(): Promise<void> {
 		await this.runtime.teardown()
 	}
 

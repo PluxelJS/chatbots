@@ -50,7 +50,7 @@ export type KookBotRecord = SecretFields &
 		id: string
 	}
 
-export type KookBotPublic = Omit<KookBotRecord, keyof SecretFields>
+export type KookBotPublic = Omit<KookBotRecord, 'tokenCiphertext' | 'tokenIv' | 'tokenTag'>
 
 export type CreateBotInput = {
 	token: string
@@ -123,6 +123,8 @@ export class KookBotRegistry {
 			persistence: await this.ctx.pluginData.persistenceForCollection<KookBotRecord>(this.collectionName),
 			indices: [createIndex('mode'), createIndex('state'), createIndex('updatedAt')],
 		})
+		// 等待持久化数据加载完成，避免启动时 list() 为空导致 autoConnect 失效
+		await this.collection.isReady()
 	}
 
 	async create(input: CreateBotInput): Promise<KookBotPublic> {

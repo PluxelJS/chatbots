@@ -1,8 +1,9 @@
-import { BasePlugin, Config, Plugin } from '@pluxel/hmr'
+import { BasePlugin, Plugin } from '@pluxel/core'
+import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { TelegramConfig, type TelegramConfigType } from './config'
 import { TelegramRuntime, type TelegramSnapshot } from './runtime/runtime'
-import type { TelegramBotRpc } from './runtime/rpc'
+import { TelegramBotRpc } from './runtime/rpc'
 
 export * from './types'
 export * from './bot'
@@ -14,7 +15,7 @@ export type { TelegramSnapshot }
 
 @Plugin({ name: 'Telegram', type: 'service' })
 export class TelegramPlugin extends BasePlugin {
-	@Config(TelegramConfig) private config!: Config<TelegramConfigType>
+	@UseConfig(TelegramConfig) private config!: InferConfig<TelegramConfigType>
 
 	public readonly runtime: TelegramRuntime
 
@@ -23,11 +24,16 @@ export class TelegramPlugin extends BasePlugin {
 		this.runtime = new TelegramRuntime(wretch)
 	}
 
-	async init(_abort: AbortSignal): Promise<void> {
+	override async init(): Promise<void> {
 		await this.runtime.bootstrap(this.ctx, this.config)
+		this.ctx.extensionService.register({ entryPath: './ui/index.tsx' })
+		this.ctx.rpc.registerExtension(() => new TelegramBotRpc(this.runtime))
+		if (this.ctx.sse) {
+			this.ctx.sse.registerExtension(() => this.runtime.createSseHandler())
+		}
 	}
 
-	async stop(_abort: AbortSignal): Promise<void> {
+	override async stop(): Promise<void> {
 		await this.runtime.teardown()
 	}
 

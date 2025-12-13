@@ -16,10 +16,21 @@ import {
 	Tooltip,
 } from '@mantine/core'
 import { IconPlugConnected, IconRefresh, IconRobot, IconRocket, IconTrash } from '@tabler/icons-react'
-import { rpc, rpcErrorMessage } from '@pluxel/hmr/web'
-import type { ExtensionContext } from '@pluxel/hmr/web'
+import { hmrWebClient, rpcErrorMessage, type GlobalExtensionContext, type PluginExtensionContext } from '@pluxel/hmr/web'
 import type { BotMode, BotStatus, Overview, Snapshot } from './types'
 import { useKookSse, useKookSnapshot } from './hooks'
+import type { CreateBotInput, UpdateBotInput } from '../runtime/bot-registry'
+
+type RpcClient = {
+	snapshot: () => Promise<Snapshot>
+	createBot: (input: CreateBotInput) => Promise<{ id: string }>
+	connectBot: (id: string) => Promise<unknown>
+	disconnectBot: (id: string) => Promise<unknown>
+	deleteBot: (id: string) => Promise<unknown>
+	updateBot: (id: string, patch: UpdateBotInput) => Promise<unknown>
+}
+
+const rpc = (): RpcClient => (hmrWebClient.rpc as any).KOOK as RpcClient
 
 const statusColors: Record<string, string> = {
 	online: 'teal',
@@ -51,7 +62,7 @@ export const humanState = (state: BotStatus['state']) => statusLabels[state] ?? 
 export const formatTime = (value?: number) => (value ? new Date(value).toLocaleTimeString() : '—')
 const modeColors: Record<BotMode, string> = { gateway: 'indigo', webhook: 'grape', api: 'gray' }
 
-export function HeaderIndicator({ ctx }: { ctx: ExtensionContext }) {
+export function HeaderIndicator({ ctx }: { ctx: GlobalExtensionContext }) {
 	const [overview, setOverview] = useState<Overview | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [loading, setLoading] = useState(true)
@@ -62,7 +73,7 @@ export function HeaderIndicator({ ctx }: { ctx: ExtensionContext }) {
 		const bootstrap = async () => {
 			setLoading(true)
 			try {
-				const snapshot = await rpc().KOOK.snapshot()
+				const snapshot = await rpc().snapshot()
 				if (!mounted) return
 				setOverview(snapshot.overview)
 				setError(null)
@@ -75,7 +86,7 @@ export function HeaderIndicator({ ctx }: { ctx: ExtensionContext }) {
 		}
 		void bootstrap()
 
-		const off = sse.KOOK.on((msg) => {
+		const off = sse.ns('KOOK').on((msg) => {
 			const payload = msg.payload as Snapshot | undefined
 			if (payload?.overview) {
 				setOverview(payload.overview)
@@ -98,7 +109,7 @@ export function HeaderIndicator({ ctx }: { ctx: ExtensionContext }) {
 	const label = error ? error : `${online}/${total || configured} 连接`
 
 	return (
-		<Tooltip label={error ?? `${ctx.pluginName} 状态监控`}>
+		<Tooltip label={error ?? 'KOOK 状态监控'}>
 			<Badge
 				variant="light"
 				color={color}
@@ -273,7 +284,7 @@ export function BotCard({
 	)
 }
 
-export function AddBotForm({ onCreate }: { onCreate: (input: Parameters<ReturnType<typeof rpc>['KOOK']['createBot']>[0]) => Promise<void> }) {
+export function AddBotForm({ onCreate }: { onCreate: (input: CreateBotInput) => Promise<void> }) {
 	const [token, setToken] = useState('')
 	const [mode, setMode] = useState<BotMode>('gateway')
 	const [verifyToken, setVerifyToken] = useState('')
@@ -351,7 +362,7 @@ export function AddBotForm({ onCreate }: { onCreate: (input: Parameters<ReturnTy
 	)
 }
 
-export function SummaryPanel({ ctx }: { ctx: ExtensionContext }) {
+export function SummaryPanel({ ctx }: { ctx: PluginExtensionContext }) {
 	const { snapshot, loading, error, refresh } = useKookSnapshot()
 	const bots = (snapshot?.bots ?? []).slice(0, 3)
 	const overview = snapshot?.overview
@@ -428,7 +439,7 @@ export function SummaryPanel({ ctx }: { ctx: ExtensionContext }) {
 	)
 }
 
-export function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
+export function StatusPanel({ ctx }: { ctx: PluginExtensionContext }) {
 	const { snapshot, loading, error, refresh, setError } = useKookSnapshot()
 	const [loadingId, setLoadingId] = useState<string | null>(null)
 	const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -437,16 +448,16 @@ export function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	const bots = snapshot?.bots ?? []
 	const overview = snapshot?.overview
 
-	const handleCreate = async (input: Parameters<ReturnType<typeof rpc>['KOOK']['createBot']>[0]) => {
-		const created = await rpc().KOOK.createBot(input)
-		await rpc().KOOK.connectBot(created.id).catch(() => {})
+	const handleCreate = async (input: CreateBotInput) => {
+		const created = await rpc().createBot(input)
+		await rpc().connectBot(created.id).catch(() => {})
 		await refresh()
 	}
 
 	const handleConnect = async (bot: BotStatus) => {
 		setLoadingId(bot.id)
 		try {
-			await rpc().KOOK.connectBot(bot.id)
+			await rpc().connectBot(bot.id)
 		} catch (err) {
 			setError(rpcErrorMessage(err, '连接失败'))
 		} finally {
@@ -457,7 +468,7 @@ export function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	const handleDisconnect = async (bot: BotStatus) => {
 		setLoadingId(bot.id)
 		try {
-			await rpc().KOOK.disconnectBot(bot.id)
+			await rpc().disconnectBot(bot.id)
 		} catch (err) {
 			setError(rpcErrorMessage(err, '断开失败'))
 		} finally {
@@ -468,7 +479,7 @@ export function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	const handleDelete = async (bot: BotStatus) => {
 		setDeletingId(bot.id)
 		try {
-			await rpc().KOOK.deleteBot(bot.id)
+			await rpc().deleteBot(bot.id)
 		} catch (err) {
 			setError(rpcErrorMessage(err, '删除失败'))
 		} finally {
@@ -482,7 +493,7 @@ export function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	) => {
 		setUpdatingId(bot.id)
 		try {
-			await rpc().KOOK.updateBot(bot.id, patch)
+			await rpc().updateBot(bot.id, patch)
 			await refresh()
 		} catch (err) {
 			setError(rpcErrorMessage(err, '更新失败'))

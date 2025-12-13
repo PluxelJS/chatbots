@@ -9,7 +9,6 @@ import { createCommandBus } from './cmd'
 import { createCommandKit } from './cmd/kit'
 import type { MessageSession } from './types'
 import type { KookConfigType } from './config'
-import { KOOKBotRpc } from './runtime/rpc'
 import { KookSseBridge, type KookSnapshot } from './runtime/sse'
 import type { KookChannel } from './events'
 
@@ -30,7 +29,6 @@ export class KookRuntime {
 	public manager!: BotManager
 	public events!: KookChannel
 	private sseBridge: KookSseBridge | null = null
-	private disposeSse: (() => void) | null = null
 
 	constructor(
 		private readonly wretch: WretchPlugin,
@@ -50,14 +48,10 @@ export class KookRuntime {
 
 		this.registerWebhook()
 		this.registerMessagePipeline()
-		this.registerRpc()
-		this.registerUi()
-		this.registerSse()
 		await this.autoConnectBots()
 	}
 
 	async teardown() {
-		this.teardownSse()
 		if (this.manager) {
 			await this.manager.disconnectAll()
 		}
@@ -97,6 +91,13 @@ export class KookRuntime {
 		return this.sseBridge?.snapshot() ?? { bots: [], overview: this.manager.getOverview(), updatedAt: Date.now() }
 	}
 
+	createSseHandler() {
+		if (!this.sseBridge) {
+			throw new Error('[KOOK] SSE bridge not initialized')
+		}
+		return this.sseBridge.createHandler()
+	}
+
 	/* ======================== Internal wiring ======================== */
 
 	private async setupClients() {
@@ -117,17 +118,6 @@ export class KookRuntime {
 		this.manager.registerWebhook(path)
 	}
 
-	private registerSse() {
-		if (!this.ctx.sse || !this.sseBridge) return
-		this.disposeSse = this.ctx.sse.registerExtension(() => this.sseBridge!.createHandler())
-	}
-
-	private teardownSse() {
-		if (!this.disposeSse) return
-		this.disposeSse()
-		this.disposeSse = null
-	}
-
 	private registerMessagePipeline() {
 		this.events.message.on((session, next) => {
 			const msg = session.data.content
@@ -137,19 +127,7 @@ export class KookRuntime {
 				.dispatch(msg.slice(1), session)
 				.catch((e) => this.ctx.logger.error(e, `执行 ${msg} 遇到以下问题：`))
 
-			return undefined
-		})
-
-		this.cmd.reg('help').describe('查看帮助').action(() => this.cmd.help())
-	}
-
-	private registerRpc() {
-		this.ctx.rpc.registerExtension(() => new KOOKBotRpc(this))
-	}
-
-	private registerUi() {
-		this.ctx.extensionService.register({
-			entryPath: './ui/index.tsx',
+			return next(session)
 		})
 	}
 

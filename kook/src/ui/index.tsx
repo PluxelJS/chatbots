@@ -5,19 +5,23 @@ const module = definePluginUIModule({
 	extensions: [
 		{
 			point: 'header:actions',
-			meta: { priority: 40, id: 'KOOK:header' },
-			when: (ctx) => ctx.pluginName === 'KOOK',
+			id: 'kook-header',
+			priority: 40,
 			Component: HeaderIndicator,
 		},
 		{
 			point: 'plugin:tabs',
-			meta: { priority: 12, label: '管理', id: 'KOOK:tabs:manage' },
+			id: 'kook-tab-manage',
+			priority: 12,
+			meta: { label: '管理' },
 			when: (ctx) => ctx.pluginName === 'KOOK',
 			Component: StatusPanel,
 		},
 		{
 			point: 'plugin:info',
-			meta: { priority: 10, id: 'KOOK:info', requireRunning: false },
+			id: 'kook-info',
+			priority: 10,
+			requireRunning: false,
 			when: (ctx) => ctx.pluginName === 'KOOK',
 			Component: SummaryPanel,
 		},

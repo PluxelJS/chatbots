@@ -18,17 +18,29 @@ import {
 import { IconPlugConnected, IconRefresh, IconRobotFace, IconRocket, IconTrash } from '@tabler/icons-react'
 import {
 	definePluginUIModule,
-	type ExtensionContext,
-	rpc,
 	rpcErrorMessage,
-	webClient,
+	type GlobalExtensionContext,
+	type PluginExtensionContext,
+	hmrWebClient,
 } from '@pluxel/hmr/web'
+import type { TelegramSnapshot } from '../telegram'
+import type { CreateBotInput, UpdateBotInput } from '../runtime/bot-registry'
 
-type RpcClient = ReturnType<typeof rpc>['Telegram']
-type Snapshot = Awaited<ReturnType<RpcClient['snapshot']>>
+type Snapshot = TelegramSnapshot
 type BotStatus = Snapshot['bots'][number]
 type Overview = Snapshot['overview']
 type BotMode = BotStatus['mode']
+
+type RpcClient = {
+	snapshot: () => Promise<Snapshot>
+	connectBot: (id: string) => Promise<unknown>
+	disconnectBot: (id: string) => Promise<unknown>
+	deleteBot: (id: string) => Promise<unknown>
+	updateBot: (id: string, patch: UpdateBotInput) => Promise<unknown>
+	createBot: (input: CreateBotInput) => Promise<{ id: string }>
+}
+
+const rpc = (): RpcClient => (hmrWebClient.rpc as any).Telegram as RpcClient
 
 const stateColors: Record<string, string> = {
 	polling: 'teal',
@@ -52,7 +64,7 @@ const stateLabels: Partial<Record<string, string>> = {
 
 const formatTime = (value?: number) => (value ? new Date(value).toLocaleTimeString() : '—')
 const useTelegramSse = () => {
-	const sse = useMemo(() => webClient.createSse({ namespaces: ['Telegram'] }), [])
+	const sse = useMemo(() => hmrWebClient.createSse({ namespaces: ['Telegram'] }), [])
 	return sse
 }
 
@@ -68,7 +80,7 @@ function useTelegramSnapshot() {
 		const bootstrap = async () => {
 			setLoading(true)
 			try {
-				const snap = await rpc().Telegram.snapshot()
+				const snap = await rpc().snapshot()
 				if (!mounted) return
 				setSnapshot(snap)
 				setOverview(snap.overview)
@@ -83,7 +95,7 @@ function useTelegramSnapshot() {
 		}
 		void bootstrap()
 
-		const off = sse.Telegram.on((msg) => {
+		const off = sse.ns('Telegram').on((msg) => {
 			const payload = msg.payload as Snapshot | undefined
 			if (payload?.overview) {
 				setSnapshot(payload)
@@ -102,7 +114,7 @@ function useTelegramSnapshot() {
 	const refresh = async () => {
 		setLoading(true)
 		try {
-			const snap = await rpc().Telegram.snapshot()
+			const snap = await rpc().snapshot()
 			setSnapshot(snap)
 			setOverview(snap.overview)
 			setError(null)
@@ -117,7 +129,7 @@ function useTelegramSnapshot() {
 	return { snapshot, overview, error, loading, setError, refresh }
 }
 
-function HeaderIndicator({ ctx }: { ctx: ExtensionContext }) {
+function HeaderIndicator({ ctx }: { ctx: GlobalExtensionContext }) {
 	const { overview, error, loading } = useTelegramSnapshot()
 
 	const configured = overview?.configuredBots ?? 0
@@ -127,7 +139,7 @@ function HeaderIndicator({ ctx }: { ctx: ExtensionContext }) {
 	const label = error ? error : `${active}/${total || configured} 运行`
 
 	return (
-		<Tooltip label={error ?? `${ctx.pluginName} 状态监控`}>
+		<Tooltip label={error ?? 'Telegram 状态监控'}>
 			<Badge
 				variant="light"
 				color={color}
@@ -392,7 +404,7 @@ function AddBotForm({ onCreate }: { onCreate: (input: Parameters<RpcClient['crea
 	)
 }
 
-function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
+function StatusPanel({ ctx }: { ctx: PluginExtensionContext }) {
 	const { snapshot, loading, error, setError, refresh } = useTelegramSnapshot()
 	const [loadingId, setLoadingId] = useState<string | null>(null)
 	const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -404,7 +416,7 @@ function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	const handleConnect = async (bot: BotStatus) => {
 		setLoadingId(bot.id)
 		try {
-			await rpc().Telegram.connectBot(bot.id)
+			await rpc().connectBot(bot.id)
 		} catch (err) {
 			setError(rpcErrorMessage(err, '连接失败'))
 		} finally {
@@ -415,7 +427,7 @@ function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	const handleDisconnect = async (bot: BotStatus) => {
 		setLoadingId(bot.id)
 		try {
-			await rpc().Telegram.disconnectBot(bot.id)
+			await rpc().disconnectBot(bot.id)
 		} catch (err) {
 			setError(rpcErrorMessage(err, '断开失败'))
 		} finally {
@@ -426,7 +438,7 @@ function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	const handleDelete = async (bot: BotStatus) => {
 		setDeletingId(bot.id)
 		try {
-			await rpc().Telegram.deleteBot(bot.id)
+			await rpc().deleteBot(bot.id)
 		} catch (err) {
 			setError(rpcErrorMessage(err, '删除失败'))
 		} finally {
@@ -440,7 +452,7 @@ function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	) => {
 		setUpdatingId(bot.id)
 		try {
-			await rpc().Telegram.updateBot(bot.id, patch)
+			await rpc().updateBot(bot.id, patch)
 			await refresh()
 		} catch (err) {
 			setError(rpcErrorMessage(err, '更新失败'))
@@ -562,7 +574,7 @@ function StatusPanel({ ctx }: { ctx: ExtensionContext }) {
 	)
 }
 
-function SummaryPanel({ ctx }: { ctx: ExtensionContext }) {
+function SummaryPanel({ ctx }: { ctx: PluginExtensionContext }) {
 	const { snapshot, loading, error, refresh } = useTelegramSnapshot()
 	const bots = (snapshot?.bots ?? []).slice(0, 3)
 	const overview = snapshot?.overview
@@ -639,13 +651,13 @@ function SummaryPanel({ ctx }: { ctx: ExtensionContext }) {
 	)
 }
 
-function ManageTab({ ctx }: { ctx: ExtensionContext }) {
+function ManageTab({ ctx }: { ctx: PluginExtensionContext }) {
 	return (
 		<Stack gap="md">
 			<AddBotForm
 				onCreate={async (input) => {
-					const created = await rpc().Telegram.createBot(input)
-					await rpc().Telegram.connectBot(created.id).catch(() => {})
+					const created = await rpc().createBot(input)
+					await rpc().connectBot(created.id).catch(() => {})
 				}}
 			/>
 			<StatusPanel ctx={ctx} />
@@ -657,19 +669,23 @@ const module = definePluginUIModule({
 	extensions: [
 		{
 			point: 'header:actions',
-			meta: { priority: 42, id: 'Telegram:header' },
-			when: (ctx) => ctx.pluginName === 'Telegram',
+			id: 'telegram-header',
+			priority: 42,
 			Component: HeaderIndicator,
 		},
 		{
 			point: 'plugin:tabs',
-			meta: { priority: 10, label: '管理', id: 'Telegram:tabs:manage' },
+			id: 'telegram-tab-manage',
+			priority: 10,
+			meta: { label: '管理' },
 			when: (ctx) => ctx.pluginName === 'Telegram',
 			Component: ManageTab,
 		},
 		{
 			point: 'plugin:info',
-			meta: { priority: 12, id: 'Telegram:summary', requireRunning: false },
+			id: 'telegram-summary',
+			priority: 12,
+			requireRunning: false,
 			when: (ctx) => ctx.pluginName === 'Telegram',
 			Component: SummaryPanel,
 		},

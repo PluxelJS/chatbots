@@ -87,7 +87,7 @@ const toAssetPayload = (part: ImagePart | FilePart) =>
 
 async function send(session: import('pluxel-plugin-kook').MessageSession, plan: OutboundPlan, options?: { quote?: boolean }) {
 	const quote = options?.quote ? session.data?.msg_id : undefined
-	const api = (session.bot as any)?.api
+	const api = session.bot.api
 
 	const sendText = async (text: string) => {
 		const needMarkdown = plan.textParts.some((p: Part) => p.type === 'styled' || p.type === 'mention' || p.type === 'link' || p.type === 'codeblock')

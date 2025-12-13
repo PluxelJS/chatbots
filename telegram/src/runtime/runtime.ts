@@ -13,7 +13,6 @@ import type { TelegramConfigType } from '../config'
 import { TelegramBotManager, type TelegramBotPublic } from '../bot-manager'
 import { TelegramBotRegistry, type CreateBotInput, type UpdateBotInput } from './bot-registry'
 import type { TelegramChannel } from '../events'
-import { TelegramBotRpc } from './rpc'
 import { TelegramSseBridge, type TelegramSnapshot } from './sse'
 
 /**
@@ -38,7 +37,6 @@ export class TelegramRuntime {
 	private manager!: TelegramBotManager
 	private repo!: TelegramBotRegistry
 	private sseBridge: TelegramSseBridge | null = null
-	private disposeSse: (() => void) | null = null
 
 	constructor(wretch: WretchPlugin) {
 		this.commands = createCommandRegistry()
@@ -62,14 +60,10 @@ export class TelegramRuntime {
 		await this.setupRepoAndManager()
 		this.commands.onChange(() => this.syncCommandsToActiveBots())
 		this.registerPipelines()
-		this.registerRpc()
-		this.registerUi()
-		this.registerSse()
 		await this.autoConnectBots()
 	}
 
 	async teardown() {
-		this.teardownSse()
 		if (this.manager) {
 			await this.manager.disconnectAll()
 		}
@@ -123,6 +117,13 @@ export class TelegramRuntime {
 		return this.sseBridge?.snapshot() ?? { bots: [], overview: this.manager.getOverview(), updatedAt: Date.now() }
 	}
 
+	createSseHandler() {
+		if (!this.sseBridge) {
+			throw new Error('[Telegram] SSE bridge not initialized')
+		}
+		return this.sseBridge.createHandler()
+	}
+
 	/* ======================== Internal wiring ======================== */
 
 	private async setupRepoAndManager() {
@@ -165,16 +166,6 @@ export class TelegramRuntime {
 		})
 	}
 
-	private registerRpc() {
-		this.ctx.rpc.registerExtension(() => new TelegramBotRpc(this))
-	}
-
-	private registerUi() {
-		this.ctx.extensionService.register({
-			entryPath: './ui/index.tsx',
-		})
-	}
-
 	private async autoConnectBots() {
 		if (this.config.autoConnect === false) return
 		const bots = this.repo.list(128)
@@ -205,17 +196,6 @@ export class TelegramRuntime {
 				}
 			}),
 		)
-	}
-
-	private registerSse() {
-		if (!this.ctx.sse || !this.sseBridge) return
-		this.disposeSse = this.ctx.sse.registerExtension(() => this.sseBridge!.createHandler())
-	}
-
-	private teardownSse() {
-		if (!this.disposeSse) return
-		this.disposeSse()
-		this.disposeSse = null
 	}
 
 	/** 处理对话消息（异步） */
