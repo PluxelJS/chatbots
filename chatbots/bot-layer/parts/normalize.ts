@@ -1,10 +1,4 @@
-import type { InlinePart, MessageContent, Part } from './types'
-
-export type PartInput =
-	| MessageContent
-	| Iterable<PartInput | null | undefined>
-	| null
-	| undefined
+import type { InlinePart, Part, PartInput } from '../types'
 
 const isPart = (value: unknown): value is Part =>
 	Boolean(value) && typeof value === 'object' && 'type' in (value as any)
@@ -63,7 +57,7 @@ const pushPart = (acc: Part[], part: Part) => {
 export const normalizeMessageContent = (input: PartInput): Part[] => {
 	const acc: Part[] = []
 
-	const visit = (value: PartInput | Part | MessageContent | unknown): void => {
+	const visit = (value: PartInput | Part | unknown): void => {
 		if (value === null || value === undefined) return
 
 		if (typeof value === 'string') {
@@ -81,7 +75,6 @@ export const normalizeMessageContent = (input: PartInput): Part[] => {
 			return
 		}
 
-		// iterable (e.g. Fragment flatten)
 		if (typeof value === 'object' && Symbol.iterator in (value as any)) {
 			for (const item of value as Iterable<PartInput | null | undefined>) {
 				visit(item)
@@ -94,6 +87,4 @@ export const normalizeMessageContent = (input: PartInput): Part[] => {
 	return acc
 }
 
-/** 兼容旧名，向下提供相同能力 */
-export const toPartArray = (content: MessageContent | PartInput | undefined): Part[] =>
-	normalizeMessageContent(content)
+export const toPartArray = (content: PartInput): Part[] => normalizeMessageContent(content)

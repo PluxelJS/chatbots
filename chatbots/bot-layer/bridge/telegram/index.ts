@@ -1,6 +1,6 @@
 import type { BridgeDefinition } from '../types'
 import { normalizeTelegramMessage } from './normalize'
-import { telegramAdapter } from './send'
+import { telegramAdapter } from './adapter'
 
 type TelegramModule = typeof import('pluxel-plugin-telegram')
 type TelegramInstance = InstanceType<TelegramModule['TelegramPlugin']>

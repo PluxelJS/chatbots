@@ -4,7 +4,7 @@ import { BotLayerRuntime } from './runtime'
 
 /**
  * 轻量跨平台消息层：统一 KOOK/Telegram 的消息抽象。
- * 平台特有功能通过 msg.bot / msg.raw 访问原生 API。
+ * 平台特有功能通过 msg.bot 访问原生 API。
  */
 @Plugin({ name: 'bot-layer', type: 'service' })
 export class BotLayer extends BasePlugin {
@@ -56,6 +56,7 @@ export class BotLayer extends BasePlugin {
 export default BotLayer
 
 export * from './types'
+export * from './parts'
 export * from './platforms/base'
 export * from './attachments'
 export { getAdapter, listAdapters, registerAdapter, getCapabilities, createAdapterRegistry } from './platforms/registry'

@@ -1,4 +1,5 @@
 import { Buffer } from 'node:buffer'
+
 import type {
 	CodeBlockPart,
 	FilePart,
@@ -10,7 +11,7 @@ import type {
 	PlatformCapabilities,
 	StyledPart,
 } from '../../types'
-import type { OutboundPlan, PlatformAdapter, RenderResult } from '../../platforms/base'
+import type { OutboundText, PlatformAdapter, RenderResult } from '../../platforms/base'
 
 const escapeHtml = (input: string): string =>
 	input
@@ -82,11 +83,9 @@ const renderPart = (part: Part): string => {
 		case 'codeblock':
 			return renderCodeblock(part)
 		case 'image':
-			return escapeHtml(part.alt ?? part.url)
+			return escapeHtml(part.alt ?? part.url ?? '')
 		case 'file':
-			return escapeHtml(part.name ?? part.url)
-		case 'raw':
-			return '[telegram raw]'
+			return escapeHtml(part.name ?? part.url ?? '')
 		default:
 			return ''
 	}
@@ -106,56 +105,50 @@ const toInputFile = (part: ImagePart | FilePart, fallbackName: string) =>
 			}
 		: part.url
 
-async function send(session: import('pluxel-plugin-telegram').MessageSession, plan: OutboundPlan, options?: { quote?: boolean }) {
-	const replyTo = options?.quote ? session.message.message_id : undefined
-	const parseMode = plan.rendered.format === 'html' ? 'HTML' : undefined
-
-	const text = render(plan.textParts).text
-	const needSplitCaption = (caption: string) =>
-		!capabilities.supportsMixedMedia || (capabilities.maxCaptionLength !== undefined && caption.length > capabilities.maxCaptionLength)
-
-	const sendText = async (content: string) => {
-		if (!content) return
-		const res = await session.bot.sendMessage(session.chatId, content, {
-			reply_to_message_id: replyTo,
-			parse_mode: parseMode,
-		})
-		if (!res.ok) throw new Error(`Telegram sendMessage failed: ${res.message}`)
-	}
-
-	// 逐个发送图片/文件，必要时拆分文本
-	for (const [index, img] of plan.images.entries()) {
-		const caption = text && !needSplitCaption(text) ? text : img.alt
-		const payload = toInputFile(img, img.name ?? img.alt ?? `image-${index + 1}.png`)
-		const res = await session.bot.sendPhoto(session.chatId, payload, {
-			caption,
-			reply_to_message_id: replyTo,
-			parse_mode: parseMode,
-		})
-		if (!res.ok) throw new Error(`Telegram sendPhoto failed: ${res.message}`)
-		if (text && needSplitCaption(text)) await sendText(text)
-	}
-
-	for (const [index, file] of plan.files.entries()) {
-		const caption = text && !needSplitCaption(text) ? text : file.name ?? undefined
-		const payload = toInputFile(file, file.name ?? `file-${index + 1}`)
-		const res = await session.bot.sendDocument(session.chatId, payload, {
-			caption,
-			reply_to_message_id: replyTo,
-		})
-		if (!res.ok) throw new Error(`Telegram sendDocument failed: ${res.message}`)
-		if (text && needSplitCaption(text)) await sendText(text)
-	}
-
-	// 如果没有媒体，发送纯文本
-	if (!plan.images.length && !plan.files.length) {
-		await sendText(plan.rendered.text)
-	}
-}
+const toParseMode = (format: RenderResult['format']): 'HTML' | undefined =>
+	format === 'html' ? 'HTML' : undefined
 
 export const telegramAdapter: PlatformAdapter<'telegram'> = {
 	name: 'telegram',
 	capabilities,
 	render,
-	send,
+
+	sendText: async (session, text: OutboundText, options) => {
+		if (!text.rendered.text) return
+		const replyTo = options?.quote ? session.message.message_id : undefined
+		const parseMode = toParseMode(text.rendered.format)
+		const res = await session.bot.sendMessage(session.chatId, text.rendered.text, {
+			reply_to_message_id: replyTo,
+			parse_mode: parseMode,
+		})
+		if (!res.ok) throw new Error(`Telegram sendMessage failed: ${res.message}`)
+	},
+
+	uploadImage: async (_session, image) => image,
+	uploadFile: async (_session, file) => file,
+
+	sendImage: async (session, image, caption, options) => {
+		const replyTo = options?.quote ? session.message.message_id : undefined
+		const parseMode = caption ? toParseMode(caption.rendered.format) : undefined
+		const payload = toInputFile(image, image.name ?? image.alt ?? 'image.png')
+		if (!payload) throw new Error('Telegram: image.url 为空，且未提供 data，无法发送图片')
+
+		const res = await session.bot.sendPhoto(session.chatId, payload, {
+			caption: caption?.rendered.text || undefined,
+			reply_to_message_id: replyTo,
+			parse_mode: parseMode,
+		})
+		if (!res.ok) throw new Error(`Telegram sendPhoto failed: ${res.message}`)
+	},
+
+	sendFile: async (session, file, options) => {
+		const replyTo = options?.quote ? session.message.message_id : undefined
+		const payload = toInputFile(file, file.name ?? 'file')
+		if (!payload) throw new Error('Telegram: file.url 为空，且未提供 data，无法发送文件')
+		const res = await session.bot.sendDocument(session.chatId, payload, {
+			reply_to_message_id: replyTo,
+		})
+		if (!res.ok) throw new Error(`Telegram sendDocument failed: ${res.message}`)
+	},
 }
+

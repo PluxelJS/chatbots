@@ -37,7 +37,6 @@ export interface PlatformCapabilities {
 	supportsImage: boolean
 	supportsFile: boolean
 	supportsMixedMedia?: boolean
-	supportsRaw?: boolean
 	supportsInlineMention: {
 		user: boolean
 		role: boolean
@@ -68,7 +67,7 @@ export interface MentionPart {
 /** 图片 */
 export interface ImagePart {
 	type: 'image'
-	url: string
+	url?: string
 	alt?: string
 	fileId?: string
 	name?: string
@@ -82,7 +81,7 @@ export interface ImagePart {
 /** 文件 */
 export interface FilePart {
 	type: 'file'
-	url: string
+	url?: string
 	name?: string
 	mime?: string
 	fileId?: string
@@ -111,21 +110,27 @@ export interface CodeBlockPart {
 	code: string
 }
 
-/** 平台原生透传（Card 等平台特有功能走这里） */
-export interface RawPart<P extends Platform = Platform> {
-	type: 'raw'
-	platform: P
-	payload: unknown
-}
-
 /** 内联元素 */
 export type InlinePart = TextPart | StyledPart | MentionPart | LinkPart
 
 /** 所有 Part 类型 */
-export type Part = InlinePart | ImagePart | FilePart | CodeBlockPart | RawPart
+export type Part = InlinePart | ImagePart | FilePart | CodeBlockPart
 
-/** 消息内容（reply 的参数类型） */
-export type MessageContent = string | Part | Part[]
+/**
+ * Outbound 输入内容（`reply/sendText` 等的参数类型）。
+ *
+ * - 支持任意嵌套数组/可迭代结构，便于 JSX Fragment / 条件拼接展开
+ * - 最终会归一为 `Part[]`（相邻 `text` 会自动合并）
+ */
+export type PartInput =
+	| string
+	| Part
+	| Iterable<PartInput | null | undefined>
+	| null
+	| undefined
+
+/** 消息内容（对外统一类型别名） */
+export type MessageContent = PartInput
 
 // ============================================================================
 // Attachments - 富媒体附件封装
@@ -173,6 +178,19 @@ export interface BotChannel<P extends Platform = Platform> {
 
 export interface ReplyOptions {
 	quote?: boolean
+	/**
+	 * 控制 `reply()` 在需要“自动拆分”时的策略（发送顺序 / 是否允许拆分）。
+	 *
+	 * 典型触发条件：
+	 * - 平台 `supportsMixedMedia=false` 且输入为“单图 + 单侧 caption”
+	 * - 平台支持 mixed，但 caption 超过 `maxCaptionLength`（`reply()` 会将其拆成两条，避免报错）
+	 *
+	 * - `undefined`：默认（auto），按输入顺序发送（caption 在前则 text-first，在后则 media-first）
+	 * - `text-first`：强制先发文本后发图片
+	 * - `media-first`：强制先发图片后发文本
+	 * - `forbid`：直接报错（适用于你不希望 `reply()` 拆分的场景）
+	 */
+	splitFallback?: 'forbid' | 'text-first' | 'media-first'
 }
 
 /**
@@ -203,8 +221,43 @@ export interface Message<P extends Platform = Platform> {
 	raw: PlatformRegistry[P]['raw']
 	/** 平台 Bot 实例（类型安全） */
 	bot: PlatformRegistry[P]['bot']
-	/** 回复消息 */
+	/**
+	 * 回复消息（便利层）。
+	 *
+	 * 行为说明：
+	 * - 支持 `string | Part | Part[] | 迭代/嵌套结构`，会先归一为 `Part[]`
+	 * - 允许混合内容（多段文本、多张图片、文件夹杂文本等）
+	 * - 可能会拆成多条消息发送（按输入顺序，拆分规则见 bot-layer DESIGN.md）
+	 * - 文本类 Part 会按平台能力做降级渲染（例如 plain 平台退化为纯文本）
+	 * - 对平台不支持的媒体（image/file）会尽量退化为可读文本而不是直接报错
+	 * - 当平台对 caption 有长度限制且 caption 超长时，`reply()` 会自动拆分为“图片 + 文本”（除非 `splitFallback='forbid'`）
+	 */
 	reply: (content: MessageContent, options?: ReplyOptions) => Promise<void>
+	/**
+	 * 显式发送纯文本（原子能力）。
+	 *
+	 * - 仅允许文本类 Part（`text/mention/link/styled/codeblock`），否则直接报错
+	 * - 会按平台能力做降级渲染（例如 plain 平台退化为纯文本）
+	 */
+	sendText?: (content: MessageContent, options?: ReplyOptions) => Promise<void>
+	/**
+	 * 显式发送图片（原子能力）。
+	 *
+	 * - 平台不支持图片时直接报错
+	 * - caption 只允许文本类 Part
+	 * - caption 过长会直接报错（不会自动截断/拆分）
+	 */
+	sendImage?: (image: ImagePart, caption?: MessageContent, options?: ReplyOptions) => Promise<void>
+	/**
+	 * 显式发送文件（原子能力）。
+	 *
+	 * - 平台不支持文件时直接报错
+	 */
+	sendFile?: (file: FilePart, options?: ReplyOptions) => Promise<void>
+	/** 上传图片（如果平台支持/需要） */
+	uploadImage?: (image: ImagePart) => Promise<ImagePart>
+	/** 上传文件（如果平台支持/需要） */
+	uploadFile?: (file: FilePart) => Promise<FilePart>
 }
 
 export interface MessageReference<P extends Platform = Platform> {

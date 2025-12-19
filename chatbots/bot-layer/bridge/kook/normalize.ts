@@ -1,8 +1,8 @@
 import type { MessageSession } from 'pluxel-plugin-kook'
 import type { Attachment, BotChannel, BotUser, Message, MessageReference, Part } from '../../types'
 import { hasRichParts } from '../../utils'
-import { createReply } from '../../platforms/base'
-import { kookAdapter } from './send'
+import { createReply, createSendHelpers } from '../../platforms/base'
+import { kookAdapter } from './adapter'
 
 type KookAttachment = { type?: string; url?: string; name?: string; file_type?: string }
 
@@ -53,7 +53,9 @@ const normalizeContent = (payload: any, source: 'message' | 'reference'): Normal
 			attachments.push({ platform: 'kook', kind: 'file', part, source })
 			return
 		}
-		parts.push({ type: 'raw', platform: 'kook', payload: att })
+		const part = { type: 'file' as const, url: att.url, name: att.name, mime: att.file_type }
+		parts.push(part)
+		attachments.push({ platform: 'kook', kind: 'file', part, source })
 	}
 
 	const attachmentsRaw = extra?.attachments
@@ -126,6 +128,7 @@ export const normalizeKookMessage = (session: MessageSession): Message<'kook'> =
 	}
 
 	const reply = createReply(kookAdapter, session)
+	const { uploadImage, uploadFile, sendText, sendImage, sendFile } = createSendHelpers(kookAdapter, session)
 
 	return {
 		platform: 'kook',
@@ -140,5 +143,10 @@ export const normalizeKookMessage = (session: MessageSession): Message<'kook'> =
 		raw: session,
 		bot: session.bot,
 		reply,
+		sendText,
+		sendImage,
+		sendFile,
+		uploadImage,
+		uploadFile,
 	}
 }

@@ -24,7 +24,8 @@
   ],
   "scripts": {
     "build": "pluxel build",
-    "test": "bun test --conditions=@pluxel/source"
+    "test": "bun test --conditions=@pluxel/hmr",
+    "bench:perm": "bun ./permissions/test/permissions.bench.ts"
   },
   "dependencies": {
     "type-flag": "^4.0.2"

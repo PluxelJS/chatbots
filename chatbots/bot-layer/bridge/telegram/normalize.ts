@@ -1,8 +1,8 @@
 import type { MessageSession } from 'pluxel-plugin-telegram'
 import type { Attachment, BotChannel, BotUser, Message, MessageReference, Part } from '../../types'
 import { hasRichParts } from '../../utils'
-import { createReply } from '../../platforms/base'
-import { telegramAdapter } from './send'
+import { createReply, createSendHelpers } from '../../platforms/base'
+import { telegramAdapter } from './adapter'
 
 type TelegramMessage = MessageSession['message']
 type Entity = {
@@ -306,6 +306,7 @@ export const normalizeTelegramMessage = async (session: MessageSession): Promise
 	}
 
 	const reply = createReply(telegramAdapter, session)
+	const { uploadImage, uploadFile, sendText, sendImage, sendFile } = createSendHelpers(telegramAdapter, session)
 
 	return {
 		platform: 'telegram',
@@ -320,5 +321,10 @@ export const normalizeTelegramMessage = async (session: MessageSession): Promise
 		raw: session,
 		bot: session.bot,
 		reply,
+		sendText,
+		sendImage,
+		sendFile,
+		uploadImage,
+		uploadFile,
 	}
 }

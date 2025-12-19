@@ -1,6 +1,6 @@
 import type { BridgeDefinition } from '../types'
 import { normalizeKookMessage } from './normalize'
-import { kookAdapter } from './send'
+import { kookAdapter } from './adapter'
 
 type KookModule = typeof import('pluxel-plugin-kook')
 type KookInstance = InstanceType<KookModule['KOOK']>
