@@ -15,10 +15,8 @@ export class BotLayer extends BasePlugin {
 
 	async init(_abort: AbortSignal): Promise<void> {
 		this.runtime = new BotLayerRuntime(this.ctx, {
-			cmdPrefix: this.config.cmdPrefix,
 			bridges: this.config.bridges,
 			debug: this.config.debug,
-			devCommands: this.config.devCommands,
 		})
 		this.runtime.bootstrap()
 
@@ -33,11 +31,6 @@ export class BotLayer extends BasePlugin {
 	/** 事件通道 */
 	get events() {
 		return this.runtime.events
-	}
-
-	/** 文本指令 Kit（type-flag） */
-	get cmd() {
-		return this.runtime.cmd
 	}
 
 	/** 桥接状态（可用于前端展示） */
@@ -63,10 +56,7 @@ export class BotLayer extends BasePlugin {
 export default BotLayer
 
 export * from './types'
-export * from './utils'
 export * from './platforms/base'
 export * from './attachments'
-export * from './cmd'
-export * from './cmd/kit'
 export { getAdapter, listAdapters, registerAdapter, getCapabilities, createAdapterRegistry } from './platforms/registry'
 export { registerBridgeDefinition, createBridgeManager } from './bridge'

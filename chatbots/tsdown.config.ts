@@ -1,7 +1,10 @@
 import { defineConfig } from 'tsdown'
 
 export default defineConfig({
-	entry: './src/bot-layer.ts',
+	entry: {
+		index: './bot-layer.ts',
+		chatbots: './chatbots.ts',
+	},
 	dts: {
 		sourcemap: true,
 	},

@@ -29,6 +29,7 @@ export class KookRuntime {
 	public manager!: BotManager
 	public events!: KookChannel
 	private sseBridge: KookSseBridge | null = null
+	private autoConnectScheduled = false
 
 	constructor(
 		private readonly wretch: WretchPlugin,
@@ -48,7 +49,7 @@ export class KookRuntime {
 
 		this.registerWebhook()
 		this.registerMessagePipeline()
-		await this.autoConnectBots()
+		this.scheduleAutoConnect()
 	}
 
 	async teardown() {
@@ -144,6 +145,16 @@ export class KookRuntime {
 				}
 			}),
 		)
+	}
+
+	private scheduleAutoConnect() {
+		if (this.autoConnectScheduled) return
+		this.autoConnectScheduled = true
+
+		// Do not block plugin start: lifecycle start timeout is short (1500ms).
+		setTimeout(() => {
+			void this.autoConnectBots().catch((e) => this.ctx.logger.warn(e, '[KOOK] autoConnect failed'))
+		}, 0)
 	}
 }
 

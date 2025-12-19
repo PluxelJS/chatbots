@@ -1,0 +1,57 @@
+{
+  "$schema": "https://market.pluxel.dev/schema/package.json",
+  "name": "pluxel-plugin-chatbots",
+  "version": "0.1.0",
+  "description": "这是一个示例插件",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@pluxel/hmr": "./bot-layer.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./chatbots": {
+      "@pluxel/hmr": "./chatbots.ts",
+      "default": "./dist/chatbots.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "!**/*.map"
+  ],
+  "scripts": {
+    "build": "pluxel build",
+    "test": "bun test --conditions=@pluxel/source"
+  },
+  "dependencies": {
+    "type-flag": "^4.0.2"
+  },
+  "peerDependencies": {
+    "pluxel-plugin-kook": "workspace:^",
+    "pluxel-plugin-mikro-orm": "workspace:^",
+    "pluxel-plugin-telegram": "workspace:^"
+  },
+  "peerDependenciesMeta": {
+    "pluxel-plugin-mikro-orm": {
+      "optional": true
+    }
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./chatbots": "./dist/chatbots.mjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "pluxel": {
+    "dependOn": {
+      "required": [],
+      "optional": [
+        "pluxel-plugin-mikro-orm"
+      ]
+    }
+  }
+}

@@ -668,12 +668,6 @@ function ManageTab({ ctx }: { ctx: PluginExtensionContext }) {
 const module = definePluginUIModule({
 	extensions: [
 		{
-			point: 'header:actions',
-			id: 'telegram-header',
-			priority: 42,
-			Component: HeaderIndicator,
-		},
-		{
 			point: 'plugin:tabs',
 			id: 'telegram-tab-manage',
 			priority: 10,

@@ -1,14 +1,8 @@
 import { definePluginUIModule } from '@pluxel/hmr/web'
-import { HeaderIndicator, StatusPanel, SummaryPanel } from './components'
+import { StatusPanel, SummaryPanel } from './components'
 
 const module = definePluginUIModule({
 	extensions: [
-		{
-			point: 'header:actions',
-			id: 'kook-header',
-			priority: 40,
-			Component: HeaderIndicator,
-		},
 		{
 			point: 'plugin:tabs',
 			id: 'kook-tab-manage',

@@ -37,6 +37,7 @@ export class TelegramRuntime {
 	private manager!: TelegramBotManager
 	private repo!: TelegramBotRegistry
 	private sseBridge: TelegramSseBridge | null = null
+	private autoConnectScheduled = false
 
 	constructor(wretch: WretchPlugin) {
 		this.commands = createCommandRegistry()
@@ -60,7 +61,7 @@ export class TelegramRuntime {
 		await this.setupRepoAndManager()
 		this.commands.onChange(() => this.syncCommandsToActiveBots())
 		this.registerPipelines()
-		await this.autoConnectBots()
+		this.scheduleAutoConnect()
 	}
 
 	async teardown() {
@@ -180,6 +181,16 @@ export class TelegramRuntime {
 			}),
 		)
 		await this.syncCommandsToActiveBots()
+	}
+
+	private scheduleAutoConnect() {
+		if (this.autoConnectScheduled) return
+		this.autoConnectScheduled = true
+
+		// Do not block plugin start: lifecycle start timeout is short (1500ms).
+		setTimeout(() => {
+			void this.autoConnectBots().catch((e) => this.ctx.logger.warn(e, '[Telegram] autoConnect failed'))
+		}, 0)
 	}
 
 	private async syncCommandsToActiveBots() {

@@ -1,0 +1,46 @@
+import type { Context } from '@pluxel/hmr'
+
+import { registerAllBridges, type BridgeConfig } from './bridge'
+import { createBridgeManager } from './bridge/manager'
+import { createBotEventChannel, dispatchMessage, type BotEventChannel } from './events'
+import { createAdapterRegistry } from './platforms/registry'
+import { createStatusTracker, type BridgeStatusTracker } from './status'
+import type { AnyMessage } from './types'
+
+export interface BotLayerRuntimeOptions {
+	bridges?: BridgeConfig
+	debug?: boolean
+}
+
+/**
+ * BotLayerRuntime 负责事件通道、桥接以及状态跟踪。
+ * BotLayer 插件只做生命周期代理，保持 API 稳定。
+ */
+export class BotLayerRuntime {
+	public readonly events: BotEventChannel
+	public readonly status: BridgeStatusTracker
+	public readonly bridges = createBridgeManager()
+	public readonly adapters = createAdapterRegistry()
+
+	constructor(private readonly ctx: Context, private readonly options: BotLayerRuntimeOptions) {
+		this.events = createBotEventChannel(ctx)
+		this.status = createStatusTracker(ctx)
+	}
+
+	bootstrap() {
+		const debug = Boolean(this.options.debug)
+		const dispatch = (msg: AnyMessage) =>
+			dispatchMessage(this.events, this.ctx, msg, debug, this.status.markMessage)
+
+		const unregisterBridges = registerAllBridges(
+			this.ctx,
+			dispatch,
+			this.options.bridges,
+			this.status,
+		)
+		this.ctx.scope.collectEffect(unregisterBridges)
+	}
+
+	teardown() {
+	}
+}

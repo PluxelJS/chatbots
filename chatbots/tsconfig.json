@@ -2,7 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "outDir": "dist",
-    "rootDir": "src",
+    "rootDir": ".",
     "target": "ES2022",
     "module": "ES2022",
     "moduleResolution": "Bundler",
@@ -14,8 +14,9 @@
     "skipLibCheck": true,
     "baseUrl": ".",
     "paths": {
-			"~/*": ["src/*"]
+			"~/*": ["bot-layer/*"]
 		}
   },
-  "include": ["src"]
+  "include": ["core", "bot-layer", "permissions"],
+  "exclude": ["**/*.test.ts", "**/*.bench.ts", "**/__tests__/**"]
 }
