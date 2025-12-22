@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsdown'
+import Macros from 'unplugin-macros/rolldown'
 
 export default defineConfig({
 	entry: {
@@ -8,6 +9,7 @@ export default defineConfig({
 	dts: {
 		sourcemap: true,
 	},
+	plugins: [Macros()],
 	format: ['esm'],
 	env: {},
 	copy: [],

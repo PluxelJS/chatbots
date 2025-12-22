@@ -1,0 +1,136 @@
+# Telegram Bot API method -> HTTP method.
+#
+# NOTE: do not put multipart shortcuts here (sendPhoto/sendDocument/sendAnimation),
+# otherwise a generic define() would override them.
+
+# Getting updates
+getMe GET
+
+# Updating messages
+editMessageCaption POST
+editMessageMedia POST
+editMessageReplyMarkup POST
+stopPoll POST
+
+# Stickers
+sendSticker POST
+getStickerSet GET
+getCustomEmojiStickers POST
+uploadStickerFile POST
+createNewStickerSet POST
+addStickerToSet POST
+setStickerPositionInSet POST
+deleteStickerFromSet POST
+replaceStickerInSet POST
+setStickerEmojiList POST
+setStickerKeywords POST
+setStickerMaskPosition POST
+setStickerSetTitle POST
+setStickerSetThumbnail POST
+setCustomEmojiStickerSetThumbnail POST
+deleteStickerSet POST
+
+# Inline mode
+answerInlineQuery POST
+answerWebAppQuery POST
+
+# Payments
+sendInvoice POST
+createInvoiceLink POST
+answerShippingQuery POST
+answerPreCheckoutQuery POST
+
+# Games
+sendGame POST
+setGameScore POST
+getGameHighScores GET
+
+# Sending other content
+sendAudio POST
+sendVideo POST
+sendVoice POST
+sendVideoNote POST
+sendMediaGroup POST
+sendLocation POST
+sendVenue POST
+sendContact POST
+sendPoll POST
+sendDice POST
+sendChatAction POST
+
+# Chat management
+getChat GET
+getChatAdministrators GET
+getChatMemberCount GET
+getChatMember GET
+setChatPhoto POST
+deleteChatPhoto POST
+setChatTitle POST
+setChatDescription POST
+pinChatMessage POST
+unpinChatMessage POST
+unpinAllChatMessages POST
+leaveChat POST
+setChatPermissions POST
+exportChatInviteLink POST
+createChatInviteLink POST
+editChatInviteLink POST
+revokeChatInviteLink POST
+approveChatJoinRequest POST
+declineChatJoinRequest POST
+setChatAdministratorCustomTitle POST
+banChatSenderChat POST
+unbanChatSenderChat POST
+
+# Chat member management
+banChatMember POST
+unbanChatMember POST
+restrictChatMember POST
+promoteChatMember POST
+
+# Forum topics
+getForumTopicIconStickers GET
+createForumTopic POST
+editForumTopic POST
+closeForumTopic POST
+reopenForumTopic POST
+deleteForumTopic POST
+unpinAllForumTopicMessages POST
+editGeneralForumTopic POST
+closeGeneralForumTopic POST
+reopenGeneralForumTopic POST
+hideGeneralForumTopic POST
+unhideGeneralForumTopic POST
+unpinAllGeneralForumTopicMessages POST
+
+# User & bot info
+getUserProfilePhotos GET
+getFile GET
+setMyCommands POST
+deleteMyCommands POST
+getMyCommands GET
+setMyName POST
+getMyName GET
+setMyDescription POST
+getMyDescription GET
+setMyShortDescription POST
+getMyShortDescription GET
+setChatMenuButton POST
+getChatMenuButton GET
+setMyDefaultAdministratorRights POST
+getMyDefaultAdministratorRights GET
+
+# Copying messages
+copyMessage POST
+copyMessages POST
+forwardMessages POST
+
+# Message reactions
+setMessageReaction POST
+
+# Chat boost
+getUserChatBoosts GET
+
+# Business
+getBusinessConnection GET
+
