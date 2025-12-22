@@ -62,6 +62,10 @@ export interface MentionPart {
 	type: 'mention'
 	kind: 'user' | 'role' | 'channel' | 'everyone'
 	id?: string | number
+	username?: string
+	displayName?: string
+	avatar?: string
+	isBot?: boolean
 }
 
 /** 图片 */
@@ -144,7 +148,7 @@ export interface Attachment<P extends Platform = Platform> {
 	kind: AttachmentKind
 	part: Extract<Part, { type: AttachmentKind }>
 	source: AttachmentSource
-	fetch?: () => Promise<ArrayBuffer | ArrayBufferView | Buffer>
+	fetch?: (signal?: AbortSignal) => Promise<ArrayBuffer | ArrayBufferView | Buffer>
 }
 
 export interface ResolvedAttachment<P extends Platform = Platform> extends Attachment<P> {
@@ -201,10 +205,14 @@ export interface ReplyOptions {
 export interface Message<P extends Platform = Platform> {
 	/** 平台标识（discriminant） */
 	platform: P
-	/** 纯文本内容 */
+	/** 渲染后的文本内容 */
 	text: string
+	/** 原始文本内容（平台提供的 raw text/caption） */
+	textRaw: string
 	/** 结构化消息部件 */
 	parts: Part[]
+	/** 提及列表（按解析顺序） */
+	mentions: MentionPart[]
 	/** 附件列表（包含当前消息及引用消息内的媒体） */
 	attachments: Attachment<P>[]
 	/** 引用/回复的消息（如果存在） */
@@ -264,7 +272,9 @@ export interface MessageReference<P extends Platform = Platform> {
 	platform: P
 	messageId: PlatformRegistry[P]['messageId'] | null
 	text: string
+	textRaw: string
 	parts: Part[]
+	mentions: MentionPart[]
 	attachments: Attachment<P>[]
 	rich: boolean
 	user?: BotUser<P> | null

@@ -1,5 +1,5 @@
 import type { MessageSession } from 'pluxel-plugin-telegram'
-import type { Attachment, BotChannel, BotUser, Message, MessageReference, Part } from '../../types'
+import type { Attachment, BotChannel, BotUser, MentionPart, Message, MessageReference, Part } from '../../types'
 import { hasRichParts } from '../../utils'
 import { createReply, createSendHelpers } from '../../platforms/base'
 import { telegramAdapter } from './adapter'
@@ -10,7 +10,7 @@ type Entity = {
 	length: number
 	type: string
 	url?: string
-	user?: { id?: number }
+	user?: { id?: number; username?: string; first_name?: string; last_name?: string; is_bot?: boolean }
 	language?: string
 }
 
@@ -28,7 +28,9 @@ interface TelegramNormalizeContext {
 
 interface NormalizedContent {
 	text: string
+	textRaw: string
 	parts: Part[]
+	mentions: MentionPart[]
 	attachments: Attachment<'telegram'>[]
 	rich: boolean
 }
@@ -82,6 +84,15 @@ const resolveTelegramFile = async (
 	return ctx.fileCache.get(fileId)!
 }
 
+const buildDisplayName = (user?: { first_name?: string; last_name?: string; username?: string }) => {
+	if (!user) return null
+	const first = user.first_name?.trim() ?? ''
+	const last = user.last_name?.trim() ?? ''
+	const joined = [first, last].filter(Boolean).join(' ')
+	if (joined) return joined
+	return user.username ?? null
+}
+
 const buildTextParts = (text: string, entities: Entity[]): Part[] => {
 	if (!text) return []
 	if (!entities.length) return [{ type: 'text', text }]
@@ -98,10 +109,29 @@ const buildTextParts = (text: string, entities: Entity[]): Part[] => {
 		const segment = text.slice(start, end)
 		switch (entity.type) {
 			case 'mention':
-				parts.push({ type: 'mention', kind: 'user', id: segment.replace(/^@/, '') })
+				{
+					const username = segment.replace(/^@/, '')
+					parts.push({
+						type: 'mention',
+						kind: 'user',
+						id: username,
+						username,
+						displayName: username,
+					})
+				}
 				break
 			case 'text_mention':
-				parts.push({ type: 'mention', kind: 'user', id: entity.user?.id })
+				{
+					const user = entity.user
+					parts.push({
+						type: 'mention',
+						kind: 'user',
+						id: user?.id,
+						username: user?.username ?? null,
+						displayName: buildDisplayName(user),
+						isBot: typeof user?.is_bot === 'boolean' ? user.is_bot : undefined,
+					})
+				}
 				break
 			case 'text_link':
 				parts.push({ type: 'link', url: entity.url ?? segment, label: segment })
@@ -235,11 +265,14 @@ const normalizeContent = async (
 		addAttachment(part)
 	}
 
+	const mentions = parts.filter((part): part is MentionPart => part.type === 'mention')
 	const rich = hasRichParts(parts)
 
 	return {
 		text: textOnly,
+		textRaw,
 		parts,
+		mentions,
 		attachments,
 		rich,
 	}
@@ -276,7 +309,9 @@ const normalizeReference = async (
 		platform: 'telegram',
 		messageId: message.message_id ?? null,
 		text: normalized.text,
+		textRaw: normalized.textRaw,
 		parts: normalized.parts,
+		mentions: normalized.mentions,
 		attachments: normalized.attachments,
 		rich: normalized.rich,
 		user,
@@ -311,7 +346,9 @@ export const normalizeTelegramMessage = async (session: MessageSession): Promise
 	return {
 		platform: 'telegram',
 		text: normalized.text,
+		textRaw: normalized.textRaw,
 		parts: normalized.parts,
+		mentions: normalized.mentions,
 		attachments: normalized.attachments,
 		reference,
 		rich: normalized.rich || Boolean(reference?.rich),

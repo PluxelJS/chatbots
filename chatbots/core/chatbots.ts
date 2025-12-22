@@ -41,7 +41,7 @@ export class Chatbots extends BasePlugin {
 	}
 
 	get cmd() {
-		return this.runtime.cmd
+		return this.runtime.getCommandKit(this.ctx.caller ?? this.ctx)
 	}
 
 	get users() {
@@ -70,11 +70,18 @@ export class Chatbots extends BasePlugin {
 
 	private registerCatalogUnloadTracking() {
 		const off = this.ctx.root.events.on('afterCommit', (summary) => {
+			const active = new Set<string>()
+			for (const id of summary.container?.services?.keys?.() ?? []) {
+				const key = pluginIdToString(id)
+				if (key) active.add(key)
+			}
 			const ids = [...summary.removed, ...summary.replaced]
 			for (const id of ids) {
 				const nsKey = pluginIdToString(id)
 				if (!nsKey) continue
+				if (active.has(nsKey)) continue
 				this.runtime.permissions.removeNamespace(nsKey)
+				this.runtime.cleanupCommandsForOwner(nsKey)
 			}
 		})
 		this.ctx.scope.collectEffect(off)

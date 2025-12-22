@@ -13,7 +13,7 @@ export type { TelegramSnapshot }
 
 /* ======================== Plugin ======================== */
 
-@Plugin({ name: 'Telegram', type: 'service' })
+@Plugin({ name: 'Telegram', type: 'service', startTimeoutMs: 10_000 })
 export class TelegramPlugin extends BasePlugin {
 	@UseConfig(TelegramConfig) private config!: InferConfig<TelegramConfigType>
 
@@ -24,8 +24,9 @@ export class TelegramPlugin extends BasePlugin {
 		this.runtime = new TelegramRuntime(wretch)
 	}
 
-	override async init(): Promise<void> {
-		await this.runtime.bootstrap(this.ctx, this.config)
+	override async init(abort: AbortSignal): Promise<void> {
+		await this.runtime.bootstrap(this.ctx, this.config, abort)
+		if (abort.aborted) return
 		this.ctx.extensionService.register({ entryPath: './ui/index.tsx' })
 		this.ctx.rpc.registerExtension(() => new TelegramBotRpc(this.runtime))
 		if (this.ctx.sse) {

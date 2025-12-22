@@ -1,8 +1,11 @@
-import type { InlinePart, Part } from '../types'
+import type { InlinePart, MentionPart, Part } from '../types'
 
 export const text = (t: string): Part => ({ type: 'text', text: t })
-export const mention = (kind: 'user' | 'role' | 'channel' | 'everyone', id?: string | number): Part =>
-	({ type: 'mention', kind, id })
+export const mention = (
+	kind: 'user' | 'role' | 'channel' | 'everyone',
+	id?: string | number,
+	meta?: Partial<Omit<MentionPart, 'type' | 'kind' | 'id'>>,
+): Part => ({ type: 'mention', kind, id, ...(meta ?? {}) })
 export const image = (url: string, alt?: string): Part => ({ type: 'image', url, alt })
 export const imageData = (
 	data: Uint8Array | ArrayBufferLike,

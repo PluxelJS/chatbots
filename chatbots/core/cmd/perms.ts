@@ -1,7 +1,7 @@
 import type { Flags, TypeFlag, TypeFlagOptions } from 'type-flag'
 
 import type { Command, ExtractCommandParams } from '../../bot-layer/cmd'
-import type { CommandBuilder as BaseCommandBuilder, CommandKit as BaseCommandKit } from '../../bot-layer/cmd/kit'
+import { createCommandKit, type CommandBuilder as BaseCommandBuilder, type CommandKit as BaseCommandKit } from '../../bot-layer/cmd/kit'
 import type { ChatbotsCommandContext } from '../types'
 import { Decision } from '../../permissions/decision'
 import type { NodeRef } from '../../permissions/resolver'
@@ -24,6 +24,28 @@ export type CommandBuilder<P extends string, F extends Flags, C, R = unknown> = 
 	perm: (ref: PermRef, message?: string) => CommandBuilder<P, F, C, R>
 }
 
+export function attachPermissionBuilder<P extends string, F extends Flags, C extends ChatbotsCommandContext, R = unknown>(
+	base: BaseCommandBuilder<P, F, C, R>,
+	perms: PermissionService,
+): CommandBuilder<P, F, C, R> {
+	const builder = base as CommandBuilder<P, F, C, R>
+	if (typeof builder.perm === 'function') return builder
+
+	builder.perm = (ref: PermRef, message: string = 'Permission denied.') => {
+		base.use((next) => async (argv: any, ctx: any) => {
+			const nodeRef = resolvePermRef(perms, ref)
+			if (!nodeRef) return message
+			const cached = perms.authorizeUserSync(ctx.user.id, nodeRef)
+			const d = cached ?? (await perms.authorizeUser(ctx.user.id, nodeRef))
+			if (d !== Decision.Allow) return message
+			return next(argv, ctx)
+		})
+		return builder
+	}
+
+	return builder
+}
+
 export function withPermissions<C extends ChatbotsCommandContext>(
 	kit: BaseCommandKit<C>,
 	perms: PermissionService,
@@ -31,26 +53,26 @@ export function withPermissions<C extends ChatbotsCommandContext>(
 	return {
 		reg(pattern, flags, flagOptions) {
 			const base = kit.reg(pattern as any, flags as any, flagOptions as any)
-			const builder = base as unknown as CommandBuilder<any, any, C, any>
-
-			builder.perm = (ref: PermRef, message: string = 'Permission denied.') => {
-				base.use((next) => async (argv: any, ctx: any) => {
-					const nodeRef = resolvePermRef(perms, ref)
-					if (!nodeRef) return message
-					const cached = perms.authorizeUserSync(ctx.user.id, nodeRef)
-					const d = cached ?? (await perms.authorizeUser(ctx.user.id, nodeRef))
-					if (d !== Decision.Allow) return message
-					return next(argv, ctx)
-				})
-				return builder
-			}
-
-			return builder as any
+			return attachPermissionBuilder(base as any, perms) as any
 		},
 		group: kit.group.bind(kit),
 		list: kit.list.bind(kit),
 		help: kit.help.bind(kit),
 	}
+}
+
+export function createPermissionCommandKit<C extends ChatbotsCommandContext>(
+	bus: {
+		register: (cmd: Command<any, any, C, any>) => any
+		list: () => Command<any, any, C, any>[]
+	},
+	perms: PermissionService,
+	opts?: { onRegister?: (cmd: Command<any, any, C, any>) => void },
+): CommandKit<C> {
+	return createCommandKit<C>(bus, {
+		extendBuilder: (builder) => attachPermissionBuilder(builder as any, perms),
+		onRegister: opts?.onRegister,
+	}) as CommandKit<C>
 }
 
 export type { Command, TypeFlag, TypeFlagOptions, ExtractCommandParams }

@@ -16,6 +16,8 @@ export interface AttachmentCollectOptions {
 export interface ResolveAttachmentsOptions extends AttachmentCollectOptions {
 	limit?: number
 	filter?: (attachment: Attachment) => boolean
+	concurrency?: number
+	signal?: AbortSignal
 }
 
 const isAttachmentPart = (part: Part): part is Extract<Part, { type: 'image' | 'file' }> =>
@@ -32,15 +34,22 @@ const toBuffer = (input: ArrayBuffer | ArrayBufferView | Buffer): Buffer => {
 	return Buffer.from(input.buffer, input.byteOffset, input.byteLength)
 }
 
-const fetchUrl = async (url: string): Promise<Buffer> => {
-	const res = await fetch(url)
+const fetchUrl = async (url: string, signal?: AbortSignal): Promise<Buffer> => {
+	const res = await fetch(url, signal ? { signal } : undefined)
 	if (!res.ok) throw new Error(`bot-layer: 下载附件失败 ${res.status} ${res.statusText}`)
 	return Buffer.from(await res.arrayBuffer())
 }
 
-const downloadAttachment = async (attachment: Attachment): Promise<Buffer> => {
+const throwIfAborted = (signal?: AbortSignal) => {
+	if (signal?.aborted) {
+		throw new Error('bot-layer: resolveAttachments aborted')
+	}
+}
+
+const downloadAttachment = async (attachment: Attachment, signal?: AbortSignal): Promise<Buffer> => {
+	throwIfAborted(signal)
 	if (attachment.fetch) {
-		const data = await attachment.fetch()
+		const data = await attachment.fetch(signal)
 		return toBuffer(data)
 	}
 
@@ -50,10 +59,16 @@ const downloadAttachment = async (attachment: Attachment): Promise<Buffer> => {
 	}
 
 	if (part.url) {
-		return fetchUrl(part.url)
+		return fetchUrl(part.url, signal)
 	}
 
 	throw new Error('bot-layer: attachment 无可用下载方式')
+}
+
+const normalizeConcurrency = (value: number | undefined, total: number): number => {
+	const base = typeof value === 'number' ? Math.floor(value) : 4
+	if (!Number.isFinite(base) || base <= 0) return 1
+	return Math.min(base, Math.max(1, total))
 }
 
 const toAttachments = (parts: Part[], platform: Platform, source: AttachmentSource): Attachment[] =>
@@ -102,10 +117,24 @@ export const resolveAttachments = async (msg: AnyMessage, opts?: ResolveAttachme
 	)
 	const limited = typeof opts?.limit === 'number' ? filtered.slice(0, opts.limit) : filtered
 
-	const results: ResolvedAttachment[] = []
-	for (const att of limited) {
-		const data = await downloadAttachment(att)
-		results.push({ ...att, data })
+	if (!limited.length) return []
+	const signal = opts?.signal
+	const concurrency = normalizeConcurrency(opts?.concurrency, limited.length)
+	const results = new Array<ResolvedAttachment>(limited.length)
+	let cursor = 0
+
+	const run = async () => {
+		while (true) {
+			throwIfAborted(signal)
+			const index = cursor++
+			if (index >= limited.length) return
+			const att = limited[index]
+			const data = await downloadAttachment(att, signal)
+			results[index] = { ...att, data }
+		}
 	}
+
+	const workers = Array.from({ length: concurrency }, () => run())
+	await Promise.all(workers)
 	return results
 }

@@ -57,7 +57,9 @@ export default BotLayer
 
 export * from './types'
 export * from './parts'
+export * from './avatars'
 export * from './platforms/base'
 export * from './attachments'
+export * from './media'
 export { getAdapter, listAdapters, registerAdapter, getCapabilities, createAdapterRegistry } from './platforms/registry'
 export { registerBridgeDefinition, createBridgeManager } from './bridge'

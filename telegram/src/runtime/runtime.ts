@@ -38,6 +38,7 @@ export class TelegramRuntime {
 	private repo!: TelegramBotRegistry
 	private sseBridge: TelegramSseBridge | null = null
 	private autoConnectScheduled = false
+	private abort?: AbortSignal
 
 	constructor(wretch: WretchPlugin) {
 		this.commands = createCommandRegistry()
@@ -54,11 +55,13 @@ export class TelegramRuntime {
 			])
 	}
 
-	async bootstrap(ctx: Context, config: Config<TelegramConfigType>) {
+	async bootstrap(ctx: Context, config: Config<TelegramConfigType>, abort?: AbortSignal) {
 		this.ctx = ctx
 		this.config = config
+		this.abort = abort
 
 		await this.setupRepoAndManager()
+		if (this.abort?.aborted) return
 		this.commands.onChange(() => this.syncCommandsToActiveBots())
 		this.registerPipelines()
 		this.scheduleAutoConnect()
@@ -72,11 +75,13 @@ export class TelegramRuntime {
 
 	/* ======================== Public API（供 RPC/外部调用） ======================== */
 
-	getOverview() {
+	async getOverview() {
+		await this.repo.whenReady()
 		return this.manager.getOverview()
 	}
 
-	getBotStatuses() {
+	async getBotStatuses() {
+		await this.repo.whenReady()
 		return this.manager.getPublicBots()
 	}
 
@@ -114,8 +119,15 @@ export class TelegramRuntime {
 		return this.manager.disconnectBot(id)
 	}
 
-	snapshot(): TelegramSnapshot {
-		return this.sseBridge?.snapshot() ?? { bots: [], overview: this.manager.getOverview(), updatedAt: Date.now() }
+	async snapshot(): Promise<TelegramSnapshot> {
+		await this.repo.whenReady()
+		return (
+			(await this.sseBridge?.snapshot()) ?? {
+				bots: [],
+				overview: this.manager.getOverview(),
+				updatedAt: Date.now(),
+			}
+		)
 	}
 
 	createSseHandler() {
@@ -168,7 +180,10 @@ export class TelegramRuntime {
 	}
 
 	private async autoConnectBots() {
+		if (this.abort?.aborted) return
 		if (this.config.autoConnect === false) return
+		await this.repo.whenReady()
+		if (this.abort?.aborted) return
 		const bots = this.repo.list(128)
 		if (bots.length === 0) return
 		await Promise.allSettled(
@@ -189,6 +204,7 @@ export class TelegramRuntime {
 
 		// Do not block plugin start: lifecycle start timeout is short (1500ms).
 		setTimeout(() => {
+			if (this.abort?.aborted) return
 			void this.autoConnectBots().catch((e) => this.ctx.logger.warn(e, '[Telegram] autoConnect failed'))
 		}, 0)
 	}

@@ -30,15 +30,17 @@ export class KookRuntime {
 	public events!: KookChannel
 	private sseBridge: KookSseBridge | null = null
 	private autoConnectScheduled = false
+	private abort?: AbortSignal
 
 	constructor(
 		private readonly wretch: WretchPlugin,
 		private readonly websocket: WebSocketPlugin,
 	) {}
 
-	async bootstrap(ctx: Context, config: Config<KookConfigType>) {
+	async bootstrap(ctx: Context, config: Config<KookConfigType>, abort?: AbortSignal) {
 		this.ctx = ctx
 		this.config = config
+		this.abort = abort
 
 		await this.setupClients()
 		this.repo = new KookBotRegistry(this.ctx)
@@ -46,6 +48,8 @@ export class KookRuntime {
 		this.manager = new BotManager(this.ctx, this.repo, this.websocket, this.baseClient)
 		this.events = this.manager.events
 		this.sseBridge = new KookSseBridge(this.repo, this.manager)
+
+		if (this.abort?.aborted) return
 
 		this.registerWebhook()
 		this.registerMessagePipeline()
@@ -60,11 +64,13 @@ export class KookRuntime {
 
 	/* ======================== Public API（供 RPC/外部调用） ======================== */
 
-	getOverview() {
+	async getOverview() {
+		await this.repo.whenReady()
 		return this.manager.getOverview()
 	}
 
-	getBotStatuses() {
+	async getBotStatuses() {
+		await this.repo.whenReady()
 		return this.manager.getPublicBots()
 	}
 
@@ -88,8 +94,15 @@ export class KookRuntime {
 		return this.manager.disconnectBot(id)
 	}
 
-	snapshot(): KookSnapshot {
-		return this.sseBridge?.snapshot() ?? { bots: [], overview: this.manager.getOverview(), updatedAt: Date.now() }
+	async snapshot(): Promise<KookSnapshot> {
+		await this.repo.whenReady()
+		return (
+			(await this.sseBridge?.snapshot()) ?? {
+				bots: [],
+				overview: this.manager.getOverview(),
+				updatedAt: Date.now(),
+			}
+		)
 	}
 
 	createSseHandler() {
@@ -133,7 +146,10 @@ export class KookRuntime {
 	}
 
 	private async autoConnectBots() {
+		if (this.abort?.aborted) return
 		if (this.config.autoConnect === false) return
+		await this.repo.whenReady()
+		if (this.abort?.aborted) return
 		const bots = this.repo.list(128)
 		if (bots.length === 0) return
 		await Promise.allSettled(
@@ -153,6 +169,7 @@ export class KookRuntime {
 
 		// Do not block plugin start: lifecycle start timeout is short (1500ms).
 		setTimeout(() => {
+			if (this.abort?.aborted) return
 			void this.autoConnectBots().catch((e) => this.ctx.logger.warn(e, '[KOOK] autoConnect failed'))
 		}, 0)
 	}

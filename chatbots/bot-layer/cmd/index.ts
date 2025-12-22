@@ -244,6 +244,58 @@ export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInse
 		cur.cmd = cmd
 	}
 
+	const getNode = (tokens: readonly string[]): Node | null => {
+		let cur = root
+		for (const raw of tokens) {
+			const t = norm(raw)
+			const n = cur.next.get(t)
+			if (!n) return null
+			cur = n
+		}
+		return cur
+	}
+
+	const remove = (tokens: readonly string[], cmd: AnyCmd) => {
+		const stack: Array<{ node: Node; key: string }> = []
+		let cur = root
+		for (const raw of tokens) {
+			const t = norm(raw)
+			const n = cur.next.get(t)
+			if (!n) return
+			stack.push({ node: cur, key: t })
+			cur = n
+		}
+		if (cur.cmd !== cmd) return
+		delete cur.cmd
+		for (let i = stack.length - 1; i >= 0; i--) {
+			const { node, key } = stack[i]!
+			const child = node.next.get(key)
+			if (!child) break
+			if (child.cmd || child.next.size) break
+			node.next.delete(key)
+		}
+	}
+
+	const rebuildByHead = () => {
+		byHead.clear()
+		for (const cmd of all) {
+			if (cmd.nameTokens.length === 1) byHead.set(norm(cmd.nameTokens[0]), cmd)
+			for (const a of cmd.aliases) {
+				const toks = a.split(/\s+/)
+				if (toks.length === 1) byHead.set(norm(toks[0]), cmd)
+			}
+		}
+	}
+
+	const assertNoConflict = (tokens: readonly string[], cmd: AnyCmd) => {
+		const node = getNode(tokens)
+		if (node?.cmd && node.cmd !== cmd) {
+			throw new Error(
+				`Command name conflict: "${tokens.join(' ')}" already registered by pattern "${node.cmd.pattern}"`,
+			)
+		}
+	}
+
 	const find = (tokens: string[]) => {
 		let cur = root
 		let last: AnyCmd | undefined
@@ -263,10 +315,14 @@ export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInse
 		register<CMD extends AnyCmd>(cmd: CMD) {
 			all.add(cmd)
 			if (cmd.nameTokens.length === 0) throw new Error(`Empty command name in pattern "${cmd.pattern}"`)
+			assertNoConflict(cmd.nameTokens, cmd)
 			if (cmd.nameTokens.length === 1) byHead.set(norm(cmd.nameTokens[0]), cmd)
 			put(cmd.nameTokens, cmd)
 			for (const a of cmd.aliases) {
 				const toks = a.split(/\s+/)
+				if (toks.join(' ') !== cmd.nameTokens.join(' ')) {
+					assertNoConflict(toks, cmd)
+				}
 				if (toks.length === 1) byHead.set(norm(toks[0]), cmd)
 				put(toks, cmd)
 			}
@@ -275,11 +331,11 @@ export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInse
 
 		unregister(cmd: AnyCmd) {
 			all.delete(cmd)
-			if (cmd.nameTokens.length === 1) byHead.delete(norm(cmd.nameTokens[0]))
+			remove(cmd.nameTokens, cmd)
 			for (const a of cmd.aliases) {
-				const toks = a.split(/\s+/)
-				if (toks.length === 1) byHead.delete(norm(toks[0]))
+				remove(a.split(/\s+/), cmd)
 			}
+			rebuildByHead()
 		},
 
 		list(): AnyCmd[] {

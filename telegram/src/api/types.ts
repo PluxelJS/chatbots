@@ -57,6 +57,8 @@ export type SendPhotoArgs = MethodArgs<'sendPhoto'>
 export type SendPhotoOptions = Omit<SendPhotoArgs, 'chat_id' | 'photo'>
 export type SendDocumentArgs = MethodArgs<'sendDocument'>
 export type SendDocumentOptions = Omit<SendDocumentArgs, 'chat_id' | 'document'>
+export type SendAnimationArgs = MethodArgs<'sendAnimation'>
+export type SendAnimationOptions = Omit<SendAnimationArgs, 'chat_id' | 'animation'>
 export type AnswerCallbackQueryArgs = MethodArgs<'answerCallbackQuery'>
 export type SetWebhookArgs = MethodArgs<'setWebhook'>
 export type DeleteWebhookArgs = MethodArgs<'deleteWebhook'>
@@ -105,6 +107,11 @@ export interface TelegramShortcuts {
 		document: SendDocumentArgs['document'],
 		options?: SendDocumentOptions,
 	): Promise<Result<MethodReturn<'sendDocument'>>>
+	sendAnimation(
+		chatId: SendAnimationArgs['chat_id'],
+		animation: SendAnimationArgs['animation'],
+		options?: SendAnimationOptions,
+	): Promise<Result<MethodReturn<'sendAnimation'>>>
 	answerCallbackQuery(
 		callbackQueryId: AnswerCallbackQueryArgs['callback_query_id'],
 		options?: Omit<AnswerCallbackQueryArgs, 'callback_query_id'>,
@@ -122,6 +129,7 @@ export type ShortcutKeys =
 	| 'deleteMessage'
 	| 'sendPhoto'
 	| 'sendDocument'
+	| 'sendAnimation'
 	| 'answerCallbackQuery'
 	| 'setWebhook'
 	| 'deleteWebhook'
@@ -160,6 +168,10 @@ export interface ChatSession {
 		document: SendDocumentArgs['document'],
 		options?: SendDocumentOptions,
 	): Promise<Result<MethodReturn<'sendDocument'>>>
+	sendAnimation(
+		animation: SendAnimationArgs['animation'],
+		options?: SendAnimationOptions,
+	): Promise<Result<MethodReturn<'sendAnimation'>>>
 	typing(
 		action?: SendChatActionArgs['action'],
 		options?: Omit<SendChatActionArgs, 'chat_id' | 'action'>,

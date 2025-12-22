@@ -1,5 +1,5 @@
 import type { MessageSession } from 'pluxel-plugin-kook'
-import type { Attachment, BotChannel, BotUser, Message, MessageReference, Part } from '../../types'
+import type { Attachment, BotChannel, BotUser, MentionPart, Message, MessageReference, Part } from '../../types'
 import { hasRichParts } from '../../utils'
 import { createReply, createSendHelpers } from '../../platforms/base'
 import { kookAdapter } from './adapter'
@@ -8,7 +8,9 @@ type KookAttachment = { type?: string; url?: string; name?: string; file_type?: 
 
 interface NormalizedContent {
 	text: string
+	textRaw: string
 	parts: Part[]
+	mentions: MentionPart[]
 	attachments: Attachment<'kook'>[]
 	rich: boolean
 }
@@ -17,10 +19,25 @@ const normalizeContent = (payload: any, source: 'message' | 'reference'): Normal
 	const parts: Part[] = []
 	const attachments: Attachment<'kook'>[] = []
 	const extra: any = payload?.extra ?? payload ?? {}
+	const mentionUsers = new Map<string, { username?: string; displayName?: string; avatar?: string }>()
+
+	const mentionParts = extra?.kmarkdown?.mention_part
+	if (Array.isArray(mentionParts)) {
+		for (const meta of mentionParts) {
+			if (!meta?.id) continue
+			const username = meta.username ?? meta.full_name ?? null
+			mentionUsers.set(String(meta.id), {
+				username: meta.username ?? null,
+				displayName: meta.full_name ?? username ?? null,
+				avatar: meta.avatar ?? null,
+			})
+		}
+	}
 
 	const rawContent = payload?.content ?? extra?.kmarkdown?.raw_content ?? ''
-	if (rawContent) {
-		parts.push({ type: 'text', text: String(rawContent) })
+	const textRaw = rawContent ? String(rawContent) : ''
+	if (textRaw) {
+		parts.push({ type: 'text', text: textRaw })
 	}
 
 	if (extra?.mention_all || extra?.mention_here) {
@@ -29,7 +46,15 @@ const normalizeContent = (payload: any, source: 'message' | 'reference'): Normal
 
 	if (Array.isArray(extra?.mention)) {
 		for (const id of extra.mention) {
-			parts.push({ type: 'mention', kind: 'user', id })
+			const meta = mentionUsers.get(String(id))
+			parts.push({
+				type: 'mention',
+				kind: 'user',
+				id,
+				username: meta?.username,
+				displayName: meta?.displayName,
+				avatar: meta?.avatar,
+			})
 		}
 	}
 
@@ -67,10 +92,13 @@ const normalizeContent = (payload: any, source: 'message' | 'reference'): Normal
 	}
 
 	const textParts = parts.filter((p) => p.type !== 'image' && p.type !== 'file')
-	const text = textParts.length ? kookAdapter.render(textParts).text : rawContent ? String(rawContent) : ''
+	const text = textParts.length ? kookAdapter.render(textParts).text : textRaw
+	const mentions = parts.filter((part): part is MentionPart => part.type === 'mention')
 	return {
 		text,
+		textRaw,
 		parts,
+		mentions,
 		attachments,
 		rich: hasRichParts(parts),
 	}
@@ -98,7 +126,9 @@ const normalizeReference = (session: MessageSession): MessageReference<'kook'> |
 		platform: 'kook',
 		messageId,
 		text: normalized.text,
+		textRaw: normalized.textRaw,
 		parts: normalized.parts,
+		mentions: normalized.mentions,
 		attachments: normalized.attachments,
 		rich: normalized.rich,
 		user,
@@ -133,7 +163,9 @@ export const normalizeKookMessage = (session: MessageSession): Message<'kook'> =
 	return {
 		platform: 'kook',
 		text: normalized.text,
+		textRaw: normalized.textRaw,
 		parts: normalized.parts,
+		mentions: normalized.mentions,
 		attachments: normalized.attachments,
 		reference,
 		rich: normalized.rich || Boolean(reference?.rich),

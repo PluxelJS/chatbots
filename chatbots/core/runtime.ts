@@ -3,16 +3,18 @@ import type { Context } from '@pluxel/hmr'
 import { MikroOrm } from 'pluxel-plugin-mikro-orm'
 
 import { CommandError, createCommandBus } from '../bot-layer/cmd'
-import { createCommandKit, type CommandKit } from '../bot-layer/cmd/kit'
+import type { CommandKit } from '../bot-layer/cmd/kit'
 import type { BotLayer } from '../bot-layer/bot-layer'
 import type { AnyMessage, MessageContent, Part } from '../bot-layer/types'
 import { hasRichParts } from '../bot-layer/utils'
+import { partsToText } from '../bot-layer/render/text'
 
 import { UserDirectory } from './db/user-directory'
 import { PermissionService } from '../permissions/service'
-import { withPermissions, type CommandKit as PermCommandKit } from './cmd/perms'
+import { createPermissionCommandKit, type CommandKit as PermCommandKit } from './cmd/perms'
 import { createPermissionApi, type ChatbotsPermissionApi } from '../permissions/permission'
 import type { ChatbotsCommandContext } from './types'
+import { getCommandMeta } from '../bot-layer/cmd/kit'
 
 export interface ChatbotsRuntimeOptions {
 	cmdPrefix: string
@@ -31,6 +33,10 @@ export class ChatbotsRuntime {
 	public readonly cmd: PermCommandKit<ChatbotsCommandContext>
 
 	private readonly bus = createCommandBus<ChatbotsCommandContext>({ caseInsensitive: true })
+	private readonly commandKits = new WeakMap<Context, PermCommandKit<ChatbotsCommandContext>>()
+	private readonly commandsByOwner = new Map<string, Set<Command<any, any, ChatbotsCommandContext, any>>>()
+	private readonly commandOwners = new WeakMap<Command<any, any, ChatbotsCommandContext, any>, string>()
+	private readonly ownerCtxById = new Map<string, Context>()
 	private disposed = false
 	private readonly disposeEntities: () => Promise<void>
 
@@ -46,7 +52,10 @@ export class ChatbotsRuntime {
 		this.users = users
 		this.permissions = permissions
 		this.permission = createPermissionApi(this.permissions)
-		this.cmd = withPermissions(createCommandKit<ChatbotsCommandContext>(this.bus), this.permissions)
+		this.cmd = createPermissionCommandKit(this.bus, this.permissions, {
+			onRegister: (cmd) => this.registerCommandCleanup(cmd, this.ctx),
+		})
+		this.commandKits.set(this.ctx, this.cmd)
 		this.disposeEntities = disposeEntities
 	}
 
@@ -74,6 +83,26 @@ export class ChatbotsRuntime {
 		if (this.options.registerUserCommands) this.registerUserCommands()
 	}
 
+	getCommandKit(caller?: Context): PermCommandKit<ChatbotsCommandContext> {
+		const ctx = caller ?? this.ctx
+		const ownerKey = ctx.pluginInfo?.id
+		if (!ownerKey) {
+			throw new Error('[chatbots] cmd registration requires caller context')
+		}
+		const prevCtx = this.ownerCtxById.get(ownerKey)
+		if (prevCtx && prevCtx !== ctx) {
+			this.cleanupCommandsForOwner(ownerKey)
+		}
+		this.ownerCtxById.set(ownerKey, ctx)
+		const cached = this.commandKits.get(ctx)
+		if (cached) return cached
+		const kit = createPermissionCommandKit(this.bus, this.permissions, {
+			onRegister: (cmd) => this.registerCommandCleanup(cmd, ctx),
+		})
+		this.commandKits.set(ctx, kit)
+		return kit
+	}
+
 	async teardown(): Promise<void> {
 		this.disposed = true
 		await this.disposeEntities()
@@ -90,7 +119,7 @@ export class ChatbotsRuntime {
 
 		const stop = this.bot.events.text.on((msg) => {
 			if (msg.user.isBot) return
-			const text = msg.text?.trim() ?? ''
+			const text = this.buildCommandText(msg).trim()
 			if (!text) return
 			if (!text.toLowerCase().startsWith(prefixLower)) return
 
@@ -101,6 +130,98 @@ export class ChatbotsRuntime {
 		})
 
 		this.ctx.scope.collectEffect(() => stop())
+	}
+
+	private buildCommandText(msg: AnyMessage): string {
+		if (!msg.parts.length) return msg.textRaw ?? msg.text ?? ''
+		const out: string[] = []
+		const push = (text: string | undefined | null) => {
+			if (text) out.push(text)
+		}
+		const walk = (part: Part) => {
+			switch (part.type) {
+				case 'text':
+					push(part.text)
+					break
+				case 'styled':
+					for (const child of part.children) walk(child)
+					break
+				case 'link':
+					push(part.label ?? part.url)
+					break
+				case 'codeblock':
+					push(part.code)
+					break
+				case 'mention':
+					break
+				default:
+					break
+			}
+		}
+		for (const part of msg.parts) walk(part)
+		let text = out.join('')
+		if (!text.trim()) text = msg.textRaw ?? msg.text ?? ''
+		if (msg.platform === 'kook' && text) {
+			text = text.replace(/\((met|rol|chn)\)([\s\S]*?)\(\1\)/g, ' ')
+		}
+		return text
+	}
+
+	private registerCommandCleanup(cmd: Command<any, any, ChatbotsCommandContext, any>, owner?: Context) {
+		const caller = owner ?? this.ctx.caller ?? this.ctx
+		const ownerKey = caller.pluginInfo?.id
+		if (!ownerKey) {
+			throw new Error('[chatbots] command registration requires caller context')
+		}
+		const unregister = (this.bus as any).unregister as ((cmd: any) => void) | undefined
+		if (typeof unregister !== 'function') return
+		this.trackCommand(ownerKey, cmd)
+		caller.scope.collectEffect(() => {
+			try {
+				unregister(cmd)
+			} catch (err) {
+				this.ctx.logger.warn(err, 'chatbots: command unregister failed')
+			} finally {
+				this.untrackCommand(cmd, ownerKey)
+			}
+		})
+	}
+
+	private trackCommand(ownerKey: string, cmd: Command<any, any, ChatbotsCommandContext, any>) {
+		let bucket = this.commandsByOwner.get(ownerKey)
+		if (!bucket) {
+			bucket = new Set()
+			this.commandsByOwner.set(ownerKey, bucket)
+		}
+		bucket.add(cmd)
+		this.commandOwners.set(cmd, ownerKey)
+	}
+
+	private untrackCommand(cmd: Command<any, any, ChatbotsCommandContext, any>, ownerKey?: string) {
+		const key = ownerKey ?? this.commandOwners.get(cmd)
+		if (!key) return
+		const bucket = this.commandsByOwner.get(key)
+		if (bucket) {
+			bucket.delete(cmd)
+			if (bucket.size === 0) this.commandsByOwner.delete(key)
+		}
+		this.commandOwners.delete(cmd)
+	}
+
+	cleanupCommandsForOwner(ownerKey: string) {
+		const bucket = this.commandsByOwner.get(ownerKey)
+		if (!bucket || bucket.size === 0) return
+		const unregister = (this.bus as any).unregister as ((cmd: any) => void) | undefined
+		if (typeof unregister !== 'function') return
+		for (const cmd of Array.from(bucket)) {
+			try {
+				unregister(cmd)
+			} catch (err) {
+				this.ctx.logger.warn(err, 'chatbots: command cleanup failed')
+			} finally {
+				this.untrackCommand(cmd, ownerKey)
+			}
+		}
 	}
 
 	private async dispatchCommand(body: string, msg: AnyMessage): Promise<void> {
@@ -167,8 +288,8 @@ export class ChatbotsRuntime {
 		}
 	}
 
-	private formatHelp(prefix: string): string {
-		const raw = this.cmd.help()
+	private formatHelp(prefix: string, group?: string): string {
+		const raw = this.cmd.help(group)
 		const lines = raw
 			.split('\n')
 			.map((line) => (line.startsWith('- ') ? `- ${prefix}${line.slice(2)}` : line))
@@ -181,6 +302,16 @@ export class ChatbotsRuntime {
 		return this.cmd.list().find((c) => c.nameTokens.join(' ').toLowerCase() === normalized)
 	}
 
+	private hasGroup(name: string): boolean {
+		const normalized = name.trim()
+		if (!normalized) return false
+		for (const cmd of this.cmd.list()) {
+			const meta = getCommandMeta(cmd)
+			if (meta?.group === normalized) return true
+		}
+		return false
+	}
+
 	private registerCoreCommands() {
 		const prefix = this.getCmdPrefix()
 
@@ -191,8 +322,9 @@ export class ChatbotsRuntime {
 				.action(({ command }) => {
 					if (!command) return this.formatHelp(prefix)
 					const found = this.findCommand(command)
-					if (!found) return `Unknown command: ${command}\n\n${this.formatHelp(prefix)}`
-					return `${prefix}${found.toUsage()}`
+					if (found) return `${prefix}${found.toUsage()}`
+					if (this.hasGroup(command)) return this.formatHelp(prefix, command)
+					return `Unknown command: ${command}\n\n${this.formatHelp(prefix)}`
 				})
 
 			cmd
@@ -249,9 +381,27 @@ export class ChatbotsRuntime {
 				.action((_argv, ctx) => (ctx.msg.parts.length ? ctx.msg.parts : ctx.msg.text || '[empty]'))
 
 			cmd
-				.reg('parts')
-				.describe('返回解析后的 parts JSON')
-				.action((_argv, ctx) => this.buildJsonBlock(ctx.msg.parts))
+				.reg('parts [scope]')
+				.describe('返回解析后的 parts JSON（默认优先引用消息）')
+				.usage('parts [ref|msg]')
+				.action(({ scope }, ctx) => {
+					const mode = String(scope ?? '').trim().toLowerCase()
+					const hasRef = Boolean(ctx.msg.reference?.parts?.length)
+					const useRef = mode ? mode === 'ref' : hasRef
+					const target = useRef ? ctx.msg.reference : undefined
+					const parts = target?.parts?.length ? target.parts : ctx.msg.parts
+					const hint =
+						!hasRef && !mode
+							? 'Tip: reply/quote a message then run /parts to inspect ctx.msg.reference.parts'
+							: undefined
+					return this.buildJsonBlock({
+						target: useRef && target ? 'reference' : 'message',
+						platform: ctx.msg.platform,
+						renderedText: partsToText(parts, ctx.msg.platform),
+						hint,
+						parts,
+					})
+				})
 
 			cmd
 				.reg('meta')

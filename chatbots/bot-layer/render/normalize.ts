@@ -1,4 +1,4 @@
-import type { FilePart, ImagePart, InlinePart, Part, Platform } from '../types'
+import type { FilePart, ImagePart, InlinePart, MentionPart, Part, Platform } from '../types'
 import type { PlatformAdapter } from '../platforms/adapter'
 
 export type TextLikePart = Exclude<Part, ImagePart | FilePart>
@@ -11,12 +11,17 @@ export const assertTextOnly = (parts: Part[], label: string) => {
 	throw new Error(`bot-layer: ${label} 只允许文本类 Part，发现: ${bad.type}`)
 }
 
+const mentionToText = (part: MentionPart): string => {
+	const label = part.displayName ?? part.username ?? (part.id != null ? String(part.id) : part.kind)
+	return `@${label}`
+}
+
 const inlineToText = (parts: InlinePart[]): string =>
 	parts
 		.map((p) => {
 			if (p.type === 'text') return p.text
 			if (p.type === 'styled') return inlineToText(p.children)
-			if (p.type === 'mention') return `@${p.id ?? p.kind}`
+			if (p.type === 'mention') return mentionToText(p)
 			if (p.type === 'link') return p.label ? `${p.label} (${p.url})` : p.url
 			return ''
 		})
@@ -40,7 +45,7 @@ const normalizeInlineForAdapter = <P extends Platform>(
 				}
 				case 'mention': {
 					const support = capabilities.supportsInlineMention[part.kind] ?? false
-					if (!support) return { type: 'text', text: `@${part.id ?? part.kind}` }
+					if (!support) return { type: 'text', text: mentionToText(part) }
 					return part
 				}
 				case 'link': {
@@ -74,7 +79,7 @@ export const normalizeTextPartsForAdapter = <P extends Platform>(
 				}
 				case 'mention': {
 					const support = capabilities.supportsInlineMention[part.kind] ?? false
-					if (!support) return { type: 'text', text: `@${part.id ?? part.kind}` }
+					if (!support) return { type: 'text', text: mentionToText(part) }
 					return part
 				}
 				case 'link': {
@@ -122,4 +127,3 @@ export const normalizePartsForAdapter = <P extends Platform>(
 	}
 	return normalizeTextPartsForAdapter(normalized, adapter)
 }
-

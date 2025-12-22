@@ -96,3 +96,24 @@ bot-layer 的 Outbound 入口（`reply/sendText` 等）支持：
 - `msg.sendFile?.(file)`
 
 它们来自 `createSendHelpers(adapter, session)`：不做“智能遍历 Part[]”，只提供原子能力；复杂顺序/失败策略由下游自行决定。
+
+## 用户头像（Avatar）注意事项
+
+bot-layer 提供两类能力：
+
+- `resolveUserAvatarUrl/resolveAuthorAvatarUrl`：返回可访问的头像 URL（若平台/上下文允许）
+- `resolveUserAvatarImage/resolveAuthorAvatarImage`：返回头像二进制（`Buffer`），适合需要“拿头像做图/再上传”的场景
+- `collectMedia/resolveMedia`：统一收集并解析媒体（`avatar/image/file`）为 `Buffer`（支持去重、并发、取消）
+
+Telegram 特别说明：
+
+- Telegram Bot API 的头像通常需要 `getUserProfilePhotos + getFile` 才能拿到实际图片；文件 URL 会包含 bot token（形如 `.../file/bot<TOKEN>/...`）
+- 若你不希望在业务侧暴露 token 或不方便直接 fetch URL，优先使用 `resolve*AvatarImage` 或 `collectMedia/resolveMedia`（内部完成拉取并返回 `Buffer`）
+- 若 `getUserProfilePhotos` 返回 `total_count=0`，通常意味着：用户没有头像或头像隐私设置对 bot 不可见（需要用户侧调整）。
+
+### 推荐用法：统一媒体管线
+
+当你需要“尽量从上下文里拿到图片输入”（例如：头像优先，其次取消息/引用中的图片附件），建议使用：
+
+- `await collectMedia(msg, { includeAvatars: true, avatarPrefer: 'public' })`
+- `await resolveMedia(items, { concurrency: 4, signal })`

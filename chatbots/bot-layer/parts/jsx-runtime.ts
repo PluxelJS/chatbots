@@ -80,7 +80,15 @@ const build = (type: string, props: any, children: Child[]): Part | Part[] => {
 		case 'link':
 			return link(props?.href ?? props?.url, children, props?.label)
 		case 'mention':
-			return { type: 'mention', kind: props?.kind ?? 'user', id: props?.id }
+			return {
+				type: 'mention',
+				kind: props?.kind ?? 'user',
+				id: props?.id,
+				username: props?.username,
+				displayName: props?.displayName,
+				avatar: props?.avatar,
+				isBot: props?.isBot,
+			}
 		case 'img':
 		case 'image':
 			return image(props?.src, props?.alt, children)
@@ -146,7 +154,14 @@ export namespace JSX {
 		text: { children?: any }
 		a: { href: string; label?: string; children?: any }
 		link: { href?: string; url?: string; label?: string; children?: any }
-		mention: { kind: 'user' | 'role' | 'channel' | 'everyone'; id?: string | number }
+		mention: {
+			kind: 'user' | 'role' | 'channel' | 'everyone'
+			id?: string | number
+			username?: string
+			displayName?: string
+			avatar?: string
+			isBot?: boolean
+		}
 		img: { src: string; alt?: string; children?: any }
 		image: { src: string; alt?: string; children?: any }
 		file: { src?: string; url?: string; name?: string; mime?: string }

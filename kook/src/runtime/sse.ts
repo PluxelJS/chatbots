@@ -15,7 +15,8 @@ export class KookSseBridge {
 		private readonly manager: BotManager,
 	) {}
 
-	snapshot(limit = 64): KookSnapshot {
+	async snapshot(limit = 64): Promise<KookSnapshot> {
+		await this.repo.whenReady()
 		return {
 			bots: this.repo.list(limit),
 			overview: this.manager.getOverview(),
@@ -24,10 +25,11 @@ export class KookSseBridge {
 	}
 
 	createHandler(limit = 64) {
-		return (channel: SseChannel) => {
-			const sendCursor = () => channel.emit('cursor', { type: 'cursor', ...this.snapshot(limit) })
-			channel.emit('ready', { type: 'ready', ...this.snapshot(limit) })
-			const dispose = this.repo.observe(limit, sendCursor)
+		return async (channel: SseChannel) => {
+			const sendCursor = async () =>
+				channel.emit('cursor', { type: 'cursor', ...(await this.snapshot(limit)) })
+			channel.emit('ready', { type: 'ready', ...(await this.snapshot(limit)) })
+			const dispose = this.repo.observe(limit, () => void sendCursor())
 			const timer = setInterval(() => channel.emit('tick', { type: 'tick', now: Date.now() }), 1000)
 
 			channel.onAbort(() => {

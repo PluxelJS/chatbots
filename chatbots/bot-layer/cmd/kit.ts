@@ -26,28 +26,37 @@ export interface CommandKit<C> {
 	): CommandBuilder<P, F, C, R>
 	group(name: string, def: (kit: CommandKit<C>) => void): void
 	list(): ReadonlyArray<Command<any, any, C, any>>
-	help(): string
+	help(group?: string): string
 }
 
-export function createCommandKit<C>(bus: {
-	register: (cmd: Command<any, any, C, any>) => any
-	list: () => Command<any, any, C, any>[]
-}): CommandKit<C> {
+export type CommandBuilderExt<C> = <P extends string, F extends Flags, R = unknown>(
+	builder: CommandBuilder<P, F, C, R>,
+) => CommandBuilder<P, F, C, R>
+
+export type CommandMeta = { desc?: string; group?: string }
+
+const COMMAND_META = Symbol.for('chatbots:command:meta')
+
+export const getCommandMeta = <C>(cmd: Command<any, any, C, any>): CommandMeta | undefined =>
+	(cmd as any)[COMMAND_META]
+
+export function createCommandKit<C>(
+	bus: {
+		register: (cmd: Command<any, any, C, any>) => any
+		list: () => Command<any, any, C, any>[]
+	},
+	opts?: { extendBuilder?: CommandBuilderExt<C>; onRegister?: (cmd: Command<any, any, C, any>) => void },
+): CommandKit<C> {
 	type AnyCmd = Command<any, any, C, any>
-	type Meta = { desc?: string; group?: string }
 
-	const meta = new WeakMap<AnyCmd, Meta>()
 	const groupStack: string[] = []
-	const buckets = new Map<string | undefined, AnyCmd[]>()
 
-	const getBucket = (group: string | undefined) => {
-		let bucket = buckets.get(group)
-		if (!bucket) {
-			bucket = []
-			buckets.set(group, bucket)
-		}
-		return bucket
+	const meta = new WeakMap<AnyCmd, CommandMeta>()
+	const setMeta = (cmd: AnyCmd, next: CommandMeta) => {
+		meta.set(cmd, next)
+		;(cmd as any)[COMMAND_META] = next
 	}
+	const readMeta = (cmd: AnyCmd): CommandMeta => meta.get(cmd) ?? (cmd as any)[COMMAND_META] ?? {}
 
 	type LocalMeta<R> = { desc?: string; group?: string; mws: CmdMiddleware<C, R>[] }
 	type Chain<R = unknown> = (argv: any, ctx: C) => Awaitable<R>
@@ -71,9 +80,9 @@ export function createCommandKit<C>(bus: {
 			...full,
 			action: chain as CommandSpec<P, F, C, R>['action'],
 		})
-		meta.set(cmd, { desc: local.desc, group: local.group })
-		getBucket(local.group).push(cmd)
+		setMeta(cmd, { desc: local.desc, group: local.group })
 		bus.register(cmd)
+		opts?.onRegister?.(cmd)
 		return cmd
 	}
 
@@ -117,7 +126,7 @@ export function createCommandKit<C>(bus: {
 					return wrap(full, local)
 				},
 			}
-			return builder
+			return opts?.extendBuilder ? opts.extendBuilder(builder) : builder
 		},
 
 		group(name, def) {
@@ -133,16 +142,29 @@ export function createCommandKit<C>(bus: {
 			return bus.list()
 		},
 
-		help() {
+		help(group) {
+			const normalizedGroup = group?.trim()
 			const lines: string[] = []
-			for (const [group, cmds] of buckets) {
+			const buckets = new Map<string | undefined, AnyCmd[]>()
+			for (const c of bus.list()) {
+				const m = readMeta(c)
+				const g = m.group
+				if (normalizedGroup && g !== normalizedGroup) continue
+				let bucket = buckets.get(g)
+				if (!bucket) {
+					bucket = []
+					buckets.set(g, bucket)
+				}
+				bucket.push(c)
+			}
+			for (const [groupName, cmds] of buckets) {
 				if (cmds.length === 0) continue
-				if (group) {
+				if (groupName) {
 					if (lines.length) lines.push('')
-					lines.push(`# ${group}`)
+					lines.push(`# ${groupName}`)
 				}
 				for (const c of cmds) {
-					const m = meta.get(c) || {}
+					const m = readMeta(c)
 					lines.push(`- ${c.toUsage()}${m.desc ? ` — ${m.desc}` : ''}`)
 				}
 			}

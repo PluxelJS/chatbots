@@ -105,6 +105,13 @@ const toInputFile = (part: ImagePart | FilePart, fallbackName: string) =>
 			}
 		: part.url
 
+const isAnimationLike = (part: ImagePart): boolean => {
+	const mime = (part.mime ?? '').toLowerCase()
+	if (mime === 'image/gif' || mime === 'video/mp4') return true
+	const name = (part.name ?? part.url ?? '').toLowerCase()
+	return name.endsWith('.gif') || name.endsWith('.mp4')
+}
+
 const toParseMode = (format: RenderResult['format']): 'HTML' | undefined =>
 	format === 'html' ? 'HTML' : undefined
 
@@ -133,12 +140,34 @@ export const telegramAdapter: PlatformAdapter<'telegram'> = {
 		const payload = toInputFile(image, image.name ?? image.alt ?? 'image.png')
 		if (!payload) throw new Error('Telegram: image.url 为空，且未提供 data，无法发送图片')
 
-		const res = await session.bot.sendPhoto(session.chatId, payload, {
-			caption: caption?.rendered.text || undefined,
-			reply_to_message_id: replyTo,
-			parse_mode: parseMode,
-		})
-		if (!res.ok) throw new Error(`Telegram sendPhoto failed: ${res.message}`)
+		if (isAnimationLike(image) && typeof (session.bot as any).sendAnimation === 'function') {
+			const res = await (session.bot as any).sendAnimation(session.chatId, payload, {
+				caption: caption?.rendered.text || undefined,
+				reply_to_message_id: replyTo,
+				parse_mode: parseMode,
+			})
+			if (!res.ok) {
+				// Some environments may still fail to send as animation (multipart quirks / invalid body).
+				// Fallback to sendDocument so the command doesn't hard-fail.
+				const msg = String(res.message ?? '')
+				if (msg.includes('no animation in the request') && typeof (session.bot as any).sendDocument === 'function') {
+					const doc = await (session.bot as any).sendDocument(session.chatId, payload, {
+						caption: caption?.rendered.text || undefined,
+						reply_to_message_id: replyTo,
+					})
+					if (!doc.ok) throw new Error(`Telegram sendAnimation failed: ${res.message}; sendDocument failed: ${doc.message}`)
+				} else {
+					throw new Error(`Telegram sendAnimation failed: ${res.message}`)
+				}
+			}
+		} else {
+			const res = await session.bot.sendPhoto(session.chatId, payload, {
+				caption: caption?.rendered.text || undefined,
+				reply_to_message_id: replyTo,
+				parse_mode: parseMode,
+			})
+			if (!res.ok) throw new Error(`Telegram sendPhoto failed: ${res.message}`)
+		}
 	},
 
 	sendFile: async (session, file, options) => {
@@ -151,4 +180,3 @@ export const telegramAdapter: PlatformAdapter<'telegram'> = {
 		if (!res.ok) throw new Error(`Telegram sendDocument failed: ${res.message}`)
 	},
 }
-

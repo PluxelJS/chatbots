@@ -85,6 +85,16 @@ function buildTelegramApi(request: TelegramRequest): TelegramApi {
 			return request<R<'sendDocument'>>('POST', 'sendDocument', buildInputFilePayload('document', document, payload))
 		},
 
+		/** 发送动图（GIF/MP4 等） */
+		sendAnimation: (chatId: P<'sendAnimation'>['chat_id'], animation: P<'sendAnimation'>['animation'], options?: Omit<P<'sendAnimation'>, 'chat_id' | 'animation'>): Promise<Result<R<'sendAnimation'>>> => {
+			const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
+			return request<R<'sendAnimation'>>(
+				'POST',
+				'sendAnimation',
+				buildInputFilePayload('animation', animation, payload),
+			)
+		},
+
 		/** 回复回调查询 */
 		answerCallbackQuery: (
 			callbackQueryId: P<'answerCallbackQuery'>['callback_query_id'],
@@ -155,7 +165,6 @@ function buildTelegramApi(request: TelegramRequest): TelegramApi {
 	// Sending other content
 	define('sendAudio', 'POST')
 	define('sendVideo', 'POST')
-	define('sendAnimation', 'POST')
 	define('sendVoice', 'POST')
 	define('sendVideoNote', 'POST')
 	define('sendMediaGroup', 'POST')
@@ -390,6 +399,19 @@ function makeChatSession(
 		return res
 	}
 
+	const sendAnimation: ChatSession['sendAnimation'] = async (animation, options) => {
+		const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
+		const res = await request<MethodReturn<'sendAnimation'>>(
+			'POST',
+			'sendAnimation',
+			buildInputFilePayload('animation', animation, payload),
+		)
+		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
+			trackedId = (res.data as any).message_id
+		}
+		return res
+	}
+
 	const upsert: ChatSession['upsert'] = async (text, options) => {
 		if (trackedId) {
 			const res = await edit(trackedId, text, options)
@@ -433,6 +455,7 @@ function makeChatSession(
 		deleteLast,
 		sendPhoto,
 		sendDocument,
+		sendAnimation,
 		typing,
 		upsert,
 		transient,
@@ -520,7 +543,13 @@ function buildInputFilePayload(fieldName: string, file: TelegramInputFile, paylo
 	for (const [key, value] of Object.entries(payload)) {
 		appendFormField(form, key, value)
 	}
-	form.append(fieldName, normalized.value, normalized.filename)
+	// Only pass filename when it is explicitly present.
+	// Passing `undefined` as the 3rd arg may cause some FormData implementations to omit filename metadata.
+	if (normalized.filename) {
+		form.append(fieldName, normalized.value, normalized.filename)
+	} else {
+		form.append(fieldName, normalized.value)
+	}
 	return form
 }
 

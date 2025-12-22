@@ -11,7 +11,7 @@ export * from './types'
 export type { KookSnapshot }
 export { BotManager }
 
-@Plugin({ name: 'KOOK', type: 'service' })
+@Plugin({ name: 'KOOK', type: 'service', startTimeoutMs: 10_000 })
 export class KOOK extends BasePlugin {
 	@UseConfig(KookConfig) private config!: InferConfig<KookConfigType>
 
@@ -22,8 +22,9 @@ export class KOOK extends BasePlugin {
 		this.runtime = new KookRuntime(wretch, websocket)
 	}
 
-	override async init(): Promise<void> {
-		await this.runtime.bootstrap(this.ctx, this.config)
+	override async init(abort: AbortSignal): Promise<void> {
+		await this.runtime.bootstrap(this.ctx, this.config, abort)
+		if (abort.aborted) return
 		this.ctx.extensionService.register({ entryPath: './ui/index.tsx' })
 		this.ctx.rpc.registerExtension(() => new KOOKBotRpc(this.runtime))
 		if (this.ctx.sse) {

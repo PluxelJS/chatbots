@@ -1,5 +1,5 @@
 import type { Context } from '@pluxel/hmr'
-import { EvtChannel } from '@pluxel/hmr/services'
+import { EvtChannel } from '@pluxel/core/services'
 import type { Platform } from './types'
 import { listAdapters } from './platforms/registry'
 

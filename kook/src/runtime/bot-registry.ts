@@ -114,6 +114,7 @@ const toPublic = (doc: KookBotRecord): KookBotPublic => {
 export class KookBotRegistry {
 	private readonly tokenBox = new TokenBox()
 	private collection!: Collection<KookBotRecord>
+	private readyPromise: Promise<void> | null = null
 
 	constructor(private readonly ctx: Context, private readonly collectionName = 'kook:bots') {}
 
@@ -123,8 +124,11 @@ export class KookBotRegistry {
 			persistence: await this.ctx.pluginData.persistenceForCollection<KookBotRecord>(this.collectionName),
 			indices: [createIndex('mode'), createIndex('state'), createIndex('updatedAt')],
 		})
-		// 等待持久化数据加载完成，避免启动时 list() 为空导致 autoConnect 失效
-		await this.collection.isReady()
+		this.readyPromise = this.collection.isReady()
+	}
+
+	whenReady() {
+		return this.readyPromise ?? Promise.resolve()
 	}
 
 	async create(input: CreateBotInput): Promise<KookBotPublic> {

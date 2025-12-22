@@ -1,5 +1,5 @@
 import type { Context } from '@pluxel/hmr'
-import { EvtChannel } from '@pluxel/hmr/services'
+import { EvtChannel } from '@pluxel/core/services'
 import type { BotLayerEventMap } from './events.types'
 import type { AnyMessage, PlainMessage, RichMessage } from '../types'
 import { hasRichParts } from '../utils'
