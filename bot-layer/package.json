@@ -1,0 +1,36 @@
+{
+  "$schema": "https://market.pluxel.dev/schema/package.json",
+  "name": "@pluxel/bot-layer",
+  "version": "0.1.0",
+  "description": "Bot-layer runtime and platform adapters.",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "!**/*.map"
+  ],
+  "scripts": {
+    "build": "pluxel build"
+  },
+  "dependencies": {
+    "type-flag": "^4.0.2",
+    "@pluxel/parts": "workspace:*"
+  },
+  "peerDependencies": {
+    "pluxel-plugin-kook": "workspace:^",
+    "pluxel-plugin-telegram": "workspace:^"
+  },
+  "exports": {
+    ".": {
+      "@pluxel/hmr": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./jsx-runtime": {
+      "@pluxel/hmr": "./src/jsx-runtime.ts",
+      "default": "./dist/jsx-runtime.mjs"
+    },
+    "./package.json": "./package.json"
+  }
+}

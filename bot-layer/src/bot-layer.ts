@@ -56,7 +56,7 @@ export class BotLayer extends BasePlugin {
 export default BotLayer
 
 export * from './types'
-export * from './parts'
+export * from '@pluxel/parts'
 export * from './avatars'
 export * from './platforms/base'
 export * from './attachments'

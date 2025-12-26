@@ -1,4 +1,4 @@
-import type { InlinePart, MentionPart, Part } from '../types'
+import type { InlinePart, MentionPart, Part } from './model'
 
 export const text = (t: string): Part => ({ type: 'text', text: t })
 export const mention = (

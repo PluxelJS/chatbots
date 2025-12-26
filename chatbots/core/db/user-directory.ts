@@ -1,7 +1,7 @@
 import type { EntityManager } from 'pluxel-plugin-mikro-orm/mikro-orm/core'
 import type { MikroOrm, MikroOrmEntityBatch } from 'pluxel-plugin-mikro-orm'
 
-import type { AnyMessage, Platform } from '../../bot-layer/types'
+import type { AnyMessage, Platform } from '@pluxel/bot-layer'
 import type { UnifiedIdentity, UnifiedPlatformUserId, UnifiedUser } from '../types'
 import type { LinkTokenRow, UnifiedIdentityRow, UnifiedUserRow } from './schemas'
 import { LinkTokenSchema, UnifiedIdentitySchema, UnifiedUserSchema } from './schemas'

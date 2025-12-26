@@ -5,7 +5,8 @@ import { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import { KookConfig, type KookConfigType } from './config'
 import { KookRuntime, type KookSnapshot } from './runtime'
 import { BotManager } from './bot-manager'
-import { KOOKBotRpc } from './runtime/rpc'
+import { registerKookExtensions } from './extensions'
+import type { KOOKBotRpc } from './runtime/rpc'
 
 export * from './types'
 export type { KookSnapshot }
@@ -25,11 +26,7 @@ export class KOOK extends BasePlugin {
 	override async init(abort: AbortSignal): Promise<void> {
 		await this.runtime.bootstrap(this.ctx, this.config, abort)
 		if (abort.aborted) return
-		this.ctx.extensionService.register({ entryPath: './ui/index.tsx' })
-		this.ctx.rpc.registerExtension(() => new KOOKBotRpc(this.runtime))
-		if (this.ctx.sse) {
-			this.ctx.sse.registerExtension(() => this.runtime.createSseHandler())
-		}
+		registerKookExtensions(this)
 	}
 
 	override async stop(): Promise<void> {

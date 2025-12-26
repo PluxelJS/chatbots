@@ -1,4 +1,4 @@
-import type { AnyMessage, Platform } from '../bot-layer/types'
+import type { AnyMessage, Platform } from '@pluxel/bot-layer'
 
 export type UnifiedPlatformUserId = string
 

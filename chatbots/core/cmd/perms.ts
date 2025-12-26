@@ -1,7 +1,7 @@
 import type { Flags, TypeFlag, TypeFlagOptions } from 'type-flag'
 
-import type { Command, ExtractCommandParams } from '../../bot-layer/cmd'
-import { createCommandKit, type CommandBuilder as BaseCommandBuilder, type CommandKit as BaseCommandKit } from '../../bot-layer/cmd/kit'
+import type { Command, ExtractCommandParams } from '@pluxel/bot-layer'
+import { createCommandKit, type CommandBuilder as BaseCommandBuilder, type CommandKit as BaseCommandKit } from '@pluxel/bot-layer'
 import type { ChatbotsCommandContext } from '../types'
 import { Decision } from '../../permissions/decision'
 import type { NodeRef } from '../../permissions/resolver'

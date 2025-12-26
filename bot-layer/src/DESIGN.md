@@ -9,13 +9,13 @@
 
 ## 目录结构
 
-- `chatbots/chatbots/bot-layer/parts/`
+- `chatbots/bot-layer/parts/src/`
   - `normalize.ts`：`PartInput -> Part[]` 的规范化/扁平化（合并相邻 text）
   - `dsl.ts`：构建 Part 的便捷函数（含 `imageData/fileData`）
   - `jsx-runtime.ts`：TSX/JSX 运行时（把 JSX 转成 `Part | Part[]`）
-- `chatbots/chatbots/bot-layer/outbound/`
+- `chatbots/bot-layer/src/outbound/`
   - `plan.ts`：将 `Part[]` 规划成“发送操作序列”（`reply()` 使用它做稳定拆分）
-- `chatbots/chatbots/bot-layer/platforms/base.ts`
+- `chatbots/bot-layer/src/platforms/base.ts`
   - adapter 接口 + 文本降级规则 + `createReply/createSendHelpers` 发送能力
 
 ## Parts 设计语言
@@ -72,7 +72,7 @@ bot-layer 的 Outbound 入口（`reply/sendText` 等）支持：
 
 ## Adapter 约定（平台实现需要提供的能力）
 
-核心接口定义在 `chatbots/chatbots/bot-layer/platforms/base.ts`：
+核心接口定义在 `chatbots/bot-layer/src/platforms/base.ts`：
 
 - `render(parts) -> { text, format }`：把“文本类 Part”渲染为平台格式文本（plain/markdown/html）
 - `sendText(session, { parts, rendered }, options)`：发送文本（核心能力，必须实现）

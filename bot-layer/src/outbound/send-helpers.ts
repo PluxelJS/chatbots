@@ -1,5 +1,5 @@
 import type { FilePart, ImagePart, MessageContent, Platform, PlatformRegistry, ReplyOptions } from '../types'
-import { normalizeMessageContent } from '../parts'
+import { normalizeMessageContent } from '@pluxel/parts'
 import type { OutboundText, PlatformAdapter } from '../platforms/adapter'
 import { assertTextOnly, normalizeTextPartsForAdapter, type TextLikePart } from '../render/normalize'
 
@@ -89,4 +89,3 @@ export const createSendHelpers = <P extends Platform>(adapter: PlatformAdapter<P
 
 	return { sendText, sendImage, sendFile, ...uploader }
 }
-

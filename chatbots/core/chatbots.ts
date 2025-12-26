@@ -1,10 +1,11 @@
 import { BasePlugin, Config, Plugin, getPluginInfo } from '@pluxel/hmr'
 import { MikroOrm } from 'pluxel-plugin-mikro-orm'
 
-import { BotLayer } from '../bot-layer/bot-layer'
+import { BotLayer } from '@pluxel/bot-layer'
 import { ChatbotsConfigSchema, type ChatbotsConfig } from './config'
 import { ChatbotsRuntime } from './runtime'
 import { createPermissionFacade, type ChatbotsPermissionFacade } from '../permissions/permission'
+import { ChatbotsSandbox, ChatbotsSandboxRpc } from './sandbox'
 
 @Plugin({ name: 'chatbots', type: 'service' })
 export class Chatbots extends BasePlugin {
@@ -12,6 +13,7 @@ export class Chatbots extends BasePlugin {
 	private config!: Config<typeof ChatbotsConfigSchema> & ChatbotsConfig
 
 	public runtime!: ChatbotsRuntime
+	private sandbox!: ChatbotsSandbox
 
 	constructor(
 		private readonly botLayer: BotLayer,
@@ -31,6 +33,12 @@ export class Chatbots extends BasePlugin {
 			registerUserCommands: this.config.registerUserCommands,
 		})
 		this.runtime.bootstrap()
+		this.sandbox = new ChatbotsSandbox(this.runtime, { cmdPrefix: this.config.cmdPrefix })
+		this.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })
+		this.ctx.ext.rpc.registerExtension(() => new ChatbotsSandboxRpc(this.sandbox, this.runtime.permissions))
+		if (this.ctx.ext.sse) {
+			this.ctx.ext.sse.registerExtension(() => this.sandbox.createSseHandler())
+		}
 		this.registerCatalogUnloadTracking()
 		this.ctx.logger.info('Chatbots initialized')
 	}

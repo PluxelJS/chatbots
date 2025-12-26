@@ -1,5 +1,5 @@
 import type { FilePart, ImagePart, MessageContent, Part, Platform, PlatformRegistry, ReplyOptions } from '../types'
-import { normalizeMessageContent } from '../parts'
+import { normalizeMessageContent } from '@pluxel/parts'
 import { planOutbound } from './plan'
 import type { PlatformAdapter } from '../platforms/adapter'
 import { createSendHelpers } from './send-helpers'
@@ -127,4 +127,3 @@ export const createReply =
 			}
 		}
 	}
-

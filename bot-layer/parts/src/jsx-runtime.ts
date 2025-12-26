@@ -1,4 +1,4 @@
-import type { InlinePart, Part, StyledPart } from '../types'
+import type { InlinePart, Part, StyledPart } from './model'
 
 type Primitive = string | number | boolean | null | undefined
 type Child = Primitive | Part | Part[] | Child[]

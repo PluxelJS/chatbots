@@ -7,6 +7,7 @@ import { Resolver } from './resolver'
 import { RoleTree } from './role_tree'
 import { UserOverridesCache } from './user_overrides_cache'
 import { AuthEngine, type AuthUser } from './auth_engine'
+import type { GrantRow, RoleRow } from './db/schemas'
 import type { NodeRef } from './resolver'
 import type { GrantsStoreApi } from './store'
 
@@ -77,6 +78,18 @@ export class PermissionService {
 
 	listPermissions(nsKey: string) {
 		return this.registry.listPermissions(nsKey)
+	}
+
+	listRoles(): Promise<RoleRow[]> {
+		return this.store.listRoles()
+	}
+
+	listGrants(subjectType: SubjectType, subjectId: number): Promise<GrantRow[]> {
+		return this.store.listGrants(subjectType, subjectId)
+	}
+
+	listUserRoleIds(userId: number): Promise<number[]> {
+		return this.store.listUserRoleIds(userId)
 	}
 
 	// --------------------------

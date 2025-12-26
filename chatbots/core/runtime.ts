@@ -2,19 +2,29 @@ import type { Context } from '@pluxel/hmr'
 
 import { MikroOrm } from 'pluxel-plugin-mikro-orm'
 
-import { CommandError, createCommandBus } from '../bot-layer/cmd'
-import type { CommandKit } from '../bot-layer/cmd/kit'
-import type { BotLayer } from '../bot-layer/bot-layer'
-import type { AnyMessage, MessageContent, Part } from '../bot-layer/types'
-import { hasRichParts } from '../bot-layer/utils'
-import { partsToText } from '../bot-layer/render/text'
+import {
+	CommandError,
+	createCommandBus,
+	getCommandMeta,
+	hasRichParts,
+	partsToText,
+	toPartArray,
+} from '@pluxel/bot-layer'
+import type {
+	AnyMessage,
+	Attachment,
+	BotLayer,
+	CommandKit,
+	MessageContent,
+	Part,
+	Platform,
+} from '@pluxel/bot-layer'
 
 import { UserDirectory } from './db/user-directory'
 import { PermissionService } from '../permissions/service'
 import { createPermissionCommandKit, type CommandKit as PermCommandKit } from './cmd/perms'
 import { createPermissionApi, type ChatbotsPermissionApi } from '../permissions/permission'
 import type { ChatbotsCommandContext } from './types'
-import { getCommandMeta } from '../bot-layer/cmd/kit'
 
 export interface ChatbotsRuntimeOptions {
 	cmdPrefix: string
@@ -83,6 +93,40 @@ export class ChatbotsRuntime {
 		if (this.options.registerUserCommands) this.registerUserCommands()
 	}
 
+	async sandboxDispatch(input: {
+		content: MessageContent
+		platform?: Platform
+		userId?: string | number
+		channelId?: string | number
+	}): Promise<Part[][]> {
+		const platform = input.platform ?? 'kook'
+		const parts = toPartArray(input.content)
+		if (!parts.length) return []
+
+		const rawText = typeof input.content === 'string' ? input.content : partsToText(parts, platform)
+		const replies: Part[][] = []
+		const msg = this.createSandboxMessage({
+			platform,
+			parts,
+			rawText,
+			userId: input.userId ?? 'sandbox-user',
+			channelId: input.channelId ?? 'sandbox-channel',
+			replies,
+		})
+
+		const text = this.buildCommandText(msg).trim()
+		if (!text) return replies
+
+		const prefix = this.getCmdPrefix()
+		if (!text.toLowerCase().startsWith(prefix.toLowerCase())) return replies
+
+		const body = text.slice(prefix.length).trim()
+		if (!body) return replies
+
+		await this.dispatchCommand(body, msg)
+		return replies
+	}
+
 	getCommandKit(caller?: Context): PermCommandKit<ChatbotsCommandContext> {
 		const ctx = caller ?? this.ctx
 		const ownerKey = ctx.pluginInfo?.id
@@ -130,6 +174,70 @@ export class ChatbotsRuntime {
 		})
 
 		this.ctx.scope.collectEffect(() => stop())
+	}
+
+	private createSandboxMessage(input: {
+		platform: Platform
+		parts: Part[]
+		rawText: string
+		userId: string | number
+		channelId: string | number
+		replies: Part[][]
+	}): AnyMessage {
+		const mentions = input.parts.filter((part) => part.type === 'mention')
+		const attachments: Attachment[] = input.parts
+			.filter((part) => part.type === 'image' || part.type === 'file')
+			.map((part) => ({
+				platform: input.platform,
+				kind: part.type,
+				part,
+				source: 'message',
+			}))
+
+		const reply = async (content: MessageContent) => {
+			const out = toPartArray(content)
+			if (out.length) input.replies.push(out)
+		}
+
+		const msg: AnyMessage = {
+			platform: input.platform,
+			text: partsToText(input.parts, input.platform),
+			textRaw: input.rawText,
+			parts: input.parts,
+			mentions,
+			attachments,
+			reference: undefined,
+			rich: hasRichParts(input.parts),
+			user: {
+				id: input.userId as any,
+				username: 'sandbox',
+				displayName: 'Sandbox',
+				avatar: null,
+				isBot: false,
+			},
+			channel: {
+				id: input.channelId as any,
+				guildId: null as any,
+				name: 'sandbox',
+				isPrivate: true,
+			},
+			messageId: null,
+			raw: {} as any,
+			bot: {} as any,
+			reply,
+			sendText: reply,
+			sendImage: async (image, caption) => {
+				const captionParts = caption ? toPartArray(caption) : []
+				await reply(captionParts.length ? [image, ...captionParts] : image)
+			},
+			sendFile: async (file) => {
+				await reply(file)
+			},
+			uploadImage: async (image) => image,
+			uploadFile: async (file) => file,
+		}
+
+		return msg
 	}
 
 	private buildCommandText(msg: AnyMessage): string {

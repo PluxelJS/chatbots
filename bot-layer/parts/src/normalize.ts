@@ -1,4 +1,4 @@
-import type { InlinePart, Part, PartInput } from '../types'
+import type { InlinePart, Part, PartInput } from './model'
 
 const isPart = (value: unknown): value is Part =>
 	Boolean(value) && typeof value === 'object' && 'type' in (value as any)
