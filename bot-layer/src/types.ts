@@ -5,6 +5,40 @@
 import type { Buffer } from 'node:buffer'
 import type { FilePart, ImagePart, MentionPart, Part, PartInput } from '@pluxel/parts'
 
+export type SandboxRole = 'user' | 'bot' | 'system'
+
+export interface SandboxAppendInput {
+	role: SandboxRole
+	parts: Part[]
+	platform?: string
+	userId?: string | number
+	channelId?: string | number
+}
+
+export interface SandboxSession {
+	targetPlatform?: string
+	userId?: string | number
+	channelId?: string | number
+	mockRoleIds?: number[]
+	mockUser?: {
+		displayName?: string
+		username?: string
+		avatar?: string
+		isBot?: boolean
+	}
+	mockChannel?: {
+		name?: string
+		isPrivate?: boolean
+	}
+	renderText?: (parts: Part[]) => string
+	append: (input: SandboxAppendInput) => unknown
+	bot?: SandboxBot
+}
+
+export interface SandboxBot {
+	platform: 'sandbox'
+}
+
 export type {
 	CodeBlockPart,
 	FilePart,
@@ -38,6 +72,14 @@ export interface PlatformRegistry {
 		channelId: number
 		guildId: never
 		messageId: number
+	}
+	sandbox: {
+		raw: SandboxSession
+		bot: SandboxBot
+		userId: string
+		channelId: string
+		guildId: never
+		messageId: string
 	}
 }
 

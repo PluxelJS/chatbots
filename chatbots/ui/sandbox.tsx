@@ -30,7 +30,7 @@ import {
 	useCombobox,
 } from '@mantine/core'
 import { useDisclosure, useMediaQuery } from '@mantine/hooks'
-import { IconCommand, IconMessage2, IconPlus, IconSearch, IconTrash, IconX } from '@tabler/icons-react'
+import { IconCommand, IconPlus, IconSearch, IconTrash, IconX } from '@tabler/icons-react'
 import { hmrWebClient, rpcErrorMessage } from '@pluxel/hmr/web'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -43,7 +43,6 @@ import {
 	sampleInputs,
 	sampleSections,
 } from '@pluxel/parts/ui-chatui'
-import { PageHeader } from './components'
 import { useRoles } from './hooks'
 import { useChatUiColorScheme } from './styles'
 
@@ -89,9 +88,44 @@ type SandboxSession = {
 const rpc = (): RpcClient => (hmrWebClient.rpc as any).chatbots as RpcClient
 
 const PLATFORM_OPTIONS = [
+	{ value: 'sandbox', label: 'Sandbox' },
 	{ value: 'kook', label: 'KOOK' },
 	{ value: 'telegram', label: 'Telegram' },
 ]
+
+type PlatformPolicy = {
+	format: 'plain' | 'markdown' | 'html'
+	supportsMixedMedia: boolean
+	supportsQuote: boolean
+	supportsImage: boolean
+	supportsFile: boolean
+	maxCaptionLength?: number
+}
+
+const PLATFORM_POLICY: Record<string, PlatformPolicy> = {
+	sandbox: {
+		format: 'plain',
+		supportsMixedMedia: true,
+		supportsQuote: true,
+		supportsImage: true,
+		supportsFile: true,
+	},
+	kook: {
+		format: 'markdown',
+		supportsMixedMedia: false,
+		supportsQuote: true,
+		supportsImage: true,
+		supportsFile: true,
+	},
+	telegram: {
+		format: 'html',
+		supportsMixedMedia: true,
+		supportsQuote: true,
+		supportsImage: true,
+		supportsFile: true,
+		maxCaptionLength: 1024,
+	},
+}
 
 const IDENTITY_PRESETS = [
 	{ value: 'sandbox', label: 'Sandbox User', userId: 'sandbox-user' },
@@ -100,13 +134,15 @@ const IDENTITY_PRESETS = [
 	{ value: 'custom', label: 'Custom', userId: '' },
 ]
 
-// Simple colored avatar placeholder (data URI)
-const DEFAULT_AVATAR = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48"%3E%3Crect width="48" height="48" fill="%234c6ef5" rx="8"/%3E%3Ctext x="50%25" y="50%25" fill="white" font-size="20" text-anchor="middle" dy=".35em"%3EU%3C/text%3E%3C/svg%3E'
+// Simple colored avatar placeholder (data URI, PNG to keep Skia-compatible)
+const DEFAULT_AVATAR = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAZElEQVR4nO3PoQ0AIADAMA7kFr5HwxGIhmRivhtz7fNzQwMa0IAGNKABDWhAAxrQgAY0oAENaEADGtCABjSgAQ1oQAMa0IAGNKABDWhAAxrQgAY0oAENaEADGtCABjSgAQ147QK2hB9pnVFyfAAAAABJRU5ErkJggg=='
+
+const DEFAULT_PLATFORM = 'sandbox'
 
 const DEFAULT_SESSION: SandboxSession = {
 	id: 'session-1',
 	label: 'Default',
-	platform: PLATFORM_OPTIONS[0].value,
+	platform: DEFAULT_PLATFORM,
 	userId: 'sandbox-user',
 	channelId: 'sandbox-channel',
 	mockRoleIds: [],
@@ -127,16 +163,20 @@ const SESSION_STORAGE_KEY = 'chatbots.sandbox.sessions.v1'
 
 const sanitizeSession = (input: any): SandboxSession | null => {
 	if (!input || typeof input !== 'object' || typeof input.id !== 'string' || !input.id) return null
+	const userAvatar =
+		typeof input.userAvatar === 'string' && input.userAvatar.startsWith('data:image/svg')
+			? DEFAULT_AVATAR
+			: input.userAvatar
 	return {
 		id: input.id,
 		label: typeof input.label === 'string' && input.label ? input.label : 'Session',
-		platform: typeof input.platform === 'string' ? input.platform : PLATFORM_OPTIONS[0].value,
+		platform: typeof input.platform === 'string' ? input.platform : DEFAULT_PLATFORM,
 		userId: typeof input.userId === 'string' ? input.userId : 'sandbox-user',
 		channelId: typeof input.channelId === 'string' ? input.channelId : 'sandbox-channel',
 		mockRoleIds: Array.isArray(input.mockRoleIds) ? input.mockRoleIds.filter((v: any) => typeof v === 'number') : [],
 		userDisplayName: typeof input.userDisplayName === 'string' ? input.userDisplayName : 'Sandbox User',
 		userUsername: typeof input.userUsername === 'string' ? input.userUsername : 'sandbox',
-		userAvatar: typeof input.userAvatar === 'string' ? input.userAvatar : DEFAULT_AVATAR,
+		userAvatar: typeof userAvatar === 'string' ? userAvatar : DEFAULT_AVATAR,
 		userIsBot: typeof input.userIsBot === 'boolean' ? input.userIsBot : false,
 		channelName: typeof input.channelName === 'string' ? input.channelName : 'sandbox-channel',
 		channelIsPrivate: typeof input.channelIsPrivate === 'boolean' ? input.channelIsPrivate : false,
@@ -946,6 +986,21 @@ export function ChatbotsSandboxPage() {
 		[session.active?.userId],
 	)
 
+	const platformPolicy = useMemo(() => {
+		const key = session.active?.platform ?? DEFAULT_PLATFORM
+		const policy = PLATFORM_POLICY[key] ?? PLATFORM_POLICY[DEFAULT_PLATFORM]
+		const mixed = policy.supportsMixedMedia ? 'on' : 'off'
+		const quote = policy.supportsQuote ? 'on' : 'off'
+		const image = policy.supportsImage ? 'on' : 'off'
+		const file = policy.supportsFile ? 'on' : 'off'
+		const caption = typeof policy.maxCaptionLength === 'number' ? String(policy.maxCaptionLength) : 'none'
+		const summary = `format: ${policy.format} · mixed-media: ${mixed} · quote: ${quote} · image: ${image} · file: ${file} · caption: ${caption}`
+		const detail = policy.supportsMixedMedia
+			? 'reply(): keeps image+caption together; splits only when caption exceeds limit.'
+			: 'reply(): splits image+caption into multiple messages.'
+		return { summary, detail }
+	}, [session.active?.platform])
+
 	// Check if currently typing a command (for showing quick replies vs not)
 	const isTypingCommand = useMemo(() => {
 		const trimmed = (session.active?.draft ?? '').trimStart()
@@ -1034,170 +1089,152 @@ export function ChatbotsSandboxPage() {
 	const configPanel = (
 		<Paper withBorder radius="lg" p="md" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
 			<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
-				<Stack gap="md">
-					<PageHeader
-						icon={<IconMessage2 size={20} />}
-						title="Chatbots Sandbox"
-						subtitle="Simulate command flows and Parts rendering."
-						badges={
-							<>
-								<Badge variant="light" color={data.connected ? 'teal' : 'gray'}>
-									{data.connected ? 'SSE Online' : 'SSE Offline'}
-								</Badge>
-								{data.loading && <Badge variant="light" color="gray">Loading...</Badge>}
-							</>
-						}
-						error={data.error}
-						onDismissError={() => data.setError(null)}
-					/>
-
-					<Stack gap="xs">
-						<Group justify="space-between" align="center">
-							<Text fw={600}>Session details</Text>
-							{session.active && <Badge variant="light" color="gray">{session.active.label}</Badge>}
-						</Group>
-						{session.active && <Text size="xs" c="dimmed">ID: {session.active.id}</Text>}
-						<TextInput
-							label="Session label"
-							size="xs"
-							value={session.active?.label ?? ''}
-							onChange={(e) => session.update({ label: e.currentTarget.value })}
-						/>
-					</Stack>
-
-					<Divider />
-
-					<Stack gap="xs">
-						<Group justify="space-between" align="center">
-							<Text fw={600}>Scenario</Text>
-							<Badge variant="light" color="grape">{partsCount} Parts</Badge>
-						</Group>
-						<Select
-							label="Target platform"
-							size="xs"
-							value={session.active?.platform ?? PLATFORM_OPTIONS[0].value}
-							data={PLATFORM_OPTIONS}
-							onChange={(v) => v && session.update({ platform: v })}
-						/>
-						<Select
-							label="Identity preset"
-							size="xs"
-							value={activePreset}
-							data={IDENTITY_PRESETS.map((p) => ({ value: p.value, label: p.label }))}
-							onChange={(v) => {
-								const p = IDENTITY_PRESETS.find((i) => i.value === v)
-								if (p && p.value !== 'custom') session.update({ userId: p.userId })
-							}}
-						/>
-						<TextInput
-							label="User ID"
-							size="xs"
-							value={session.active?.userId ?? ''}
-							onChange={(e) => session.update({ userId: e.currentTarget.value })}
-						/>
-						<TextInput
-							label="Channel ID"
-							size="xs"
-							value={session.active?.channelId ?? ''}
-							onChange={(e) => session.update({ channelId: e.currentTarget.value })}
-						/>
-						<MultiSelect
-							label="Mock permission roles"
-							description="Override user's roles for testing"
-							size="xs"
-							placeholder={roles.loading ? 'Loading roles...' : 'Select roles to mock'}
-							data={roles.options}
-							value={(session.active?.mockRoleIds ?? []).map(String)}
-							onChange={(values) => session.update({ mockRoleIds: values.map(Number) })}
-							clearable
-							searchable
-						/>
-					</Stack>
-
-					<Divider />
-
-					{/* Mock User Settings */}
-					<Stack gap="xs">
-						<Text fw={600}>Mock User</Text>
-						<Group align="flex-start" gap="sm">
-							<Avatar
-								src={session.active?.userAvatar}
-								size="md"
-								radius="md"
-								style={{ border: '2px solid var(--mantine-color-gray-4)' }}
-							/>
-							<Stack gap="xs" style={{ flex: 1 }}>
-								<TextInput
-									label="Display Name"
-									size="xs"
-									value={session.active?.userDisplayName ?? ''}
-									onChange={(e) => session.update({ userDisplayName: e.currentTarget.value })}
-								/>
-								<TextInput
-									label="Username"
-									size="xs"
-									value={session.active?.userUsername ?? ''}
-									onChange={(e) => session.update({ userUsername: e.currentTarget.value })}
-								/>
-							</Stack>
-						</Group>
-						<TextInput
-							label="Avatar URL"
-							size="xs"
-							placeholder="Leave empty for default"
-							value={session.active?.userAvatar === DEFAULT_AVATAR ? '' : (session.active?.userAvatar ?? '')}
-							onChange={(e) => session.update({ userAvatar: e.currentTarget.value || DEFAULT_AVATAR })}
-						/>
-						<Checkbox
-							label="Is Bot"
-							size="xs"
-							checked={session.active?.userIsBot ?? false}
-							onChange={(e) => session.update({ userIsBot: e.currentTarget.checked })}
-						/>
-					</Stack>
-
-					<Divider />
-
-					{/* Mock Channel Settings */}
-					<Stack gap="xs">
-						<Text fw={600}>Mock Channel</Text>
-						<TextInput
-							label="Channel Name"
-							size="xs"
-							value={session.active?.channelName ?? ''}
-							onChange={(e) => session.update({ channelName: e.currentTarget.value })}
-						/>
-						<Checkbox
-							label="Private Channel"
-							size="xs"
-							checked={session.active?.channelIsPrivate ?? false}
-							onChange={(e) => session.update({ channelIsPrivate: e.currentTarget.checked })}
-						/>
-						<Text size="xs" c="dimmed">
-							Commands use the bot bus. Plain text won't trigger replies unless a command matches.
-						</Text>
-					</Stack>
-
-					<Divider />
-
+				<Stack gap="sm">
 					<Group justify="space-between" align="center">
-						<Text fw={600}>Sandbox controls</Text>
+						<Group gap="xs">
+							<Badge variant="light" color={data.connected ? 'teal' : 'gray'}>
+								{data.connected ? 'SSE Online' : 'SSE Offline'}
+							</Badge>
+							{data.loading && <Badge variant="light" color="gray">Loading...</Badge>}
+						</Group>
 						<Button size="xs" variant="light" onClick={data.reset}>
-							Reset sandbox
+							Reset
 						</Button>
 					</Group>
 
+					{data.error && (
+						<Paper withBorder radius="sm" p="xs" style={{ background: 'var(--mantine-color-red-0)' }}>
+							<Group justify="space-between" align="center" gap="xs" wrap="nowrap">
+								<Text size="xs" c="red" style={{ wordBreak: 'break-word' }}>{data.error}</Text>
+								<ActionIcon size="xs" variant="subtle" color="red" onClick={() => data.setError(null)}>
+									<IconX size={12} />
+								</ActionIcon>
+							</Group>
+						</Paper>
+					)}
+
 					<Divider />
 
-					<Group justify="space-between" align="center">
-						<Text fw={600}>Parts Library</Text>
-						<Switch
-							size="sm"
-							checked={showParts}
-							onChange={(e) => setShowParts(e.currentTarget.checked)}
-							label={showParts ? 'Shown' : 'Hidden'}
+					<TextInput
+						label="Session label"
+						size="xs"
+						value={session.active?.label ?? ''}
+						onChange={(e) => session.update({ label: e.currentTarget.value })}
+					/>
+					{session.active && <Text size="xs" c="dimmed">ID: {session.active.id}</Text>}
+
+					<Divider />
+
+					<Select
+						label="Target platform"
+						size="xs"
+						value={session.active?.platform ?? DEFAULT_PLATFORM}
+						data={PLATFORM_OPTIONS}
+						onChange={(v) => v && session.update({ platform: v })}
+					/>
+					<Text size="xs" c="dimmed">{platformPolicy.summary}</Text>
+					<Text size="xs" c="dimmed">{platformPolicy.detail}</Text>
+					<Text size="xs" c="dimmed">{partsCount} Parts samples available.</Text>
+
+					<Select
+						label="Identity preset"
+						size="xs"
+						value={activePreset}
+						data={IDENTITY_PRESETS.map((p) => ({ value: p.value, label: p.label }))}
+						onChange={(v) => {
+							const p = IDENTITY_PRESETS.find((i) => i.value === v)
+							if (p && p.value !== 'custom') session.update({ userId: p.userId })
+						}}
+					/>
+					<TextInput
+						label="User ID"
+						size="xs"
+						value={session.active?.userId ?? ''}
+						onChange={(e) => session.update({ userId: e.currentTarget.value })}
+					/>
+					<TextInput
+						label="Channel ID"
+						size="xs"
+						value={session.active?.channelId ?? ''}
+						onChange={(e) => session.update({ channelId: e.currentTarget.value })}
+					/>
+					<MultiSelect
+						label="Mock permission roles"
+						size="xs"
+						placeholder={roles.loading ? 'Loading roles...' : 'Select roles to mock'}
+						data={roles.options}
+						value={(session.active?.mockRoleIds ?? []).map(String)}
+						onChange={(values) => session.update({ mockRoleIds: values.map(Number) })}
+						clearable
+						searchable
+					/>
+
+					<Divider />
+
+					<Text size="xs" c="dimmed">Mock user</Text>
+					<Group align="flex-start" gap="sm">
+						<Avatar
+							src={session.active?.userAvatar}
+							size="md"
+							radius="md"
+							style={{ border: '2px solid var(--mantine-color-gray-4)' }}
 						/>
+						<Stack gap="xs" style={{ flex: 1 }}>
+							<TextInput
+								label="Display Name"
+								size="xs"
+								value={session.active?.userDisplayName ?? ''}
+								onChange={(e) => session.update({ userDisplayName: e.currentTarget.value })}
+							/>
+							<TextInput
+								label="Username"
+								size="xs"
+								value={session.active?.userUsername ?? ''}
+								onChange={(e) => session.update({ userUsername: e.currentTarget.value })}
+							/>
+						</Stack>
 					</Group>
+					<TextInput
+						label="Avatar URL"
+						size="xs"
+						placeholder="Leave empty for default"
+						value={session.active?.userAvatar === DEFAULT_AVATAR ? '' : (session.active?.userAvatar ?? '')}
+						onChange={(e) => session.update({ userAvatar: e.currentTarget.value || DEFAULT_AVATAR })}
+					/>
+					<Checkbox
+						label="Is Bot"
+						size="xs"
+						checked={session.active?.userIsBot ?? false}
+						onChange={(e) => session.update({ userIsBot: e.currentTarget.checked })}
+					/>
+
+					<Divider />
+
+					<Text size="xs" c="dimmed">Mock channel</Text>
+					<TextInput
+						label="Channel Name"
+						size="xs"
+						value={session.active?.channelName ?? ''}
+						onChange={(e) => session.update({ channelName: e.currentTarget.value })}
+					/>
+					<Checkbox
+						label="Private Channel"
+						size="xs"
+						checked={session.active?.channelIsPrivate ?? false}
+						onChange={(e) => session.update({ channelIsPrivate: e.currentTarget.checked })}
+					/>
+					<Text size="xs" c="dimmed">
+						Commands use the bot bus. Plain text won't trigger replies unless a command matches.
+					</Text>
+
+					<Divider />
+
+					<Switch
+						size="sm"
+						checked={showParts}
+						onChange={(e) => setShowParts(e.currentTarget.checked)}
+						label="Parts samples"
+					/>
 					<Collapse in={showParts}>
 						<PartsShowcasePanel sections={sampleSections} onUseSample={handleUseSample} />
 					</Collapse>

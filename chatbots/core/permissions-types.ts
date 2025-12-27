@@ -30,4 +30,5 @@ export type PermissionGrantDto = {
 	local: string
 	effect: PermissionEffect
 	updatedAt: string
+	node?: string
 }

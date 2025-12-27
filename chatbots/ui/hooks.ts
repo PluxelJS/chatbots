@@ -41,11 +41,27 @@ type PermissionsRpc = {
 export const getPermissionsRpc = (): PermissionsRpc =>
 	(hmrWebClient.rpc as any).chatbots as PermissionsRpc
 
-export const formatGrantNode = (grant: PermissionGrantDto) => {
-	if (grant.kind === 'star') {
-		return `${grant.nsKey}.${grant.local ? `${grant.local}.*` : '*'}`
+type GrantNodeLike = {
+	kind?: PermissionGrantDto['kind']
+	nsKey?: string
+	local?: string
+	node?: string
+}
+
+const sanitizeNode = (node: string) => node.trim()
+
+export const formatGrantNode = (grant: GrantNodeLike) => {
+	if (typeof grant.node === 'string') {
+		const node = sanitizeNode(grant.node)
+		if (node) return node
 	}
-	return `${grant.nsKey}.${grant.local}`
+	const nsKey = typeof grant.nsKey === 'string' ? grant.nsKey.trim() : ''
+	const local = typeof grant.local === 'string' ? grant.local.trim() : ''
+	if (!nsKey) return local || '(unknown)'
+	if (grant.kind === 'star') {
+		return local ? `${nsKey}.${local}.*` : `${nsKey}.*`
+	}
+	return local ? `${nsKey}.${local}` : nsKey
 }
 
 export const formatTimestamp = (value: string) => {

@@ -1,8 +1,15 @@
 import { RpcTarget } from '@pluxel/hmr/capnweb'
 import { Buffer } from 'node:buffer'
-import type { SseChannel } from '@pluxel/hmr/services'
-import type { Part, Platform } from '@pluxel/bot-layer'
-import { getCommandMeta, partsToText, toPartArray } from '@pluxel/bot-layer'
+import type { Part, Platform, SandboxSession } from '@pluxel/bot-layer'
+import {
+	createSandboxAdapter,
+	createSandboxMessage,
+	getAdapter,
+	getCommandMeta,
+	normalizePartsForAdapter,
+	registerSandboxAdapter,
+	toPartArray,
+} from '@pluxel/bot-layer'
 
 import type { ChatbotsRuntime } from './runtime'
 import type {
@@ -10,11 +17,11 @@ import type {
 	SandboxCommandsSnapshot,
 	SandboxEvent,
 	SandboxMessage,
-	SandboxPart,
 	SandboxSendInput,
 	SandboxSendResult,
 	SandboxSnapshot,
 } from './sandbox-types'
+import { SandboxStore } from './sandbox-store'
 import type { PermissionService, SubjectType } from '../permissions/service'
 import type { GrantRow, RoleRow } from '../permissions/db/schemas'
 import type {
@@ -25,7 +32,7 @@ import type {
 import type { UnifiedUserDto } from './user-types'
 import type { UserDirectory } from './db/user-directory'
 
-const DEFAULT_PLATFORM = 'kook'
+const DEFAULT_TARGET_PLATFORM: Platform = 'sandbox'
 const DEFAULT_USER_ID = 'sandbox-user'
 const DEFAULT_CHANNEL_ID = 'sandbox-channel'
 const MAX_MESSAGES = 200
@@ -44,17 +51,6 @@ const decodeBinary = (value: unknown): Uint8Array | undefined => {
 	return undefined
 }
 
-const encodeBinary = (value: Uint8Array) => Buffer.from(value).toString('base64')
-
-const serializeParts = (parts: Part[]): SandboxPart[] =>
-	parts.map((part) => {
-		if ((part.type === 'image' || part.type === 'file') && part.data) {
-			const decoded = decodeBinary(part.data)
-			if (decoded) return { ...part, data: encodeBinary(decoded) }
-		}
-		return part
-	})
-
 const normalizeSandboxContent = (content: SandboxContent): Part[] => {
 	const parts = toPartArray(content as any)
 	return parts.map((part) => {
@@ -68,27 +64,35 @@ const normalizeSandboxContent = (content: SandboxContent): Part[] => {
 	})
 }
 
+const resolveBaseAdapter = (platform: Platform) => {
+	if (platform === 'sandbox') return undefined
+	try {
+		return getAdapter(platform)
+	} catch {
+		return undefined
+	}
+}
+
 export class ChatbotsSandbox {
-	private readonly subscribers = new Set<SseChannel>()
 	private readonly cmdPrefix: string
-	private messages: SandboxMessage[] = []
-	private seq = 1
+	private readonly store: SandboxStore
 
 	constructor(private readonly runtime: ChatbotsRuntime, options: { cmdPrefix: string }) {
 		this.cmdPrefix = options.cmdPrefix.trim() || '/'
+		registerSandboxAdapter()
+		this.store = new SandboxStore(MAX_MESSAGES)
 		this.reset()
 	}
 
 	snapshot(): SandboxSnapshot {
-		return { messages: this.messages.map((msg) => ({ ...msg })) }
+		return this.store.snapshot()
 	}
 
 	reset(): SandboxSnapshot {
-		this.messages = []
-		this.seq = 1
-		this.append('system', [{ type: 'text', text: `Chatbots sandbox ready. Prefix: ${this.cmdPrefix}` }])
-		this.emit('sync', { type: 'sync', messages: this.snapshot().messages })
-		return this.snapshot()
+		return this.store.reset(
+			[{ type: 'text', text: `Chatbots sandbox ready. Prefix: ${this.cmdPrefix}` }],
+			{ platform: DEFAULT_TARGET_PLATFORM, userId: DEFAULT_USER_ID, channelId: DEFAULT_CHANNEL_ID },
+		)
 	}
 
 	commands(): SandboxCommandsSnapshot {
@@ -107,7 +111,7 @@ export class ChatbotsSandbox {
 	}
 
 	async send(input: SandboxSendInput): Promise<SandboxSendResult> {
-		const platform = input.platform ?? DEFAULT_PLATFORM
+		const targetPlatform = input.platform ?? DEFAULT_TARGET_PLATFORM
 		const userId = input.userId ?? DEFAULT_USER_ID
 		const channelId = input.channelId ?? DEFAULT_CHANNEL_ID
 		const parts = normalizeSandboxContent(input.content)
@@ -115,68 +119,45 @@ export class ChatbotsSandbox {
 			return { messages: [] }
 		}
 
-		const appended: SandboxMessage[] = []
-		appended.push(this.append('user', parts, { platform, userId, channelId }))
+		const baseAdapter = resolveBaseAdapter(targetPlatform)
+		const adapter = createSandboxAdapter(baseAdapter)
+		const renderText = (value: Part[]) => adapter.render(normalizePartsForAdapter(value, adapter)).text
 
-		const replies = await this.runtime.sandboxDispatch({
-			content: parts,
-			platform,
+		const session: SandboxSession = {
+			targetPlatform,
 			userId,
 			channelId,
-		})
-
-		for (const reply of replies) {
-			if (!reply.length) continue
-			appended.push(this.append('bot', reply, { platform, userId, channelId }))
+			mockRoleIds: input.mockRoleIds,
+			mockUser: input.mockUser,
+			mockChannel: input.mockChannel,
+			renderText,
+			append: (payload) =>
+				this.store.append({
+					...payload,
+					platform: targetPlatform,
+					userId,
+					channelId,
+					renderText,
+				}),
 		}
 
-		if (appended.length) {
-			this.emit('append', { type: 'append', messages: appended })
+		const rawText = typeof input.content === 'string' ? input.content : undefined
+		let messages: SandboxMessage[] = []
+
+		this.store.beginBatch()
+		try {
+			session.append({ role: 'user', parts })
+			const msg = createSandboxMessage({ session, parts, rawText, adapter })
+			await this.runtime.dispatchSandboxMessage(msg)
+		} finally {
+			messages = this.store.endBatch()
 		}
 
-		return { messages: appended }
+		return { messages }
 	}
 
 	createSseHandler() {
-		return (channel: SseChannel) => {
-			const sendSync = () => {
-				channel.emit('sync', { type: 'sync', messages: this.snapshot().messages })
-			}
-			sendSync()
-			this.subscribers.add(channel)
-			return channel.onAbort(() => {
-				this.subscribers.delete(channel)
-			})
-		}
-	}
-
-	private append(
-		role: SandboxMessage['role'],
-		parts: Part[],
-		context: Pick<SandboxSendInput, 'platform' | 'userId' | 'channelId'> = {},
-	): SandboxMessage {
-		const platform = context.platform ?? DEFAULT_PLATFORM
-		const message: SandboxMessage = {
-			id: String(this.seq++),
-			role,
-			parts: serializeParts(parts),
-			text: partsToText(parts, platform),
-			platform,
-			userId: context.userId,
-			channelId: context.channelId,
-			createdAt: Date.now(),
-		}
-		this.messages.push(message)
-		if (this.messages.length > MAX_MESSAGES) {
-			this.messages = this.messages.slice(-MAX_MESSAGES)
-		}
-		return message
-	}
-
-	private emit(type: SandboxEvent['type'], payload: SandboxEvent) {
-		for (const channel of this.subscribers) {
-			channel.emit(type, payload)
-		}
+		return this.store.createSseHandler()
 	}
 }
 
@@ -298,6 +279,7 @@ const serializeGrant = (row: GrantRow): PermissionGrantDto => ({
 	local: row.local,
 	effect: row.effect,
 	updatedAt: toIso(row.updatedAt),
+	node: row.kind === 'star' ? `${row.nsKey}.${row.local ? `${row.local}.*` : '*'}` : `${row.nsKey}.${row.local}`,
 })
 
 const serializeUser = (user: { id: number; displayName: string | null; createdAt: Date; identities: Array<{ platform: Platform; platformUserId: string }> }): UnifiedUserDto => ({

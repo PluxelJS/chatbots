@@ -8,16 +8,15 @@ import {
 	getCommandMeta,
 	hasRichParts,
 	partsToText,
-	toPartArray,
 } from '@pluxel/bot-layer'
 import type {
 	AnyMessage,
-	Attachment,
 	BotLayer,
 	CommandKit,
 	MessageContent,
 	Part,
 	Platform,
+	SandboxSession,
 } from '@pluxel/bot-layer'
 
 import { UserDirectory } from './db/user-directory'
@@ -93,38 +92,17 @@ export class ChatbotsRuntime {
 		if (this.options.registerUserCommands) this.registerUserCommands()
 	}
 
-	async sandboxDispatch(input: {
-		content: MessageContent
-		platform?: Platform
-		userId?: string | number
-		channelId?: string | number
-	}): Promise<Part[][]> {
-		const platform = input.platform ?? 'kook'
-		const parts = toPartArray(input.content)
-		if (!parts.length) return []
-
-		const rawText = typeof input.content === 'string' ? input.content : partsToText(parts, platform)
-		const replies: Part[][] = []
-		const msg = this.createSandboxMessage({
-			platform,
-			parts,
-			rawText,
-			userId: input.userId ?? 'sandbox-user',
-			channelId: input.channelId ?? 'sandbox-channel',
-			replies,
-		})
-
+	async dispatchSandboxMessage(msg: AnyMessage): Promise<void> {
 		const text = this.buildCommandText(msg).trim()
-		if (!text) return replies
+		if (!text) return
 
 		const prefix = this.getCmdPrefix()
-		if (!text.toLowerCase().startsWith(prefix.toLowerCase())) return replies
+		if (!text.toLowerCase().startsWith(prefix.toLowerCase())) return
 
 		const body = text.slice(prefix.length).trim()
-		if (!body) return replies
+		if (!body) return
 
 		await this.dispatchCommand(body, msg)
-		return replies
 	}
 
 	getCommandKit(caller?: Context): PermCommandKit<ChatbotsCommandContext> {
@@ -176,72 +154,25 @@ export class ChatbotsRuntime {
 		this.ctx.scope.collectEffect(() => stop())
 	}
 
-	private createSandboxMessage(input: {
-		platform: Platform
-		parts: Part[]
-		rawText: string
-		userId: string | number
-		channelId: string | number
-		replies: Part[][]
-	}): AnyMessage {
-		const mentions = input.parts.filter((part) => part.type === 'mention')
-		const attachments: Attachment[] = input.parts
-			.filter((part) => part.type === 'image' || part.type === 'file')
-			.map((part) => ({
-				platform: input.platform,
-				kind: part.type,
-				part,
-				source: 'message',
-			}))
+	private resolveCommandPlatform(msg: AnyMessage): Platform {
+		if (msg.platform !== 'sandbox') return msg.platform
+		const raw = msg.raw as SandboxSession | undefined
+		const target = raw?.targetPlatform
+		if (target === 'kook' || target === 'telegram' || target === 'sandbox') return target
+		return msg.platform
+	}
 
-		const reply = async (content: MessageContent) => {
-			const out = toPartArray(content)
-			if (out.length) input.replies.push(out)
+	private renderPartsForMessage(parts: Part[], msg: AnyMessage): string {
+		if (msg.platform === 'sandbox') {
+			const raw = msg.raw as SandboxSession | undefined
+			if (raw?.renderText) return raw.renderText(parts)
 		}
-
-		const msg: AnyMessage = {
-			platform: input.platform,
-			text: partsToText(input.parts, input.platform),
-			textRaw: input.rawText,
-			parts: input.parts,
-			mentions,
-			attachments,
-			reference: undefined,
-			rich: hasRichParts(input.parts),
-			user: {
-				id: input.userId as any,
-				username: 'sandbox',
-				displayName: 'Sandbox',
-				avatar: null,
-				isBot: false,
-			},
-			channel: {
-				id: input.channelId as any,
-				guildId: null as any,
-				name: 'sandbox',
-				isPrivate: true,
-			},
-			messageId: null,
-			raw: {} as any,
-			bot: {} as any,
-			reply,
-			sendText: reply,
-			sendImage: async (image, caption) => {
-				const captionParts = caption ? toPartArray(caption) : []
-				await reply(captionParts.length ? [image, ...captionParts] : image)
-			},
-			sendFile: async (file) => {
-				await reply(file)
-			},
-			uploadImage: async (image) => image,
-			uploadFile: async (file) => file,
-		}
-
-		return msg
+		return partsToText(parts, msg.platform)
 	}
 
 	private buildCommandText(msg: AnyMessage): string {
 		if (!msg.parts.length) return msg.textRaw ?? msg.text ?? ''
+		const platform = this.resolveCommandPlatform(msg)
 		const out: string[] = []
 		const push = (text: string | undefined | null) => {
 			if (text) out.push(text)
@@ -269,7 +200,7 @@ export class ChatbotsRuntime {
 		for (const part of msg.parts) walk(part)
 		let text = out.join('')
 		if (!text.trim()) text = msg.textRaw ?? msg.text ?? ''
-		if (msg.platform === 'kook' && text) {
+		if (platform === 'kook' && text) {
 			text = text.replace(/\((met|rol|chn)\)([\s\S]*?)\(\1\)/g, ' ')
 		}
 		return text
@@ -365,6 +296,8 @@ export class ChatbotsRuntime {
 	}
 
 	private summarizeMessage(msg: AnyMessage) {
+		const targetPlatform =
+			msg.platform === 'sandbox' ? (msg.raw as SandboxSession | undefined)?.targetPlatform ?? null : null
 		const attachments =
 			msg.attachments?.map((a) => ({
 				platform: a.platform,
@@ -385,6 +318,7 @@ export class ChatbotsRuntime {
 
 		return {
 			platform: msg.platform,
+			targetPlatform,
 			text: msg.text,
 			rich: msg.rich ?? hasRichParts(msg.parts),
 			parts: msg.parts.length,
@@ -505,7 +439,7 @@ export class ChatbotsRuntime {
 					return this.buildJsonBlock({
 						target: useRef && target ? 'reference' : 'message',
 						platform: ctx.msg.platform,
-						renderedText: partsToText(parts, ctx.msg.platform),
+						renderedText: this.renderPartsForMessage(parts, ctx.msg as AnyMessage),
 						hint,
 						parts,
 					})
