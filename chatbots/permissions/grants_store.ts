@@ -32,9 +32,14 @@ export class GrantsStore implements GrantsStoreApi {
 		return (await em.find(this.entities.role as any, {}, { orderBy: { roleId: 'asc' } as any })) as RoleRow[]
 	}
 
-	async createRole(parentRoleId: number | null, rank: number): Promise<number> {
+	async createRole(parentRoleId: number | null, rank: number, name?: string | null): Promise<number> {
 		const em = await this.em()
-		const row = { parentRoleId, rank, updatedAt: new Date() } satisfies Omit<RoleRow, 'roleId'>
+		const row = {
+			parentRoleId,
+			rank,
+			name: normalizeRoleName(name),
+			updatedAt: new Date(),
+		} satisfies Omit<RoleRow, 'roleId'>
 		const inserted = await em.insert(this.entities.role as any, row)
 		const id = normalizeInsertId(inserted)
 		if (id && id > 0) return id
@@ -51,12 +56,17 @@ export class GrantsStore implements GrantsStoreApi {
 		throw new Error('[Permissions] createRole(): failed to read inserted roleId')
 	}
 
-	async updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number }): Promise<void> {
+	async updateRole(
+		roleId: number,
+		patch: { parentRoleId?: number | null; rank?: number; name?: string | null },
+	): Promise<void> {
 		const em = await this.em()
+		const next = { ...patch }
+		if ('name' in next) next.name = normalizeRoleName(next.name ?? null)
 		await em.nativeUpdate(
 			this.entities.role as any,
 			{ roleId },
-			{ ...patch, updatedAt: new Date() },
+			{ ...next, updatedAt: new Date() },
 		)
 	}
 
@@ -148,4 +158,9 @@ function normalizeInsertId(value: unknown): number | null {
 		if (typeof any.id === 'bigint') return Number(any.id)
 	}
 	return null
+}
+
+function normalizeRoleName(value: string | null | undefined): string | null {
+	const trimmed = typeof value === 'string' ? value.trim() : ''
+	return trimmed ? trimmed : null
 }

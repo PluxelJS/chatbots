@@ -15,6 +15,7 @@ export type PermissionCatalogNamespace = {
 
 export type PermissionRoleDto = {
 	roleId: number
+	name: string | null
 	parentRoleId: number | null
 	rank: number
 	updatedAt: string

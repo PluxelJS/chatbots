@@ -2,6 +2,7 @@ import { EntitySchema } from 'pluxel-plugin-mikro-orm/mikro-orm/core'
 
 export interface UnifiedUserRow {
 	id: number
+	displayName: string | null
 	createdAt: Date
 }
 
@@ -27,6 +28,7 @@ export const UnifiedUserSchema = new EntitySchema<UnifiedUserRow>({
 	tableName: 'unified_users',
 	properties: {
 		id: { primary: true, type: 'number', autoincrement: true },
+		displayName: { type: 'string', nullable: true, index: true },
 		createdAt: { type: 'Date' },
 	},
 })

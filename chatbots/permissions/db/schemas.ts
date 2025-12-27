@@ -6,6 +6,7 @@ export type GrantEffect = 'allow' | 'deny'
 
 export interface RoleRow {
 	roleId: number
+	name: string | null
 	parentRoleId: number | null
 	rank: number
 	updatedAt: Date
@@ -34,6 +35,7 @@ export const RoleSchema = new EntitySchema<RoleRow>({
 	tableName: 'permission_roles',
 	properties: {
 		roleId: { primary: true, type: 'number', autoincrement: true },
+		name: { type: 'string', nullable: true, index: true },
 		parentRoleId: { type: 'number', nullable: true, index: true },
 		rank: { type: 'number', default: 0, index: true },
 		updatedAt: { type: 'Date' },
@@ -66,4 +68,3 @@ export const GrantSchema = new EntitySchema<GrantRow>({
 	},
 	uniques: [{ properties: ['subjectType', 'subjectId', 'nsKey', 'kind', 'local'] }],
 })
-

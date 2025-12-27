@@ -10,6 +10,7 @@ export interface UnifiedIdentity {
 export interface UnifiedUser {
 	id: number
 	identities: UnifiedIdentity[]
+	displayName: string | null
 	createdAt: Date
 }
 

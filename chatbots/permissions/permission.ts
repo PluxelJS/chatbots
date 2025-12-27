@@ -31,11 +31,11 @@ export class ChatbotsPermissionApi {
 		return this.perms.revoke(subjectType, subjectId, node)
 	}
 
-	createRole(parentRoleId: number | null = null, rank = 0) {
-		return this.perms.createRole(parentRoleId, rank)
+	createRole(parentRoleId: number | null = null, rank = 0, name?: string | null) {
+		return this.perms.createRole(parentRoleId, rank, name)
 	}
 
-	updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number }) {
+	updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number; name?: string | null }) {
 		return this.perms.updateRole(roleId, patch)
 	}
 

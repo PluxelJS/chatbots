@@ -230,13 +230,16 @@ class BenchGrantsStore implements GrantsStoreApi {
 		return [...this.roles.values()].sort((a, b) => a.roleId - b.roleId)
 	}
 
-	async createRole(parentRoleId: number | null, rank: number): Promise<number> {
+	async createRole(parentRoleId: number | null, rank: number, name?: string | null): Promise<number> {
 		const roleId = this.nextRoleId++
-		this.roles.set(roleId, { roleId, parentRoleId, rank, updatedAt: new Date() })
+		this.roles.set(roleId, { roleId, parentRoleId, rank, name: name ?? null, updatedAt: new Date() })
 		return roleId
 	}
 
-	async updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number }): Promise<void> {
+	async updateRole(
+		roleId: number,
+		patch: { parentRoleId?: number | null; rank?: number; name?: string | null },
+	): Promise<void> {
 		const existing = this.roles.get(roleId)
 		if (!existing) throw new Error(`Role not found: ${roleId}`)
 		this.roles.set(roleId, {

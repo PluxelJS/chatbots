@@ -1,7 +1,7 @@
 import { RpcTarget } from '@pluxel/hmr/capnweb'
 import { Buffer } from 'node:buffer'
 import type { SseChannel } from '@pluxel/hmr/services'
-import type { Part } from '@pluxel/bot-layer'
+import type { Part, Platform } from '@pluxel/bot-layer'
 import { getCommandMeta, partsToText, toPartArray } from '@pluxel/bot-layer'
 
 import type { ChatbotsRuntime } from './runtime'
@@ -22,6 +22,8 @@ import type {
 	PermissionGrantDto,
 	PermissionRoleDto,
 } from './permissions-types'
+import type { UnifiedUserDto } from './user-types'
+import type { UserDirectory } from './db/user-directory'
 
 const DEFAULT_PLATFORM = 'kook'
 const DEFAULT_USER_ID = 'sandbox-user'
@@ -182,6 +184,7 @@ export class ChatbotsSandboxRpc extends RpcTarget {
 	constructor(
 		private readonly sandbox: ChatbotsSandbox,
 		private readonly permissions: PermissionService,
+		private readonly users: UserDirectory,
 	) {
 		super()
 	}
@@ -229,11 +232,14 @@ export class ChatbotsSandboxRpc extends RpcTarget {
 		return rows.map(serializeGrant)
 	}
 
-	async createRole(parentRoleId: number | null, rank: number): Promise<number> {
-		return await this.permissions.createRole(parentRoleId, rank)
+	async createRole(parentRoleId: number | null, rank: number, name?: string | null): Promise<number> {
+		return await this.permissions.createRole(parentRoleId, rank, name)
 	}
 
-	async updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number }): Promise<void> {
+	async updateRole(
+		roleId: number,
+		patch: { parentRoleId?: number | null; rank?: number; name?: string | null },
+	): Promise<void> {
 		await this.permissions.updateRole(roleId, patch)
 	}
 
@@ -252,12 +258,32 @@ export class ChatbotsSandboxRpc extends RpcTarget {
 	async revoke(subjectType: SubjectType, subjectId: number, node: string): Promise<void> {
 		await this.permissions.revoke(subjectType, subjectId, node)
 	}
+
+	async getUser(userId: number): Promise<UnifiedUserDto | null> {
+		const user = await this.users.getUserById(userId)
+		return user ? serializeUser(user) : null
+	}
+
+	async findUserByPlatformIdentity(platform: Platform, platformUserId: string | number): Promise<UnifiedUserDto | null> {
+		const user = await this.users.findUserByIdentity(platform, String(platformUserId))
+		return user ? serializeUser(user) : null
+	}
+
+	async searchUsersByName(query: string, limit?: number): Promise<UnifiedUserDto[]> {
+		const users = await this.users.searchUsersByName(query, limit)
+		return users.map(serializeUser)
+	}
+
+	async updateUserDisplayName(userId: number, displayName: string | null): Promise<void> {
+		await this.users.updateUserDisplayName(userId, displayName)
+	}
 }
 
 const toIso = (value: Date | string) => (typeof value === 'string' ? value : value.toISOString())
 
 const serializeRole = (row: RoleRow): PermissionRoleDto => ({
 	roleId: row.roleId,
+	name: row.name ?? null,
 	parentRoleId: row.parentRoleId,
 	rank: row.rank,
 	updatedAt: toIso(row.updatedAt),
@@ -272,6 +298,16 @@ const serializeGrant = (row: GrantRow): PermissionGrantDto => ({
 	local: row.local,
 	effect: row.effect,
 	updatedAt: toIso(row.updatedAt),
+})
+
+const serializeUser = (user: { id: number; displayName: string | null; createdAt: Date; identities: Array<{ platform: Platform; platformUserId: string }> }): UnifiedUserDto => ({
+	id: user.id,
+	displayName: user.displayName ?? null,
+	createdAt: toIso(user.createdAt),
+	identities: user.identities.map((identity) => ({
+		platform: identity.platform,
+		platformUserId: identity.platformUserId,
+	})),
 })
 
 declare module '@pluxel/hmr/services' {

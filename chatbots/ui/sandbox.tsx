@@ -1,21 +1,23 @@
-import Chat, {
+import {
 	Bubble,
-	List,
-	ListItem,
 	QuickReplies,
 	SystemMessage,
-	Tag,
-	Text as ChatText,
 } from '@chatui/core/es'
 import type { MessageProps, QuickReplyItemProps } from '@chatui/core'
 import {
 	ActionIcon,
+	Avatar,
 	Badge,
 	Box,
 	Button,
+	Checkbox,
 	Collapse,
+	Combobox,
 	Divider,
 	Group,
+	Kbd,
+	Modal,
+	MultiSelect,
 	Paper,
 	ScrollArea,
 	Select,
@@ -24,9 +26,11 @@ import {
 	Tabs,
 	Text,
 	TextInput,
+	Tooltip,
+	useCombobox,
 } from '@mantine/core'
-import { useMediaQuery } from '@mantine/hooks'
-import { IconMessage2, IconPlus, IconTrash } from '@tabler/icons-react'
+import { useDisclosure, useMediaQuery } from '@mantine/hooks'
+import { IconCommand, IconMessage2, IconPlus, IconSearch, IconTrash, IconX } from '@tabler/icons-react'
 import { hmrWebClient, rpcErrorMessage } from '@pluxel/hmr/web'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
@@ -40,6 +44,7 @@ import {
 	sampleSections,
 } from '@pluxel/parts/ui-chatui'
 import { PageHeader } from './components'
+import { useRoles } from './hooks'
 import { useChatUiColorScheme } from './styles'
 
 import type {
@@ -69,6 +74,15 @@ type SandboxSession = {
 	platform: string
 	userId: string
 	channelId: string
+	mockRoleIds: number[]
+	// Mock user info
+	userDisplayName: string
+	userUsername: string
+	userAvatar: string
+	userIsBot: boolean
+	// Mock channel info
+	channelName: string
+	channelIsPrivate: boolean
 	draft: string
 }
 
@@ -86,12 +100,22 @@ const IDENTITY_PRESETS = [
 	{ value: 'custom', label: 'Custom', userId: '' },
 ]
 
+// Simple colored avatar placeholder (data URI)
+const DEFAULT_AVATAR = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="48" height="48"%3E%3Crect width="48" height="48" fill="%234c6ef5" rx="8"/%3E%3Ctext x="50%25" y="50%25" fill="white" font-size="20" text-anchor="middle" dy=".35em"%3EU%3C/text%3E%3C/svg%3E'
+
 const DEFAULT_SESSION: SandboxSession = {
 	id: 'session-1',
 	label: 'Default',
 	platform: PLATFORM_OPTIONS[0].value,
 	userId: 'sandbox-user',
 	channelId: 'sandbox-channel',
+	mockRoleIds: [],
+	userDisplayName: 'Sandbox User',
+	userUsername: 'sandbox',
+	userAvatar: DEFAULT_AVATAR,
+	userIsBot: false,
+	channelName: 'sandbox-channel',
+	channelIsPrivate: false,
 	draft: '',
 }
 
@@ -109,6 +133,13 @@ const sanitizeSession = (input: any): SandboxSession | null => {
 		platform: typeof input.platform === 'string' ? input.platform : PLATFORM_OPTIONS[0].value,
 		userId: typeof input.userId === 'string' ? input.userId : 'sandbox-user',
 		channelId: typeof input.channelId === 'string' ? input.channelId : 'sandbox-channel',
+		mockRoleIds: Array.isArray(input.mockRoleIds) ? input.mockRoleIds.filter((v: any) => typeof v === 'number') : [],
+		userDisplayName: typeof input.userDisplayName === 'string' ? input.userDisplayName : 'Sandbox User',
+		userUsername: typeof input.userUsername === 'string' ? input.userUsername : 'sandbox',
+		userAvatar: typeof input.userAvatar === 'string' ? input.userAvatar : DEFAULT_AVATAR,
+		userIsBot: typeof input.userIsBot === 'boolean' ? input.userIsBot : false,
+		channelName: typeof input.channelName === 'string' ? input.channelName : 'sandbox-channel',
+		channelIsPrivate: typeof input.channelIsPrivate === 'boolean' ? input.channelIsPrivate : false,
 		draft: typeof input.draft === 'string' ? input.draft : '',
 	}
 }
@@ -250,6 +281,13 @@ function useSandboxSessions() {
 			platform: base.platform,
 			userId: base.userId,
 			channelId: `sandbox-${seq.current}`,
+			mockRoleIds: [],
+			userDisplayName: base.userDisplayName,
+			userUsername: base.userUsername,
+			userAvatar: base.userAvatar,
+			userIsBot: base.userIsBot,
+			channelName: `sandbox-${seq.current}`,
+			channelIsPrivate: base.channelIsPrivate,
 			draft: '',
 		}
 		setSessions((prev) => [...prev, newSession])
@@ -397,6 +435,380 @@ function SessionTabs({ sessions, activeId, onChange, onCreate, onRemove }: Sessi
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Command Picker - 指令选择器
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CommandPickerProps = {
+	commands: SandboxCommand[]
+	cmdPrefix: string
+	opened: boolean
+	onClose: () => void
+	onSelect: (cmd: SandboxCommand, execute: boolean) => void
+}
+
+function CommandPicker({ commands, cmdPrefix, opened, onClose, onSelect }: CommandPickerProps) {
+	const [search, setSearch] = useState('')
+
+	const filtered = useMemo(() => {
+		const q = search.toLowerCase().trim()
+		if (!q) return commands
+		return commands.filter(
+			(c) =>
+				c.name.toLowerCase().includes(q) ||
+				c.aliases.some((a) => a.toLowerCase().includes(q)) ||
+				c.desc?.toLowerCase().includes(q) ||
+				c.group?.toLowerCase().includes(q),
+		)
+	}, [commands, search])
+
+	const grouped = useMemo(() => {
+		const map = new Map<string, SandboxCommand[]>()
+		for (const cmd of filtered) {
+			const group = cmd.group || 'Other'
+			const list = map.get(group) ?? []
+			list.push(cmd)
+			map.set(group, list)
+		}
+		return Array.from(map.entries()).sort(([a], [b]) => a.localeCompare(b))
+	}, [filtered])
+
+	useEffect(() => {
+		if (!opened) setSearch('')
+	}, [opened])
+
+	return (
+		<Modal
+			opened={opened}
+			onClose={onClose}
+			title={
+				<Group gap="xs">
+					<IconCommand size={18} />
+					<Text fw={600}>Command Browser</Text>
+					<Badge size="sm" variant="light" color="gray">
+						{commands.length} commands
+					</Badge>
+				</Group>
+			}
+			size="lg"
+			styles={{ body: { padding: 0 } }}
+		>
+			<Box p="md" pb={0}>
+				<TextInput
+					placeholder="Search commands..."
+					leftSection={<IconSearch size={16} />}
+					value={search}
+					onChange={(e) => setSearch(e.currentTarget.value)}
+					autoFocus
+				/>
+			</Box>
+			<ScrollArea style={{ height: 400 }} type="auto" offsetScrollbars p="md">
+				{grouped.length === 0 ? (
+					<Text c="dimmed" ta="center" py="xl">
+						No commands match "{search}"
+					</Text>
+				) : (
+					<Stack gap="md">
+						{grouped.map(([group, cmds]) => (
+							<Box key={group}>
+								<Text size="xs" fw={600} c="dimmed" mb="xs" tt="uppercase">
+									{group}
+								</Text>
+								<Stack gap="xs">
+									{cmds.map((cmd) => (
+										<Paper
+											key={cmd.name}
+											withBorder
+											p="sm"
+											style={{ cursor: 'pointer' }}
+											onClick={() => onSelect(cmd, false)}
+										>
+											<Group justify="space-between" align="flex-start" wrap="nowrap">
+												<Box style={{ flex: 1, minWidth: 0 }}>
+													<Group gap="xs" mb={4}>
+														<Text size="sm" fw={600} style={{ fontFamily: 'monospace' }}>
+															{cmdPrefix}{cmd.name}
+														</Text>
+														{cmd.aliases.length > 0 && (
+															<Text size="xs" c="dimmed">
+																({cmd.aliases.map((a) => cmdPrefix + a).join(', ')})
+															</Text>
+														)}
+													</Group>
+													{cmd.usage && cmd.usage !== cmd.name && (
+														<Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }} mb={4}>
+															{cmdPrefix}{cmd.usage}
+														</Text>
+													)}
+													{cmd.desc && (
+														<Text size="xs" c="dimmed">
+															{cmd.desc}
+														</Text>
+													)}
+												</Box>
+												<Group gap="xs">
+													<Tooltip label="Fill input">
+														<ActionIcon
+															variant="light"
+															size="sm"
+															onClick={(e) => {
+																e.stopPropagation()
+																onSelect(cmd, false)
+															}}
+														>
+															<IconCommand size={14} />
+														</ActionIcon>
+													</Tooltip>
+													<Tooltip label="Execute now">
+														<ActionIcon
+															variant="filled"
+															size="sm"
+															color="blue"
+															onClick={(e) => {
+																e.stopPropagation()
+																onSelect(cmd, true)
+															}}
+														>
+															<IconPlus size={14} />
+														</ActionIcon>
+													</Tooltip>
+												</Group>
+											</Group>
+										</Paper>
+									))}
+								</Stack>
+							</Box>
+						))}
+					</Stack>
+				)}
+			</ScrollArea>
+			<Box p="md" pt={0}>
+				<Group justify="center" gap="lg">
+					<Text size="xs" c="dimmed">
+						<Kbd size="xs">Click</Kbd> to fill input
+					</Text>
+					<Text size="xs" c="dimmed">
+						<Kbd size="xs">Blue button</Kbd> to execute
+					</Text>
+				</Group>
+			</Box>
+		</Modal>
+	)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Command Input - 带补全的指令输入
+// ─────────────────────────────────────────────────────────────────────────────
+
+type CommandInputProps = {
+	value: string
+	onChange: (value: string) => void
+	onSend: () => void
+	commands: SandboxCommand[]
+	cmdPrefix: string
+	onOpenPicker: () => void
+	placeholder?: string
+}
+
+function CommandInput({ value, onChange, onSend, commands, cmdPrefix, onOpenPicker, placeholder }: CommandInputProps) {
+	const combobox = useCombobox({
+		onDropdownClose: () => combobox.resetSelectedOption(),
+	})
+	const inputRef = useRef<HTMLInputElement>(null)
+	const [selectedIndex, setSelectedIndex] = useState(0)
+
+	const trimmed = value.trimStart()
+	const isCommand = trimmed.startsWith(cmdPrefix)
+	const query = isCommand ? trimmed.slice(cmdPrefix.length).split(/\s+/)[0]?.toLowerCase() ?? '' : null
+	const hasArgs = isCommand && trimmed.includes(' ')
+
+	const suggestions = useMemo(() => {
+		if (query === null || hasArgs) return []
+		if (!query) return commands.slice(0, 10)
+		return commands
+			.filter((c) => c.name.toLowerCase().startsWith(query) || c.aliases.some((a) => a.toLowerCase().startsWith(query)))
+			.slice(0, 8)
+	}, [commands, query, hasArgs])
+
+	const showDropdown = suggestions.length > 0
+
+	// Reset selection when suggestions change
+	useEffect(() => {
+		setSelectedIndex(0)
+		if (showDropdown) {
+			combobox.openDropdown()
+		} else {
+			combobox.closeDropdown()
+		}
+	}, [showDropdown, suggestions.length, combobox])
+
+	const applyCommand = useCallback(
+		(cmd: SandboxCommand) => {
+			onChange(`${cmdPrefix}${cmd.name} `)
+			combobox.closeDropdown()
+			setSelectedIndex(0)
+			inputRef.current?.focus()
+		},
+		[cmdPrefix, onChange, combobox],
+	)
+
+	const handleKeyDown = useCallback(
+		(e: React.KeyboardEvent<HTMLInputElement>) => {
+			if (!showDropdown) {
+				// No dropdown - Enter sends
+				if (e.key === 'Enter') {
+					e.preventDefault()
+					onSend()
+				}
+				return
+			}
+
+			// Dropdown is open
+			if (e.key === 'Tab') {
+				// Tab cycles through options
+				e.preventDefault()
+				e.stopPropagation()
+				setSelectedIndex((prev) => (prev + 1) % suggestions.length)
+			} else if (e.key === 'Enter') {
+				// Enter completes the selected option
+				e.preventDefault()
+				const selected = suggestions[selectedIndex]
+				if (selected) applyCommand(selected)
+			} else if (e.key === 'ArrowDown') {
+				e.preventDefault()
+				setSelectedIndex((prev) => Math.min(prev + 1, suggestions.length - 1))
+			} else if (e.key === 'ArrowUp') {
+				e.preventDefault()
+				setSelectedIndex((prev) => Math.max(prev - 1, 0))
+			} else if (e.key === 'Escape') {
+				combobox.closeDropdown()
+			}
+		},
+		[showDropdown, suggestions, selectedIndex, applyCommand, onSend, combobox],
+	)
+
+	return (
+		<Combobox store={combobox} onOptionSubmit={(val) => {
+			const cmd = commands.find((c) => c.name === val)
+			if (cmd) applyCommand(cmd)
+		}}>
+			<Combobox.Target>
+				<TextInput
+					ref={inputRef}
+					value={value}
+					onChange={(e) => onChange(e.currentTarget.value)}
+					onKeyDownCapture={handleKeyDown}
+					onFocus={() => showDropdown && combobox.openDropdown()}
+					placeholder={placeholder}
+					rightSection={
+						<Tooltip label="Browse commands">
+							<ActionIcon variant="subtle" onClick={onOpenPicker}>
+								<IconCommand size={16} />
+							</ActionIcon>
+						</Tooltip>
+					}
+					styles={{ input: { fontFamily: isCommand ? 'monospace' : undefined } }}
+				/>
+			</Combobox.Target>
+			<Combobox.Dropdown>
+				<Combobox.Options>
+					{suggestions.map((cmd, index) => (
+						<Combobox.Option
+							key={cmd.name}
+							value={cmd.name}
+							active={index === selectedIndex}
+							onMouseEnter={() => setSelectedIndex(index)}
+						>
+							<Group justify="space-between" wrap="nowrap">
+								<Box style={{ flex: 1, minWidth: 0 }}>
+									<Group gap="xs">
+										<Text size="sm" fw={500} style={{ fontFamily: 'monospace' }}>
+											{cmdPrefix}{cmd.name}
+										</Text>
+										{cmd.group && <Badge size="xs" variant="light">{cmd.group}</Badge>}
+									</Group>
+									{cmd.desc && (
+										<Text size="xs" c="dimmed" lineClamp={1}>
+											{cmd.desc}
+										</Text>
+									)}
+								</Box>
+							</Group>
+						</Combobox.Option>
+					))}
+				</Combobox.Options>
+				<Combobox.Footer>
+					<Group justify="center" gap="md">
+						<Text size="xs" c="dimmed">
+							<Kbd size="xs">Tab</Kbd> cycle
+						</Text>
+						<Text size="xs" c="dimmed">
+							<Kbd size="xs">Enter</Kbd> complete
+						</Text>
+						<Text size="xs" c="dimmed">
+							<Kbd size="xs">↑↓</Kbd> navigate
+						</Text>
+					</Group>
+				</Combobox.Footer>
+			</Combobox.Dropdown>
+		</Combobox>
+	)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Image Lightbox - 图片预览
+// ─────────────────────────────────────────────────────────────────────────────
+
+type ImageLightboxProps = {
+	src: string | null
+	onClose: () => void
+}
+
+function ImageLightbox({ src, onClose }: ImageLightboxProps) {
+	if (!src) return null
+
+	return (
+		<Modal
+			opened={!!src}
+			onClose={onClose}
+			size="xl"
+			centered
+			withCloseButton={false}
+			styles={{
+				body: { padding: 0, background: 'transparent' },
+				content: { background: 'transparent', boxShadow: 'none' },
+			}}
+			overlayProps={{ backgroundOpacity: 0.85 }}
+		>
+			<Box style={{ position: 'relative' }}>
+				<ActionIcon
+					variant="filled"
+					color="dark"
+					size="lg"
+					radius="xl"
+					style={{ position: 'absolute', top: 8, right: 8, zIndex: 10 }}
+					onClick={onClose}
+				>
+					<IconX size={18} />
+				</ActionIcon>
+				<img
+					src={src}
+					alt="Preview"
+					style={{
+						display: 'block',
+						maxWidth: '90vw',
+						maxHeight: '85vh',
+						margin: '0 auto',
+						borderRadius: 8,
+						boxShadow: '0 4px 24px rgba(0,0,0,0.3)',
+					}}
+					onClick={onClose}
+				/>
+			</Box>
+		</Modal>
+	)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -406,7 +818,12 @@ export function ChatbotsSandboxPage() {
 	const isStacked = useMediaQuery('(max-width: 1200px)', undefined, { getInitialValueInEffect: true })
 	const session = useSandboxSessions()
 	const data = useSandboxData()
+	const roles = useRoles()
 	const [showParts, setShowParts] = useState(false)
+	const [pickerOpened, { open: openPicker, close: closePicker }] = useDisclosure(false)
+	const [lightboxSrc, setLightboxSrc] = useState<string | null>(null)
+	const messagesEndRef = useRef<HTMLDivElement>(null)
+	const messageContainerRef = useRef<HTMLDivElement>(null)
 
 	const partsCount = useMemo(() => sampleSections.reduce((acc, s) => acc + s.items.length, 0), [])
 
@@ -422,6 +839,28 @@ export function ChatbotsSandboxPage() {
 			.map(toChatUiMessage)
 	}, [data.messages, session.active?.channelId, session.active?.platform])
 
+	// Auto-scroll to bottom when messages change
+	useEffect(() => {
+		messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+	}, [chatMessages.length])
+
+	// Image click-to-enlarge via event delegation
+	useEffect(() => {
+		const container = messageContainerRef.current
+		if (!container) return
+		const handleClick = (e: MouseEvent) => {
+			const target = e.target as HTMLElement
+			if (target.tagName === 'IMG') {
+				const img = target as HTMLImageElement
+				// Skip small icons/avatars (arbitrary threshold)
+				if (img.naturalWidth < 50 && img.naturalHeight < 50) return
+				setLightboxSrc(img.src)
+			}
+		}
+		container.addEventListener('click', handleClick)
+		return () => container.removeEventListener('click', handleClick)
+	}, [])
+
 	const sendToSandbox = useCallback(
 		async (content: SandboxSendInput['content']) => {
 			data.setError(null)
@@ -432,6 +871,17 @@ export function ChatbotsSandboxPage() {
 					platform: session.active.platform,
 					userId: coerceId(session.active.userId),
 					channelId: coerceId(session.active.channelId),
+					mockRoleIds: session.active.mockRoleIds.length ? session.active.mockRoleIds : undefined,
+					mockUser: {
+						displayName: session.active.userDisplayName || undefined,
+						username: session.active.userUsername || undefined,
+						avatar: session.active.userAvatar || undefined,
+						isBot: session.active.userIsBot,
+					},
+					mockChannel: {
+						name: session.active.channelName || undefined,
+						isPrivate: session.active.channelIsPrivate,
+					},
 				})
 				session.update({ draft: '' })
 				if (result?.messages?.length) data.appendMessages(result.messages)
@@ -442,39 +892,26 @@ export function ChatbotsSandboxPage() {
 		[data, session],
 	)
 
-	const handleSend = useCallback(
-		(type: string, value: string) => {
-			if (type !== 'text') return
-			const text = value.trim()
-			if (text) void sendToSandbox(text)
-		},
-		[sendToSandbox],
-	)
+	const handleSendText = useCallback(() => {
+		const text = (session.active?.draft ?? '').trim()
+		if (text) void sendToSandbox(text)
+	}, [sendToSandbox, session.active?.draft])
 
 	const handleInputChange = useCallback(
 		(value: string) => session.update({ draft: value }),
 		[session],
 	)
 
-	const commandQuery = useMemo(() => {
-		const trimmed = (session.active?.draft ?? '').trimStart()
-		return trimmed.startsWith(data.cmdPrefix) ? trimmed.slice(data.cmdPrefix.length) : null
-	}, [data.cmdPrefix, session.active?.draft])
-
-	const commandSuggestions = useMemo(() => {
-		if (commandQuery === null) return []
-		const head = commandQuery.split(/\s+/)[0]?.toLowerCase() ?? ''
-		return data.commands
-			.filter((c) => !head || c.name.toLowerCase().startsWith(head) || c.aliases.some((a) => a.toLowerCase().startsWith(head)))
-			.slice(0, 8)
-	}, [commandQuery, data.commands])
-
-	const applyCommand = useCallback(
-		(cmd: SandboxCommand) => {
-			const base = `${data.cmdPrefix}${cmd.name}`
-			session.update({ draft: base.endsWith(' ') ? base : `${base} ` })
+	const handleCommandSelect = useCallback(
+		(cmd: SandboxCommand, execute: boolean) => {
+			closePicker()
+			if (execute) {
+				void sendToSandbox(`${data.cmdPrefix}${cmd.name}`)
+			} else {
+				session.update({ draft: `${data.cmdPrefix}${cmd.name} ` })
+			}
 		},
-		[data.cmdPrefix, session],
+		[closePicker, data.cmdPrefix, sendToSandbox, session],
 	)
 
 	const handleQuickReplyClick = useCallback(
@@ -509,37 +946,11 @@ export function ChatbotsSandboxPage() {
 		[session.active?.userId],
 	)
 
-	const renderQuickReplies = useCallback(() => {
-		if (commandQuery !== null) {
-			if (!commandSuggestions.length) {
-				return (
-					<List bordered variant="buttons">
-						<ListItem content={<ChatText>No commands match.</ChatText>} />
-					</List>
-				)
-			}
-			return (
-				<List bordered variant="buttons">
-					{commandSuggestions.map((cmd) => (
-						<ListItem
-							key={cmd.name}
-							onClick={() => applyCommand(cmd)}
-							content={
-								<div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-									<div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-										<ChatText>{data.cmdPrefix}{cmd.usage || cmd.name}</ChatText>
-										{cmd.group && <Tag color="primary">{cmd.group}</Tag>}
-									</div>
-									{cmd.desc && <ChatText><span style={{ color: '#6b7280' }}>{cmd.desc}</span></ChatText>}
-								</div>
-							}
-						/>
-					))}
-				</List>
-			)
-		}
-		return <QuickReplies items={quickItems} visible onClick={handleQuickReplyClick} />
-	}, [applyCommand, commandQuery, commandSuggestions, data.cmdPrefix, handleQuickReplyClick, quickItems])
+	// Check if currently typing a command (for showing quick replies vs not)
+	const isTypingCommand = useMemo(() => {
+		const trimmed = (session.active?.draft ?? '').trimStart()
+		return trimmed.startsWith(data.cmdPrefix)
+	}, [data.cmdPrefix, session.active?.draft])
 
 	const chatPanel = (
 		<Paper withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
@@ -559,20 +970,64 @@ export function ChatbotsSandboxPage() {
 				</Badge>
 			</Group>
 			<Divider mb="sm" />
-			<Box style={{ flex: 1, minHeight: 0, overflow: 'hidden' }}>
-				<Chat
-					navbar={{ title: 'Chatbots Sandbox' }}
-					messages={chatMessages}
-					renderMessageContent={renderMessageContent}
-					onSend={handleSend}
-					text={session.active?.draft ?? ''}
-					onInputChange={handleInputChange}
-					placeholder={`Type ${data.cmdPrefix}help or another command`}
-					renderQuickReplies={renderQuickReplies}
-					wideBreakpoint="900px"
-					style={{ height: '100%' }}
-				/>
-			</Box>
+
+			{/* Messages Area */}
+			<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
+				<Stack gap="sm" p="xs" ref={messageContainerRef}>
+					{chatMessages.length === 0 ? (
+						<Text c="dimmed" ta="center" py="xl">
+							No messages yet. Type a command to get started.
+						</Text>
+					) : (
+						chatMessages.map((msg) => (
+							<Box
+								key={msg._id}
+								style={{
+									display: 'flex',
+									justifyContent: msg.position === 'right' ? 'flex-end' : msg.position === 'center' ? 'center' : 'flex-start',
+								}}
+							>
+								<Box style={{ maxWidth: msg.position === 'center' ? '100%' : '80%' }}>
+									{renderMessageContent(msg)}
+								</Box>
+							</Box>
+						))
+					)}
+					<div ref={messagesEndRef} />
+				</Stack>
+			</ScrollArea>
+
+			{/* Quick Replies (only when not typing a command) */}
+			{!isTypingCommand && quickItems.length > 0 && (
+				<Box py="xs">
+					<QuickReplies items={quickItems} visible onClick={handleQuickReplyClick} />
+				</Box>
+			)}
+
+			<Divider my="xs" />
+
+			{/* Command Input */}
+			<CommandInput
+				value={session.active?.draft ?? ''}
+				onChange={handleInputChange}
+				onSend={handleSendText}
+				commands={data.commands}
+				cmdPrefix={data.cmdPrefix}
+				onOpenPicker={openPicker}
+				placeholder={`Type ${data.cmdPrefix}help or browse commands...`}
+			/>
+
+			{/* Command Picker Modal */}
+			<CommandPicker
+				commands={data.commands}
+				cmdPrefix={data.cmdPrefix}
+				opened={pickerOpened}
+				onClose={closePicker}
+				onSelect={handleCommandSelect}
+			/>
+
+			{/* Image Lightbox */}
+			<ImageLightbox src={lightboxSrc} onClose={() => setLightboxSrc(null)} />
 		</Paper>
 	)
 
@@ -645,6 +1100,78 @@ export function ChatbotsSandboxPage() {
 							size="xs"
 							value={session.active?.channelId ?? ''}
 							onChange={(e) => session.update({ channelId: e.currentTarget.value })}
+						/>
+						<MultiSelect
+							label="Mock permission roles"
+							description="Override user's roles for testing"
+							size="xs"
+							placeholder={roles.loading ? 'Loading roles...' : 'Select roles to mock'}
+							data={roles.options}
+							value={(session.active?.mockRoleIds ?? []).map(String)}
+							onChange={(values) => session.update({ mockRoleIds: values.map(Number) })}
+							clearable
+							searchable
+						/>
+					</Stack>
+
+					<Divider />
+
+					{/* Mock User Settings */}
+					<Stack gap="xs">
+						<Text fw={600}>Mock User</Text>
+						<Group align="flex-start" gap="sm">
+							<Avatar
+								src={session.active?.userAvatar}
+								size="md"
+								radius="md"
+								style={{ border: '2px solid var(--mantine-color-gray-4)' }}
+							/>
+							<Stack gap="xs" style={{ flex: 1 }}>
+								<TextInput
+									label="Display Name"
+									size="xs"
+									value={session.active?.userDisplayName ?? ''}
+									onChange={(e) => session.update({ userDisplayName: e.currentTarget.value })}
+								/>
+								<TextInput
+									label="Username"
+									size="xs"
+									value={session.active?.userUsername ?? ''}
+									onChange={(e) => session.update({ userUsername: e.currentTarget.value })}
+								/>
+							</Stack>
+						</Group>
+						<TextInput
+							label="Avatar URL"
+							size="xs"
+							placeholder="Leave empty for default"
+							value={session.active?.userAvatar === DEFAULT_AVATAR ? '' : (session.active?.userAvatar ?? '')}
+							onChange={(e) => session.update({ userAvatar: e.currentTarget.value || DEFAULT_AVATAR })}
+						/>
+						<Checkbox
+							label="Is Bot"
+							size="xs"
+							checked={session.active?.userIsBot ?? false}
+							onChange={(e) => session.update({ userIsBot: e.currentTarget.checked })}
+						/>
+					</Stack>
+
+					<Divider />
+
+					{/* Mock Channel Settings */}
+					<Stack gap="xs">
+						<Text fw={600}>Mock Channel</Text>
+						<TextInput
+							label="Channel Name"
+							size="xs"
+							value={session.active?.channelName ?? ''}
+							onChange={(e) => session.update({ channelName: e.currentTarget.value })}
+						/>
+						<Checkbox
+							label="Private Channel"
+							size="xs"
+							checked={session.active?.channelIsPrivate ?? false}
+							onChange={(e) => session.update({ channelIsPrivate: e.currentTarget.checked })}
 						/>
 						<Text size="xs" c="dimmed">
 							Commands use the bot bus. Plain text won't trigger replies unless a command matches.

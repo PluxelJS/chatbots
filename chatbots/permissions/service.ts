@@ -12,6 +12,7 @@ import type { NodeRef } from './resolver'
 import type { GrantsStoreApi } from './store'
 
 export type SubjectType = 'user' | 'role'
+const DEFAULT_ROLE_NAME = 'DEFAULT'
 
 export interface PermissionServiceOptions {
 	resolverCacheMax?: number
@@ -31,6 +32,7 @@ export class PermissionService {
 	private readonly store: GrantsStoreApi
 	private readonly userRoleCache = new Map<number, { expiresAt: number; roleIdsSorted: number[] }>()
 	private readonly userRolesTtlMs: number
+	private defaultRoleId: number | null = null
 	private catalogDirty = false
 	private catalogRefresh: Promise<void> | null = null
 
@@ -54,6 +56,7 @@ export class PermissionService {
 	static async create(mikro: MikroOrm, options: PermissionServiceOptions = {}): Promise<PermissionService> {
 		const { store, batch } = await GrantsStore.create(mikro)
 		const svc = new PermissionService(store, () => batch.dispose(), options)
+		await svc.ensureDefaultRole()
 		await svc.roles.refreshAll()
 		return svc
 	}
@@ -64,6 +67,7 @@ export class PermissionService {
 		dispose: () => Promise<void> = async () => {},
 	): Promise<PermissionService> {
 		const svc = new PermissionService(store, dispose, options)
+		await svc.ensureDefaultRole()
 		await svc.roles.refreshAll()
 		return svc
 	}
@@ -138,13 +142,16 @@ export class PermissionService {
 	// Role management
 	// --------------------------
 
-	async createRole(parentRoleId: number | null = null, rank = 0): Promise<number> {
-		const id = await this.store.createRole(parentRoleId, rank)
+	async createRole(parentRoleId: number | null = null, rank = 0, name?: string | null): Promise<number> {
+		const id = await this.store.createRole(parentRoleId, rank, name)
 		await this.roles.refreshRoleSubtree(id)
 		return id
 	}
 
-	async updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number }): Promise<void> {
+	async updateRole(
+		roleId: number,
+		patch: { parentRoleId?: number | null; rank?: number; name?: string | null },
+	): Promise<void> {
 		await this.store.updateRole(roleId, patch)
 		await this.roles.refreshRoleSubtree(roleId)
 		this.userRoleCache.clear()
@@ -218,7 +225,7 @@ export class PermissionService {
 		if (cached && cached.expiresAt > now) return { userId, roleIdsSorted: cached.roleIdsSorted }
 
 		const roleIds = await this.store.listUserRoleIds(userId)
-		const sorted = this.roles.sortRoleIds(roleIds)
+		const sorted = this.roles.sortRoleIds(this.applyDefaultRole(roleIds))
 		const entry = { expiresAt: now + this.userRolesTtlMs, roleIdsSorted: sorted }
 		this.userRoleCache.set(userId, entry)
 		return { userId, roleIdsSorted: sorted }
@@ -233,6 +240,22 @@ export class PermissionService {
 		const cached = this.userRoleCache.get(userId)
 		if (!cached || cached.expiresAt <= now) return null
 		return { userId, roleIdsSorted: cached.roleIdsSorted }
+	}
+
+private async ensureDefaultRole(): Promise<void> {
+	const roles = await this.store.listRoles()
+	const existing = roles.find((role) => normalizeRoleName(role.name) === DEFAULT_ROLE_NAME)
+		if (existing) {
+			this.defaultRoleId = existing.roleId
+			return
+		}
+		this.defaultRoleId = await this.store.createRole(null, 0, DEFAULT_ROLE_NAME)
+	}
+
+	private applyDefaultRole(roleIds: number[]): number[] {
+		if (!this.defaultRoleId) return roleIds
+		if (roleIds.length > 0) return roleIds
+		return [this.defaultRoleId]
 	}
 
 	async authorizeUser(userId: number, node: string | NodeRef): Promise<Decision> {
@@ -322,4 +345,9 @@ function parseGrantNodeUnchecked(
 	}
 	if (localRaw.includes('*')) return null
 	return { nsKey, kind: 'exact', local: localRaw }
+}
+
+function normalizeRoleName(value: string | null | undefined): string | null {
+	const trimmed = typeof value === 'string' ? value.trim() : ''
+	return trimmed ? trimmed.toUpperCase() : null
 }

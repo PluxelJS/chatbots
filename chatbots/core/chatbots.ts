@@ -35,7 +35,7 @@ export class Chatbots extends BasePlugin {
 		this.runtime.bootstrap()
 		this.sandbox = new ChatbotsSandbox(this.runtime, { cmdPrefix: this.config.cmdPrefix })
 		this.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })
-		this.ctx.ext.rpc.registerExtension(() => new ChatbotsSandboxRpc(this.sandbox, this.runtime.permissions))
+		this.ctx.ext.rpc.registerExtension(() => new ChatbotsSandboxRpc(this.sandbox, this.runtime.permissions, this.runtime.users))
 		if (this.ctx.ext.sse) {
 			this.ctx.ext.sse.registerExtension(() => this.sandbox.createSseHandler())
 		}

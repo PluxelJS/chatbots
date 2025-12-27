@@ -2,8 +2,8 @@ import type { GrantEffect, GrantKind, GrantRow, GrantSubjectType, RoleRow } from
 
 export interface GrantsStoreApi {
 	listRoles(): Promise<RoleRow[]>
-	createRole(parentRoleId: number | null, rank: number): Promise<number>
-	updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number }): Promise<void>
+	createRole(parentRoleId: number | null, rank: number, name?: string | null): Promise<number>
+	updateRole(roleId: number, patch: { parentRoleId?: number | null; rank?: number; name?: string | null }): Promise<void>
 
 	listUserRoleIds(userId: number): Promise<number[]>
 	assignRoleToUser(userId: number, roleId: number): Promise<void>
@@ -29,4 +29,3 @@ export interface GrantsStoreApi {
 		local: string
 	}): Promise<void>
 }
-

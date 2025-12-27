@@ -45,6 +45,17 @@ export type SandboxSendInput = {
 	platform?: Platform
 	userId?: string | number
 	channelId?: string | number
+	mockRoleIds?: number[]
+	mockUser?: {
+		displayName?: string
+		username?: string
+		avatar?: string
+		isBot?: boolean
+	}
+	mockChannel?: {
+		name?: string
+		isPrivate?: boolean
+	}
 }
 
 export type SandboxSendResult = {

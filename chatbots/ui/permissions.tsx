@@ -5,6 +5,7 @@ import {
 	Checkbox,
 	Group,
 	NumberInput,
+	Paper,
 	ScrollArea,
 	Select,
 	Stack,
@@ -32,7 +33,9 @@ import {
 	useRoleGrants,
 	useRoles,
 	useUserPermissions,
+	useUserSearch,
 	type PermissionEffect,
+	type UserSearchResult,
 } from './hooks'
 import { useChatUiColorScheme } from './styles'
 
@@ -47,17 +50,20 @@ type RolesPanelProps = {
 }
 
 function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
+	const [newName, setNewName] = useState('')
 	const [newRank, setNewRank] = useState<number | ''>(0)
 	const [newParentId, setNewParentId] = useState<string | null>(null)
 
 	const handleCreate = useCallback(async () => {
 		const rank = typeof newRank === 'number' ? newRank : 0
 		const parent = newParentId ? Number(newParentId) : null
-		const id = await roles.createRole(parent, rank)
+		const name = newName.trim() || null
+		const id = await roles.createRole(parent, rank, name)
 		onSelectRole(id)
+		setNewName('')
 		setNewParentId(null)
 		setNewRank(0)
-	}, [newParentId, newRank, onSelectRole, roles])
+	}, [newName, newParentId, newRank, onSelectRole, roles])
 
 	return (
 		<Panel
@@ -71,6 +77,13 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 			}
 		>
 			<Stack gap="xs" mb="sm">
+				<TextInput
+					label="Name"
+					size="xs"
+					placeholder="Optional role name"
+					value={newName}
+					onChange={(e) => setNewName(e.currentTarget.value)}
+				/>
 				<Select
 					label="Parent role"
 					size="xs"
@@ -84,7 +97,7 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 				<Table highlightOnHover withTableBorder verticalSpacing="xs" horizontalSpacing="xs">
 					<Table.Thead>
 						<Table.Tr>
-							<Table.Th>#</Table.Th>
+							<Table.Th>Name</Table.Th>
 							<Table.Th>Parent</Table.Th>
 							<Table.Th>Rank</Table.Th>
 						</Table.Tr>
@@ -102,7 +115,7 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 							>
 								<Table.Td>
 									<Text size="sm" fw={500}>
-										#{role.roleId}
+										{role.name || <Text span c="dimmed">#{role.roleId}</Text>}
 									</Text>
 								</Table.Td>
 								<Table.Td>
@@ -141,16 +154,19 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 	const [selectedNodes, setSelectedNodes] = useState<string[]>([])
 	const [effect, setEffect] = useState<PermissionEffect>('allow')
 	const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+	const [name, setName] = useState('')
 	const [parentId, setParentId] = useState<string | null>(null)
 	const [rank, setRank] = useState<number | ''>(0)
 	const [search, setSearch] = useState('')
 
 	useEffect(() => {
 		if (!role) {
+			setName('')
 			setParentId(null)
 			setRank('')
 			return
 		}
+		setName(role.name ?? '')
 		setParentId(role.parentRoleId === null ? null : String(role.parentRoleId))
 		setRank(role.rank)
 	}, [role])
@@ -201,10 +217,11 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 	const handleSave = useCallback(async () => {
 		if (!role) return
 		await roles.updateRole(role.roleId, {
+			name: name.trim() || null,
 			parentRoleId: parentId ? Number(parentId) : null,
 			rank: typeof rank === 'number' ? rank : role.rank,
 		})
-	}, [parentId, rank, role, roles])
+	}, [name, parentId, rank, role, roles])
 
 	if (!role) {
 		return (
@@ -220,15 +237,23 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 		<Panel
 			title="Role grants"
 			icon={<IconKey size={16} />}
-			badge={<Badge variant="light" color="gray">Role #{role.roleId}</Badge>}
+			badge={<Badge variant="light" color="gray">{role.name || `#${role.roleId}`}</Badge>}
 		>
 			<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
 				{/* 顶部：角色设置 + 添加权限 */}
 				<Group align="flex-end" gap="sm" wrap="wrap">
+					<TextInput
+						label="Name"
+						size="xs"
+						style={{ width: 140 }}
+						placeholder="Role name"
+						value={name}
+						onChange={(e) => setName(e.currentTarget.value)}
+					/>
 					<Select
 						label="Parent"
 						size="xs"
-						style={{ width: 120 }}
+						style={{ width: 140 }}
 						value={parentId ?? ''}
 						data={[
 							{ value: '', label: 'None' },
@@ -298,16 +323,37 @@ type UserLookupPanelProps = {
 	onLoadUser: (id: number) => void
 	roles: ReturnType<typeof useRoles>
 	userPerms: ReturnType<typeof useUserPermissions>
+	userSearch: ReturnType<typeof useUserSearch>
+	activeUser: UserSearchResult | null
+	onActiveUserChange: (user: UserSearchResult | null) => void
 }
 
-function UserLookupPanel({ userId, onLoadUser, roles, userPerms }: UserLookupPanelProps) {
+function UserLookupPanel({ userId, onLoadUser, roles, userPerms, userSearch, activeUser, onActiveUserChange }: UserLookupPanelProps) {
 	const [input, setInput] = useState('')
 
-	const handleLoad = useCallback(() => {
-		const parsed = Number(input)
-		if (!Number.isFinite(parsed)) return
-		onLoadUser(parsed)
-	}, [input, onLoadUser])
+	const handleSearch = useCallback(() => {
+		const trimmed = input.trim()
+		if (!trimmed) return
+		const parsed = Number(trimmed)
+		if (Number.isFinite(parsed)) {
+			onLoadUser(parsed)
+			userSearch.getById(parsed).then((user) => {
+				onActiveUserChange(user)
+			})
+		} else {
+			void userSearch.search(trimmed)
+		}
+	}, [input, onLoadUser, userSearch, onActiveUserChange])
+
+	const handleSelectUser = useCallback(
+		(user: UserSearchResult) => {
+			onLoadUser(user.id)
+			onActiveUserChange(user)
+			userSearch.clear()
+			setInput('')
+		},
+		[onLoadUser, onActiveUserChange, userSearch],
+	)
 
 	const handleToggleRole = useCallback(
 		async (roleId: number, assigned: boolean) => {
@@ -324,26 +370,84 @@ function UserLookupPanel({ userId, onLoadUser, roles, userPerms }: UserLookupPan
 		<Panel
 			title="User lookup"
 			actions={
-				<Button size="xs" variant="light" onClick={handleLoad}>
-					Load
+				<Button size="xs" variant="light" onClick={handleSearch} loading={userSearch.loading}>
+					Search
 				</Button>
 			}
 		>
 			<Stack gap="sm" mb="sm">
 				<TextInput
-					label="User ID"
+					label="User ID or Name"
 					size="xs"
-					placeholder="Numeric user id"
+					placeholder="Enter user id or display name"
 					value={input}
 					onChange={(e) => setInput(e.currentTarget.value)}
-					onKeyDown={(e) => e.key === 'Enter' && handleLoad()}
+					onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
 				/>
-				{userId !== null && (
+				{userId !== null && activeUser && (
+					<Group gap="xs">
+						<Badge variant="light" color="blue">
+							#{userId}
+						</Badge>
+						{activeUser.displayName && (
+							<Badge variant="light" color="grape">
+								{activeUser.displayName}
+							</Badge>
+						)}
+						{activeUser.identities.map((i) => (
+							<Badge key={`${i.platform}:${i.platformUserId}`} variant="light" color="gray" size="xs">
+								{i.platform}: {i.platformUserId}
+							</Badge>
+						))}
+					</Group>
+				)}
+				{userId !== null && !activeUser && (
 					<Badge variant="light" color="blue">
 						Active: #{userId}
 					</Badge>
 				)}
 			</Stack>
+
+			{/* Search Results */}
+			{userSearch.results.length > 0 && (
+				<>
+					<Text fw={600} size="sm" mb="xs">
+						Search results ({userSearch.results.length})
+					</Text>
+					<ScrollArea style={{ maxHeight: 160 }} type="auto" offsetScrollbars mb="sm">
+						<Stack gap="xs">
+							{userSearch.results.map((user) => (
+								<Paper
+									key={user.id}
+									withBorder
+									p="xs"
+									style={{ cursor: 'pointer' }}
+									onClick={() => handleSelectUser(user)}
+								>
+									<Group justify="space-between" align="center">
+										<Group gap="xs">
+											<Text size="sm" fw={500}>
+												{user.displayName || <Text span c="dimmed">No name</Text>}
+											</Text>
+											<Badge size="xs" variant="light" color="gray">
+												#{user.id}
+											</Badge>
+										</Group>
+										<Group gap={4}>
+											{user.identities.slice(0, 2).map((i) => (
+												<Badge key={`${i.platform}:${i.platformUserId}`} size="xs" variant="outline" color="gray">
+													{i.platform}
+												</Badge>
+											))}
+										</Group>
+									</Group>
+								</Paper>
+							))}
+						</Stack>
+					</ScrollArea>
+				</>
+			)}
+
 			<Text fw={600} size="sm" mb="xs">
 				Role assignments
 			</Text>
@@ -359,7 +463,7 @@ function UserLookupPanel({ userId, onLoadUser, roles, userPerms }: UserLookupPan
 										disabled={userId === null}
 										onChange={() => handleToggleRole(role.roleId, assigned)}
 									/>
-									<Text size="sm">Role #{role.roleId}</Text>
+									<Text size="sm">{role.name || `Role #${role.roleId}`}</Text>
 								</Group>
 								<Badge size="xs" variant="light" color="gray">
 									Rank {role.rank}
@@ -506,9 +610,11 @@ export function ChatbotsPermissionsPage() {
 
 	const catalog = usePermissionCatalog()
 	const roles = useRoles()
+	const userSearch = useUserSearch()
 
 	const [selectedRoleId, setSelectedRoleId] = useState<number | null>(null)
 	const [activeUserId, setActiveUserId] = useState<number | null>(null)
+	const [activeUser, setActiveUser] = useState<UserSearchResult | null>(null)
 
 	const roleGrants = useRoleGrants(selectedRoleId)
 	const userPerms = useUserPermissions(activeUserId)
@@ -589,6 +695,9 @@ export function ChatbotsPermissionsPage() {
 							onLoadUser={setActiveUserId}
 							roles={roles}
 							userPerms={userPerms}
+							userSearch={userSearch}
+							activeUser={activeUser}
+							onActiveUserChange={setActiveUser}
 						/>
 						<UserGrantsPanel userId={activeUserId} catalog={catalog} userPerms={userPerms} />
 					</Box>

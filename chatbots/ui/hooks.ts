@@ -16,18 +16,26 @@ export type PermissionInfo = {
 	nsKey: string
 }
 
+export type UserSearchResult = {
+	id: number
+	displayName: string | null
+	identities: { platform: string; platformUserId: string }[]
+}
+
 type PermissionsRpc = {
 	catalog: () => Promise<PermissionCatalogNamespace[]>
 	listRoles: () => Promise<PermissionRoleDto[]>
 	listRoleGrants: (roleId: number) => Promise<PermissionGrantDto[]>
 	listUserRoles: (userId: number) => Promise<number[]>
 	listUserGrants: (userId: number) => Promise<PermissionGrantDto[]>
-	createRole: (parentRoleId: number | null, rank: number) => Promise<number>
-	updateRole: (roleId: number, patch: { parentRoleId?: number | null; rank?: number }) => Promise<void>
+	createRole: (parentRoleId: number | null, rank: number, name?: string | null) => Promise<number>
+	updateRole: (roleId: number, patch: { parentRoleId?: number | null; rank?: number; name?: string | null }) => Promise<void>
 	assignRoleToUser: (userId: number, roleId: number) => Promise<void>
 	unassignRoleFromUser: (userId: number, roleId: number) => Promise<void>
 	grant: (subjectType: 'user' | 'role', subjectId: number, effect: PermissionEffect, node: string) => Promise<void>
 	revoke: (subjectType: 'user' | 'role', subjectId: number, node: string) => Promise<void>
+	searchUsers: (query: string, limit?: number) => Promise<UserSearchResult[]>
+	getUser: (userId: number) => Promise<UserSearchResult | null>
 }
 
 export const getPermissionsRpc = (): PermissionsRpc =>
@@ -114,18 +122,21 @@ export function useRoles() {
 	}, [refresh])
 
 	const options = useMemo(
-		() => roles.map((role) => ({ value: String(role.roleId), label: `Role #${role.roleId}` })),
+		() => roles.map((role) => ({
+			value: String(role.roleId),
+			label: role.name ? `${role.name} (#${role.roleId})` : `Role #${role.roleId}`,
+		})),
 		[roles],
 	)
 
-	const createRole = useCallback(async (parentRoleId: number | null, rank: number) => {
-		const id = await getPermissionsRpc().createRole(parentRoleId, rank)
+	const createRole = useCallback(async (parentRoleId: number | null, rank: number, name?: string | null) => {
+		const id = await getPermissionsRpc().createRole(parentRoleId, rank, name)
 		await refresh()
 		return id
 	}, [refresh])
 
 	const updateRole = useCallback(
-		async (roleId: number, patch: { parentRoleId?: number | null; rank?: number }) => {
+		async (roleId: number, patch: { parentRoleId?: number | null; rank?: number; name?: string | null }) => {
 			await getPermissionsRpc().updateRole(roleId, patch)
 			await refresh()
 		},
@@ -330,4 +341,43 @@ export function useUserPermissions(userId: number | null) {
 		revokeMany,
 		toggleEffect,
 	}
+}
+
+export function useUserSearch() {
+	const [results, setResults] = useState<UserSearchResult[]>([])
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	const search = useCallback(async (query: string) => {
+		const trimmed = query.trim()
+		if (!trimmed) {
+			setResults([])
+			return
+		}
+		setLoading(true)
+		try {
+			const data = await getPermissionsRpc().searchUsers(trimmed, 20)
+			setResults(data)
+			setError(null)
+		} catch (err) {
+			setError(rpcErrorMessage(err, 'Failed to search users'))
+		} finally {
+			setLoading(false)
+		}
+	}, [])
+
+	const getById = useCallback(async (userId: number): Promise<UserSearchResult | null> => {
+		try {
+			return await getPermissionsRpc().getUser(userId)
+		} catch {
+			return null
+		}
+	}, [])
+
+	const clear = useCallback(() => {
+		setResults([])
+		setError(null)
+	}, [])
+
+	return { results, loading, error, search, getById, clear }
 }
