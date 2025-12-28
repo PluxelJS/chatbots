@@ -1,0 +1,53 @@
+{
+  "$schema": "https://market.pluxel.dev/schema/package.json",
+  "name": "pluxel-plugin-milky",
+  "version": "0.1.2",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@pluxel/hmr": "./src/milky.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./api": {
+      "@pluxel/hmr": "./src/api/index.ts",
+      "default": "./dist/api.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "!**/*.map"
+  ],
+  "scripts": {
+    "build": "pluxel build",
+    "gen:api": "node scripts/generate-api-definitions.mjs",
+    "update:openapi": "curl -fsSL https://milky.ntqqrev.org/raw/openapi/openapi.json -o src/api/openapi.json && node scripts/generate-api-definitions.mjs"
+  },
+  "dependencies": {
+    "@saltify/milky-types": "latest",
+    "zod": "^4.1.5"
+  },
+  "peerDependencies": {
+    "pluxel-plugin-wretch": "workspace:*"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./api": "./dist/api.mjs",
+      "./package.json": "./package.json"
+    },
+    "access": "public",
+    "provenance": true
+  },
+  "pluxel": {
+    "dependOn": {
+      "required": [],
+      "optional": [
+        "pluxel-plugin-wretch"
+      ]
+    }
+  }
+}

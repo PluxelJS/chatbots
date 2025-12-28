@@ -20,6 +20,7 @@
   },
   "peerDependencies": {
     "pluxel-plugin-kook": "workspace:^",
+    "pluxel-plugin-milky": "workspace:^",
     "pluxel-plugin-telegram": "workspace:^"
   },
   "exports": {
@@ -32,5 +33,12 @@
       "default": "./dist/jsx-runtime.mjs"
     },
     "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./jsx-runtime": "./dist/jsx-runtime.mjs",
+      "./package.json": "./package.json"
+    }
   }
 }

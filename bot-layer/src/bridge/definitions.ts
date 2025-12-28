@@ -1,6 +1,7 @@
 import type { Platform } from '../types'
 import type { BridgeDefinition } from './types'
 import { kookBridge } from './kook'
+import { milkyBridge } from './milky'
 import { telegramBridge } from './telegram'
 import { registerAdapter } from '../platforms/registry'
 
@@ -13,6 +14,7 @@ const addBuiltin = (def: BridgeDefinition) => {
 }
 
 addBuiltin(kookBridge as BridgeDefinition)
+addBuiltin(milkyBridge as BridgeDefinition)
 addBuiltin(telegramBridge as BridgeDefinition)
 
 /** 获取当前所有桥接定义（包含运行时动态注册的） */

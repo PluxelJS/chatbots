@@ -12,6 +12,12 @@ export const BridgeConfigSchema = v.object({
 		}),
 		{ enabled: true },
 	),
+	milky: v.optional(
+		v.object({
+			enabled: v.optional(v.boolean(), true),
+		}),
+		{ enabled: true },
+	),
 	telegram: v.optional(
 		v.object({
 			enabled: v.optional(v.boolean(), true),

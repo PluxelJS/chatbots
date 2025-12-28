@@ -65,6 +65,14 @@ export interface PlatformRegistry {
 		guildId: string
 		messageId: string
 	}
+	milky: {
+		raw: import('pluxel-plugin-milky').MilkyMessageSession
+		bot: import('pluxel-plugin-milky').MilkyMessageSession['bot']
+		userId: number
+		channelId: number
+		guildId: never
+		messageId: number
+	}
 	telegram: {
 		raw: import('pluxel-plugin-telegram').MessageSession
 		bot: import('pluxel-plugin-telegram').MessageSession['bot']
