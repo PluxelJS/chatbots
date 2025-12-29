@@ -24,6 +24,15 @@ export type MilkyBotControl = {
 
 const DEFAULT_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000] as const
 
+const createIdleStatus = (instanceId: string, baseUrl: string, tokenPreview: string): MilkyBotStatus => ({
+	instanceId,
+	state: 'initializing',
+	baseUrl,
+	tokenPreview,
+	startedAt: 0,
+	updatedAt: 0,
+})
+
 export class MilkyBot extends AbstractBot {
 	public readonly $control: MilkyBotControl
 
@@ -50,7 +59,9 @@ export class MilkyBot extends AbstractBot {
 		this.instanceId = `milky-${++MilkyBot.seq}`
 		this.onStatusChange = onStatusChange
 		const preview = config.accessToken ? maskSecret(config.accessToken) : '—'
-		this.status = createInitialStatus(this.instanceId, this.baseUrl, preview)
+		this.status = onStatusChange
+			? createInitialStatus(this.instanceId, this.baseUrl, preview)
+			: createIdleStatus(this.instanceId, this.baseUrl, preview)
 		this.$control = {
 			info: { instanceId: this.instanceId, baseUrl: this.baseUrl },
 			start: () => this.startInternal(),
@@ -60,8 +71,14 @@ export class MilkyBot extends AbstractBot {
 	}
 
 	private updateStatus(patch: Partial<MilkyBotStatus>) {
-		this.status = { ...this.status, ...patch, updatedAt: Date.now() }
-		this.onStatusChange?.(this.status)
+		if (!this.onStatusChange) return
+		this.updateStatusAt(Date.now(), patch)
+	}
+
+	private updateStatusAt(now: number, patch: Partial<MilkyBotStatus>) {
+		if (!this.onStatusChange) return
+		this.status = { ...this.status, ...patch, updatedAt: now }
+		this.onStatusChange(this.status)
 	}
 
 	private snapshotStatus(): MilkyBotStatus {
@@ -168,11 +185,14 @@ export class MilkyBot extends AbstractBot {
 			throw new Error('SSE response has no body')
 		}
 
-		this.updateStatus({
-			state: 'online',
-			stateMessage: 'SSE 已连接',
-			connectedAt: Date.now(),
-		})
+		if (this.onStatusChange) {
+			const now = Date.now()
+			this.updateStatusAt(now, {
+				state: 'online',
+				stateMessage: 'SSE 已连接',
+				connectedAt: now,
+			})
+		}
 
 		const reader = res.body.getReader()
 		const decoder = new TextDecoder()
@@ -192,11 +212,11 @@ export class MilkyBot extends AbstractBot {
 			const parsed = Event.safeParse(json)
 			if (!parsed.success) return
 
-			this.updateStatus({ lastEventAt: Date.now(), stateMessage: parsed.data.event_type })
-			dispatchMilkyEvent(this.events, this, parsed.data, {
-				receivedAt: Date.now(),
-				source: 'sse',
-			})
+			if (this.onStatusChange) {
+				const now = Date.now()
+				this.updateStatusAt(now, { lastEventAt: now, lastEventType: parsed.data.event_type })
+			}
+			dispatchMilkyEvent(this.events, this, parsed.data)
 		}
 
 		while (!signal.aborted) {

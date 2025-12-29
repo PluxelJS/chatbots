@@ -1,18 +1,12 @@
 import type { Event as MilkyEvent, IncomingMessage } from '@saltify/milky-types'
 import type { MilkyBot } from '../bot'
 
-export type EventMeta = {
-	receivedAt: number
-	source: 'sse'
-}
-
 export type MilkyEventType = MilkyEvent['event_type']
 export type MilkyEventOf<T extends MilkyEventType> = Extract<MilkyEvent, { event_type: T }>
 
 export type MilkyEventSession<T extends MilkyEventType = MilkyEventType> = {
 	bot: MilkyBot
 	event: MilkyEventOf<T>
-	meta: EventMeta
 	selfId: number
 }
 

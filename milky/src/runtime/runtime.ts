@@ -30,6 +30,7 @@ export class MilkyRuntime {
 		this.ctx = ctx
 		this.config = config
 		this.abort = abort
+		const isHmrRuntime = this.ctx.env.isHmrRuntime
 
 		this.repo = new MilkyBotRegistry(this.ctx)
 		await this.repo.init()
@@ -38,9 +39,10 @@ export class MilkyRuntime {
 			this.ctx,
 			this.repo,
 			this.baseClient,
+			isHmrRuntime ? { statusDebounceMs: 250 } : { enableStatusPersistence: false },
 		)
 		this.events = this.manager.events
-		this.sseBridge = new MilkySseBridge(this.repo, this.manager)
+		this.sseBridge = isHmrRuntime ? new MilkySseBridge(this.repo, this.manager) : null
 
 		if (this.abort?.aborted) return
 		this.scheduleAutoConnect()

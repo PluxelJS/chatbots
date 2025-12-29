@@ -1,6 +1,5 @@
 import type { Context } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
-import type { SseChannel } from '@pluxel/hmr/services'
 import { MilkyBot } from '../bot'
 import { createMilkyChannel, type MilkyChannel } from '../events'
 import {
@@ -15,13 +14,22 @@ import {
 export class MilkyBotManager {
 	private readonly botInstances = new Map<string, MilkyBot>()
 	public readonly events: MilkyChannel
+	private readonly enableStatusPersistence: boolean
+	private readonly statusDebounceMs: number
+	private readonly pendingStatus = new Map<
+		string,
+		{ timer: ReturnType<typeof setTimeout> | null; patch: Partial<MilkyBotRecord> }
+	>()
 
 	constructor(
 		private readonly ctx: Context,
 		private readonly repo: MilkyBotRegistry,
 		private readonly baseClient: HttpClient,
+		options?: { enableStatusPersistence?: boolean; statusDebounceMs?: number },
 	) {
 		this.events = createMilkyChannel(ctx)
+		this.enableStatusPersistence = options?.enableStatusPersistence ?? true
+		this.statusDebounceMs = Math.max(0, options?.statusDebounceMs ?? 250)
 	}
 
 	getOverview() {
@@ -70,7 +78,9 @@ export class MilkyBotManager {
 		if (!doc) throw new Error('Bot 未找到')
 		if (this.botInstances.has(id)) return { id, status: doc.state }
 
-		await this.repo.update(id, { state: 'connecting', stateMessage: '正在启动', lastError: undefined })
+		if (this.enableStatusPersistence) {
+			await this.repo.update(id, { state: 'connecting', stateMessage: '正在启动', lastError: undefined })
+		}
 
 		const accessToken = this.repo.decryptAccessToken(doc)
 		const bot = new MilkyBot(
@@ -78,18 +88,22 @@ export class MilkyBotManager {
 			{ baseUrl: doc.baseUrl, accessToken: accessToken || undefined },
 			this.ctx,
 			this.events,
-			(status) => this.onBotStatus(id, status),
+			this.enableStatusPersistence ? (status) => this.onBotStatus(id, status) : undefined,
 		)
 
 		this.botInstances.set(id, bot)
 
 		try {
 			await bot.$control.start()
-			await this.repo.update(id, { state: 'online', stateMessage: '已连接', connectedAt: Date.now() })
+			if (this.enableStatusPersistence) {
+				await this.repo.update(id, { state: 'online', stateMessage: '已连接', connectedAt: Date.now() })
+			}
 			return { id, status: 'online' }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e)
-			await this.repo.update(id, { state: 'error', lastError: message, stateMessage: '启动失败' })
+			if (this.enableStatusPersistence) {
+				await this.repo.update(id, { state: 'error', lastError: message, stateMessage: '启动失败' })
+			}
 			this.botInstances.delete(id)
 			this.ctx.logger.error(e, '[Milky] bot 启动失败')
 			throw e
@@ -100,12 +114,15 @@ export class MilkyBotManager {
 		const bot = this.botInstances.get(id)
 		const doc = this.repo.findOne(id)
 		if (!bot) {
-			if (doc) await this.repo.update(id, { state: 'stopped', stateMessage: '已断开', connectedAt: undefined })
+			if (doc && this.enableStatusPersistence) {
+				await this.repo.update(id, { state: 'stopped', stateMessage: '已断开', connectedAt: undefined })
+			}
 			return { id, status: 'stopped' }
 		}
+		this.cancelPendingStatusUpdate(id)
 		await bot.$control.stop().catch((e) => this.ctx.logger.warn(e, '[Milky] bot 停止失败'))
 		this.botInstances.delete(id)
-		if (doc) {
+		if (doc && this.enableStatusPersistence) {
 			await this.repo.update(id, { state: 'stopped', stateMessage: '已断开', connectedAt: undefined })
 		}
 		return { id, status: 'stopped' }
@@ -115,36 +132,60 @@ export class MilkyBotManager {
 		return Promise.allSettled(Array.from(this.botInstances.keys()).map((id) => this.disconnectBot(id)))
 	}
 
-	registerSseChannel(channel: SseChannel, limit = 64) {
-		const sendSnapshot = () => channel.emit('cursor', { type: 'cursor', ...this.getCursorPayload() })
-		channel.emit('ready', { type: 'ready', now: Date.now(), ...this.getCursorPayload() })
-		const dispose = this.repo.observe(limit, sendSnapshot)
-		channel.onAbort(() => dispose())
-		return dispose
-	}
-
-	private getCursorPayload() {
-		const bots = this.repo.list(64)
-		return { bots, overview: this.getOverview() }
-	}
-
 	private onBotStatus(id: string, status: BotState) {
+		if (!this.enableStatusPersistence) return
+		const patch = {
+			state: status.state,
+			stateMessage: status.stateMessage,
+			lastError: status.lastError,
+			selfId: status.selfId,
+			nickname: status.nickname,
+			implName: status.implName,
+			implVersion: status.implVersion,
+			milkyVersion: status.milkyVersion,
+			qqProtocolType: status.qqProtocolType,
+			qqProtocolVersion: status.qqProtocolVersion,
+			lastEventAt: status.lastEventAt,
+			lastEventType: status.lastEventType,
+			connectedAt: status.connectedAt,
+		} satisfies Partial<MilkyBotRecord>
+
+		this.queueStatusUpdate(id, patch)
+	}
+
+	private queueStatusUpdate(id: string, patch: Partial<MilkyBotRecord>) {
+		const entry = this.pendingStatus.get(id) ?? { timer: null, patch: {} }
+		Object.assign(entry.patch, patch)
+		this.pendingStatus.set(id, entry)
+
+		if (this.statusDebounceMs === 0) {
+			this.flushStatusUpdate(id)
+			return
+		}
+
+		if (entry.timer) return
+		entry.timer = setTimeout(() => {
+			entry.timer = null
+			this.flushStatusUpdate(id)
+		}, this.statusDebounceMs)
+	}
+
+	private flushStatusUpdate(id: string) {
+		const entry = this.pendingStatus.get(id)
+		if (!entry) return
+		const patch = entry.patch
+		entry.patch = {}
+
 		void this.repo
-			.update(id, {
-				state: status.state,
-				stateMessage: status.stateMessage,
-				lastError: status.lastError,
-				selfId: status.selfId,
-				nickname: status.nickname,
-				implName: status.implName,
-				implVersion: status.implVersion,
-				milkyVersion: status.milkyVersion,
-				qqProtocolType: status.qqProtocolType,
-				qqProtocolVersion: status.qqProtocolVersion,
-				lastEventAt: status.lastEventAt,
-				connectedAt: status.connectedAt,
-			} satisfies Partial<MilkyBotRecord>)
+			.update(id, patch)
 			.catch((error) => this.ctx.logger.warn(error, '[Milky] bot 状态更新失败'))
+	}
+
+	private cancelPendingStatusUpdate(id: string) {
+		const entry = this.pendingStatus.get(id)
+		if (!entry) return
+		if (entry.timer) clearTimeout(entry.timer)
+		this.pendingStatus.delete(id)
 	}
 }
 

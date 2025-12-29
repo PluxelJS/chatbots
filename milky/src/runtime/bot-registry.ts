@@ -30,6 +30,7 @@ type RuntimeFields = {
 	qqProtocolType?: string
 	qqProtocolVersion?: string
 	lastEventAt?: number
+	lastEventType?: string
 	connectedAt?: number
 }
 
@@ -135,14 +136,14 @@ export class MilkyBotRegistry {
 		const baseUrl = normalizeBaseUrlValue(input.baseUrl)
 		const enc = this.tokenBox.encrypt(input.accessToken)
 
-			const doc: MilkyBotRecord = {
-				id: crypto.randomUUID(),
-				name: input.name?.trim() || undefined,
-				baseUrl,
-				state: 'initializing',
-				stateMessage: '等待连接',
-				lastError: undefined,
-				selfId: undefined,
+		const doc: MilkyBotRecord = {
+			id: crypto.randomUUID(),
+			name: input.name?.trim() || undefined,
+			baseUrl,
+			state: 'initializing',
+			stateMessage: '等待连接',
+			lastError: undefined,
+			selfId: undefined,
 			nickname: undefined,
 			implName: undefined,
 			implVersion: undefined,
@@ -150,6 +151,7 @@ export class MilkyBotRegistry {
 			qqProtocolType: undefined,
 			qqProtocolVersion: undefined,
 			lastEventAt: undefined,
+			lastEventType: undefined,
 			connectedAt: undefined,
 			createdAt: now,
 			updatedAt: now,

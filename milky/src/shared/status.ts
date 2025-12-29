@@ -19,6 +19,7 @@ export type MilkyBotStatus = {
 	qqProtocolVersion?: string
 
 	lastEventAt?: number
+	lastEventType?: string
 	connectedAt?: number
 
 	startedAt: number

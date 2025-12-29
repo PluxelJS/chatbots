@@ -1,7 +1,7 @@
 import type { Event as MilkyEvent } from '@saltify/milky-types'
 import type { MilkyChannel } from './index'
 import type { MilkyBot } from '../bot'
-import type { EventMeta, MilkyEventOf, MilkyEventSession, MilkyEventType, MilkyMessageSession } from './events.types'
+import type { MilkyEventSession, MilkyMessageSession } from './events.types'
 
 const assertNever = (value: never): never => value
 
@@ -9,20 +9,20 @@ export function dispatchMilkyEvent(
 	events: MilkyChannel,
 	bot: MilkyBot,
 	event: MilkyEvent,
-	meta: EventMeta,
 ) {
 	const selfId = Number(event.self_id)
-	const base: MilkyEventSession = { bot, event, meta, selfId }
 
-	events.event.emit(base)
-
-	switch (event.event_type) {
-		case 'message_receive': {
-			const session: MilkyMessageSession = { bot, event, meta, selfId, message: event.data }
+	if (event.event_type === "message_receive") {
+			const session: MilkyMessageSession = { bot, event, selfId, message: event.data }
 			events.message.waterfall(session)
 			events.message_receive.emit(session)
 			return
-		}
+	}
+		
+	const base: MilkyEventSession = { bot, event, selfId }
+	events.event.emit(base)
+
+	switch (event.event_type) {
 		case 'bot_offline':
 			events.bot_offline.emit(base as MilkyEventSession<'bot_offline'>)
 			return

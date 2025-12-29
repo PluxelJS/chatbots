@@ -25,7 +25,7 @@ export class Milky extends BasePlugin {
 	override async init(abort: AbortSignal): Promise<void> {
 		await this.runtime.bootstrap(this.ctx, this.config, abort)
 		if (abort.aborted) return
-		registerMilkyExtensions(this)
+		registerMilkyExtensions({ ctx: this.ctx, runtime: this.runtime })
 	}
 
 	override async stop(): Promise<void> {
@@ -73,4 +73,3 @@ declare module '@pluxel/hmr/services' {
 		Milky: MilkySnapshot
 	}
 }
-

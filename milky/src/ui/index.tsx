@@ -194,7 +194,7 @@ function BotCard({
 								</Text>
 							</Group>
 						<Text size="xs" c={bot.lastError ? 'red' : 'dimmed'} lineClamp={1}>
-							{bot.lastError ?? bot.stateMessage ?? '等待事件'}
+							{bot.lastError ?? bot.stateMessage ?? bot.lastEventType ?? '等待事件'}
 						</Text>
 					</Stack>
 					<Group gap="xs" wrap="wrap" justify="flex-end">
@@ -251,7 +251,10 @@ function BotCard({
 							<Table.Td>Token</Table.Td>
 							<Table.Td>{bot.tokenPreview}</Table.Td>
 							<Table.Td>Last Event</Table.Td>
-							<Table.Td>{formatTime(bot.lastEventAt)}</Table.Td>
+							<Table.Td>
+								{formatTime(bot.lastEventAt)}
+								{bot.lastEventType ? ` (${bot.lastEventType})` : ''}
+							</Table.Td>
 						</Table.Tr>
 						<Table.Tr>
 							<Table.Td>Impl</Table.Td>
