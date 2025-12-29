@@ -1,9 +1,8 @@
 import type { Context } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import type { SseChannel } from '@pluxel/hmr/services'
-import { MilkyBot } from './bot'
-import { createMilkyChannel, type MilkyChannel } from './events'
-import type { MilkyEventTransport } from './config'
+import { MilkyBot } from '../bot'
+import { createMilkyChannel, type MilkyChannel } from '../events'
 import {
 	MilkyBotRegistry,
 	type BotState,
@@ -11,7 +10,7 @@ import {
 	type MilkyBotPublic,
 	type MilkyBotRecord,
 	type UpdateBotInput,
-} from './runtime/bot-registry'
+} from './bot-registry'
 
 export class MilkyBotManager {
 	private readonly botInstances = new Map<string, MilkyBot>()
@@ -21,7 +20,6 @@ export class MilkyBotManager {
 		private readonly ctx: Context,
 		private readonly repo: MilkyBotRegistry,
 		private readonly baseClient: HttpClient,
-		private readonly defaultTransport: MilkyEventTransport,
 	) {
 		this.events = createMilkyChannel(ctx)
 	}
@@ -44,11 +42,8 @@ export class MilkyBotManager {
 		return this.repo.list(limit)
 	}
 
-	async createBot(input: Omit<CreateBotInput, 'transport'> & { transport?: MilkyEventTransport }): Promise<MilkyBotPublic> {
-		return this.repo.create({
-			...input,
-			transport: input.transport ?? this.defaultTransport,
-		})
+	async createBot(input: CreateBotInput): Promise<MilkyBotPublic> {
+		return this.repo.create(input)
 	}
 
 	async deleteBot(id: string) {
@@ -80,7 +75,7 @@ export class MilkyBotManager {
 		const accessToken = this.repo.decryptAccessToken(doc)
 		const bot = new MilkyBot(
 			this.baseClient,
-			{ baseUrl: doc.baseUrl, accessToken: accessToken || undefined, transport: doc.transport },
+			{ baseUrl: doc.baseUrl, accessToken: accessToken || undefined },
 			this.ctx,
 			this.events,
 			(status) => this.onBotStatus(id, status),
@@ -89,7 +84,7 @@ export class MilkyBotManager {
 		this.botInstances.set(id, bot)
 
 		try {
-			await bot.start()
+			await bot.$control.start()
 			await this.repo.update(id, { state: 'online', stateMessage: '已连接', connectedAt: Date.now() })
 			return { id, status: 'online' }
 		} catch (e) {
@@ -108,7 +103,7 @@ export class MilkyBotManager {
 			if (doc) await this.repo.update(id, { state: 'stopped', stateMessage: '已断开', connectedAt: undefined })
 			return { id, status: 'stopped' }
 		}
-		await bot.stop().catch((e) => this.ctx.logger.warn(e, '[Milky] bot 停止失败'))
+		await bot.$control.stop().catch((e) => this.ctx.logger.warn(e, '[Milky] bot 停止失败'))
 		this.botInstances.delete(id)
 		if (doc) {
 			await this.repo.update(id, { state: 'stopped', stateMessage: '已断开', connectedAt: undefined })

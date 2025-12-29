@@ -1,5 +1,6 @@
 import type { z } from 'zod'
 import type { MilkyApiDefinitionByEndpoint, MilkyApiEndpoint } from './definitions'
+import type { OutgoingSegment, SendGroupMessageOutput, SendPrivateMessageOutput } from '@saltify/milky-types'
 import * as milkySchemas from '@saltify/milky-types'
 
 export type { MilkyApiEndpoint } from './definitions'
@@ -62,16 +63,65 @@ export type MilkyApiOutput<E extends MilkyApiEndpoint> = OutputStruct<E> extends
 
 type EmptyInput = Record<string, never>
 
-export type MilkyApi = {
+export type MilkyApiArgs<E extends MilkyApiEndpoint> = MilkyApiInput<E> extends void
+	? [payload?: EmptyInput]
+	: {} extends MilkyApiInput<E>
+		? [payload?: MilkyApiInput<E>]
+		: [payload: MilkyApiInput<E>]
+
+export type MilkyApiEndpointFn<E extends MilkyApiEndpoint> = (
+	...args: MilkyApiArgs<E>
+) => Promise<Result<MilkyApiOutput<E>>>
+
+export type MilkyApiEndpoints = {
+	[E in MilkyApiEndpoint]: MilkyApiEndpointFn<E>
+}
+
+export type MilkyApiCall = {
 	// Typed call for known endpoints
-	call<E extends MilkyApiEndpoint>(
+	<E extends MilkyApiEndpoint>(
 		api: E,
-		...args: MilkyApiInput<E> extends void
-			? [payload?: EmptyInput]
-			: {} extends MilkyApiInput<E>
-				? [payload?: MilkyApiInput<E>]
-			: [payload: MilkyApiInput<E>]
+		...args: MilkyApiArgs<E>
 	): Promise<Result<MilkyApiOutput<E>>>
 	// Fallback for custom/unknown endpoints
-	call<T = unknown>(api: string, payload?: JsonLike): Promise<Result<T>>
+	<T = unknown>(api: string, payload?: JsonLike): Promise<Result<T>>
+}
+
+export type MilkyRawApi = {
+	/**
+	 * Escape hatch for dynamic endpoints (or when you really want the string-based call).
+	 * Prefer calling endpoints directly: `api.get_login_info()` etc.
+	 */
+	call: MilkyApiCall
+	/** Lowest-level request fn (envelope + optional zod validation). */
+	request: MilkyRequest
+}
+
+export type MilkyApiTools = {
+	createGroupSession(groupId: number): MilkyGroupSession
+	createPrivateSession(userId: number): MilkyPrivateSession
+	createGroupMessageBuilder(groupId: number): MilkyGroupSession['send']
+	createPrivateMessageBuilder(userId: number): MilkyPrivateSession['send']
+}
+
+export type MilkyApi = MilkyApiEndpoints & { $raw: MilkyRawApi; $tool: MilkyApiTools }
+
+export type MilkyMessage = string | OutgoingSegment[] | OutgoingSegment
+
+export type MilkyGroupSession = {
+	readonly groupId: number
+	readonly lastMessageSeq?: number
+	send(message: MilkyMessage): Promise<Result<SendGroupMessageOutput>>
+	reply(messageSeq: number, message: MilkyMessage): Promise<Result<SendGroupMessageOutput>>
+	recall(messageSeq?: number): Promise<Result<void>>
+	track(messageSeq?: number | null): number | undefined
+}
+
+export type MilkyPrivateSession = {
+	readonly userId: number
+	readonly lastMessageSeq?: number
+	send(message: MilkyMessage): Promise<Result<SendPrivateMessageOutput>>
+	reply(messageSeq: number, message: MilkyMessage): Promise<Result<SendPrivateMessageOutput>>
+	recall(messageSeq?: number): Promise<Result<void>>
+	track(messageSeq?: number | null): number | undefined
 }

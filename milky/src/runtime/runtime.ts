@@ -2,11 +2,11 @@ import type { Context } from '@pluxel/hmr'
 import type { Config } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import { middlewares, WretchPlugin } from 'pluxel-plugin-wretch'
-import type { MilkyConfigType } from './config'
+import type { MilkyConfigType } from '../config'
 import { MilkyBotManager, type MilkyBotPublic } from './bot-manager'
-import { MilkyBotRegistry, type CreateBotInput, type UpdateBotInput } from './runtime/bot-registry'
-import { MilkySseBridge, type MilkySnapshot } from './runtime/sse'
-import type { MilkyChannel } from './events'
+import { MilkyBotRegistry, type CreateBotInput, type UpdateBotInput } from './bot-registry'
+import { MilkySseBridge, type MilkySnapshot } from './sse'
+import type { MilkyChannel } from '../events'
 
 export class MilkyRuntime {
 	public readonly baseClient: HttpClient
@@ -38,7 +38,6 @@ export class MilkyRuntime {
 			this.ctx,
 			this.repo,
 			this.baseClient,
-			this.config.defaultTransport ?? 'sse',
 		)
 		this.events = this.manager.events
 		this.sseBridge = new MilkySseBridge(this.repo, this.manager)
@@ -131,4 +130,3 @@ export class MilkyRuntime {
 }
 
 export type { MilkySnapshot }
-

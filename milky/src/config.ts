@@ -1,8 +1,5 @@
 import { f, v } from '@pluxel/hmr/config'
 
-export const MilkyEventTransport = ['sse', 'ws'] as const
-export type MilkyEventTransport = (typeof MilkyEventTransport)[number]
-
 export const MilkyConfig = v.object({
 	autoConnect: v.pipe(
 		v.optional(v.boolean(), true),
@@ -12,15 +9,6 @@ export const MilkyConfig = v.object({
 		}),
 		f.booleanMeta({ variant: 'switch' }),
 	),
-	defaultTransport: v.pipe(
-		v.optional(v.picklist(MilkyEventTransport), 'sse'),
-		f.formMeta({ label: '默认事件连接方式', description: '新建 Bot 的默认事件接入方式（SSE / WebSocket）' }),
-		f.picklistMeta({
-			variant: 'segmented',
-			labels: { sse: 'SSE', ws: 'WebSocket' },
-		}),
-	),
 })
 
 export type MilkyConfigType = typeof MilkyConfig
-

@@ -1,5 +1,5 @@
 import type { SseChannel } from '@pluxel/hmr/services'
-import type { MilkyBotManager } from '../bot-manager'
+import type { MilkyBotManager } from './bot-manager'
 import type { MilkyBotRegistry, MilkyBotPublic } from './bot-registry'
 
 export type MilkySnapshot = {
@@ -43,4 +43,3 @@ export class MilkySseBridge {
 		}
 	}
 }
-

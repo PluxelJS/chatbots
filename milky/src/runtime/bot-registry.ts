@@ -1,11 +1,10 @@
 import crypto from 'node:crypto'
 import { Collection, createIndex } from '@pluxel/hmr/signaldb'
 import type { Context } from '@pluxel/hmr'
-import type { MilkyBot } from '../bot'
-import type { MilkyEventTransport } from '../config'
-import { maskSecret, normalizeBaseUrl as normalizeBaseUrlValue } from '../utils'
+import type { MilkyBotStatus } from '../shared/status'
+import { maskSecret, normalizeBaseUrl as normalizeBaseUrlValue } from '../shared/utils'
 
-export type BotState = ReturnType<MilkyBot['getStatusSnapshot']>
+export type BotState = MilkyBotStatus
 
 type SecretFields = {
 	accessTokenCiphertext: string
@@ -17,7 +16,6 @@ type SecretFields = {
 type IdentityFields = {
 	name?: string
 	baseUrl: string
-	transport: MilkyEventTransport
 }
 
 type RuntimeFields = {
@@ -57,10 +55,9 @@ export type CreateBotInput = {
 	baseUrl: string
 	accessToken?: string
 	name?: string
-	transport: MilkyEventTransport
 }
 
-export type UpdateBotInput = Partial<Pick<CreateBotInput, 'baseUrl' | 'name' | 'transport'>> & {
+export type UpdateBotInput = Partial<Pick<CreateBotInput, 'baseUrl' | 'name'>> & {
 	accessToken?: string
 }
 
@@ -124,7 +121,7 @@ export class MilkyBotRegistry {
 		this.collection = new Collection<MilkyBotRecord>({
 			name: this.collectionName,
 			persistence: await this.ctx.pluginData.persistenceForCollection<MilkyBotRecord>(this.collectionName),
-			indices: [createIndex('state'), createIndex('updatedAt'), createIndex('transport')],
+			indices: [createIndex('state'), createIndex('updatedAt')],
 		})
 		this.readyPromise = this.collection.isReady()
 	}
@@ -138,15 +135,14 @@ export class MilkyBotRegistry {
 		const baseUrl = normalizeBaseUrlValue(input.baseUrl)
 		const enc = this.tokenBox.encrypt(input.accessToken)
 
-		const doc: MilkyBotRecord = {
-			id: crypto.randomUUID(),
-			name: input.name?.trim() || undefined,
-			baseUrl,
-			transport: input.transport,
-			state: 'initializing',
-			stateMessage: '等待连接',
-			lastError: undefined,
-			selfId: undefined,
+			const doc: MilkyBotRecord = {
+				id: crypto.randomUUID(),
+				name: input.name?.trim() || undefined,
+				baseUrl,
+				state: 'initializing',
+				stateMessage: '等待连接',
+				lastError: undefined,
+				selfId: undefined,
 			nickname: undefined,
 			implName: undefined,
 			implVersion: undefined,
@@ -194,7 +190,6 @@ export class MilkyBotRegistry {
 
 		const nextPatch: Partial<MilkyBotRecord> = {}
 		if (typeof patch.baseUrl === 'string') nextPatch.baseUrl = normalizeBaseUrlValue(patch.baseUrl)
-		if (typeof patch.transport === 'string') nextPatch.transport = patch.transport
 		if (typeof patch.name === 'string') nextPatch.name = patch.name.trim() || undefined
 		if ('accessToken' in patch) {
 			const enc = this.tokenBox.encrypt(patch.accessToken)

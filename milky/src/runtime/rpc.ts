@@ -1,6 +1,6 @@
 import { RpcTarget } from '@pluxel/hmr/capnweb'
 import type { CreateBotInput, UpdateBotInput } from './bot-registry'
-import type { MilkyRuntime } from '../runtime'
+import type { MilkyRuntime } from './runtime'
 
 export class MilkyBotRpc extends RpcTarget {
 	constructor(private readonly runtime: MilkyRuntime) {
@@ -39,4 +39,3 @@ export class MilkyBotRpc extends RpcTarget {
 		return this.runtime.snapshot()
 	}
 }
-

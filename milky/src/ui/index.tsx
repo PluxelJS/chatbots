@@ -24,7 +24,6 @@ import {
 } from '@pluxel/hmr/web'
 import type { MilkySnapshot } from '../runtime'
 import type { CreateBotInput, UpdateBotInput } from '../runtime/bot-registry'
-import type { MilkyEventTransport } from '../config'
 
 type Snapshot = MilkySnapshot
 type BotStatus = Snapshot['bots'][number]
@@ -170,13 +169,11 @@ function BotCard({
 	const [editing, setEditing] = useState(false)
 	const [name, setName] = useState(bot.name ?? '')
 	const [baseUrl, setBaseUrl] = useState(bot.baseUrl)
-	const [transport, setTransport] = useState<MilkyEventTransport>(bot.transport as MilkyEventTransport)
 	const [accessToken, setAccessToken] = useState('')
 
 	useEffect(() => {
 		setName(bot.name ?? '')
 		setBaseUrl(bot.baseUrl)
-		setTransport(bot.transport as MilkyEventTransport)
 		setAccessToken('')
 	}, [bot])
 
@@ -186,16 +183,16 @@ function BotCard({
 				<Group justify="space-between" align="center">
 					<Stack gap={4}>
 						<Group gap="xs" align="center" wrap="wrap">
-							<Badge size="sm" variant="filled" color={stateColors[bot.state] ?? 'gray'}>
-								{stateLabels[bot.state] ?? bot.state}
-							</Badge>
-							<Badge size="sm" variant="filled" color="indigo">
-								{bot.transport.toUpperCase()}
-							</Badge>
-							<Text fw={700}>
-								{bot.name ?? bot.nickname ?? (String(bot.selfId ?? '') || bot.baseUrl)}
-							</Text>
-						</Group>
+								<Badge size="sm" variant="filled" color={stateColors[bot.state] ?? 'gray'}>
+									{stateLabels[bot.state] ?? bot.state}
+								</Badge>
+								<Badge size="sm" variant="filled" color="indigo">
+									SSE
+								</Badge>
+								<Text fw={700}>
+									{bot.name ?? bot.nickname ?? (String(bot.selfId ?? '') || bot.baseUrl)}
+								</Text>
+							</Group>
 						<Text size="xs" c={bot.lastError ? 'red' : 'dimmed'} lineClamp={1}>
 							{bot.lastError ?? bot.stateMessage ?? '等待事件'}
 						</Text>
@@ -280,15 +277,6 @@ function BotCard({
 								onChange={(e) => setBaseUrl(e.currentTarget.value)}
 								placeholder="http://127.0.0.1:3000"
 							/>
-							<Select
-								label="事件连接方式"
-								value={transport}
-								onChange={(v) => setTransport((v as MilkyEventTransport) ?? 'sse')}
-								data={[
-									{ value: 'sse', label: 'SSE' },
-									{ value: 'ws', label: 'WebSocket' },
-								]}
-							/>
 							<TextInput
 								label="Access Token（留空表示不改）"
 								value={accessToken}
@@ -304,7 +292,6 @@ function BotCard({
 										onUpdate(bot, {
 											name,
 											baseUrl,
-											transport,
 											...(accessToken ? { accessToken } : {}),
 										})
 									}
@@ -330,7 +317,6 @@ function MainPanel() {
 	const [newName, setNewName] = useState('')
 	const [newBaseUrl, setNewBaseUrl] = useState('')
 	const [newToken, setNewToken] = useState('')
-	const [newTransport, setNewTransport] = useState<MilkyEventTransport>('sse')
 
 	const bots = snapshot?.bots ?? []
 
@@ -389,12 +375,10 @@ function MainPanel() {
 				name: newName || undefined,
 				baseUrl: newBaseUrl,
 				accessToken: newToken || undefined,
-				transport: newTransport,
 			})
 			setNewName('')
 			setNewBaseUrl('')
 			setNewToken('')
-			setNewTransport('sse')
 			setError(null)
 			await refresh()
 		} catch (err: any) {
@@ -444,15 +428,6 @@ function MainPanel() {
 							value={newName}
 							onChange={(e) => setNewName(e.currentTarget.value)}
 							placeholder="例如：QQ 主号"
-						/>
-						<Select
-							label="事件连接方式"
-							value={newTransport}
-							onChange={(v) => setNewTransport((v as MilkyEventTransport) ?? 'sse')}
-							data={[
-								{ value: 'sse', label: 'SSE' },
-								{ value: 'ws', label: 'WebSocket' },
-							]}
 						/>
 					</Group>
 					<TextInput

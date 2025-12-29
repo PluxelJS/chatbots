@@ -3,30 +3,38 @@ import type { HttpClient } from 'pluxel-plugin-wretch'
 import { Event } from '@saltify/milky-types'
 import type { MilkyChannel } from '../events'
 import { dispatchMilkyEvent } from '../events/dispatcher'
-import type { MilkyEventTransport } from '../config'
-import { createInitialStatus, type MilkyBotStatus } from '../status'
+import { createInitialStatus, type MilkyBotStatus } from '../shared/status'
 import { AbstractBot } from './api'
-import { maskSecret } from '../utils'
+import { maskSecret } from '../shared/utils'
 
 export type MilkyBotConfig = {
 	baseUrl: string
 	accessToken?: string
-	transport: MilkyEventTransport
+}
+
+export type MilkyBotControl = {
+	info: {
+		instanceId: string
+		baseUrl: string
+	}
+	start(): Promise<void>
+	stop(): Promise<void>
+	getStatusSnapshot(): MilkyBotStatus
 }
 
 const DEFAULT_BACKOFF_MS = [1000, 2000, 4000, 8000, 16000] as const
 
 export class MilkyBot extends AbstractBot {
-	public readonly baseUrl: string
-	public readonly transport: MilkyEventTransport
-	public readonly instanceId: string
+	public readonly $control: MilkyBotControl
+
+	private readonly baseUrl: string
+	private readonly instanceId: string
 
 	private abort?: AbortController
 	private running = false
 	private stopRequested = false
 	private status: MilkyBotStatus
 	private readonly onStatusChange?: (status: MilkyBotStatus) => void
-	private ws: WebSocket | null = null
 
 	private static seq = 0
 
@@ -39,11 +47,16 @@ export class MilkyBot extends AbstractBot {
 	) {
 		super(http, { baseUrl: config.baseUrl, accessToken: config.accessToken })
 		this.baseUrl = config.baseUrl.replace(/\/+$/, '')
-		this.transport = config.transport
 		this.instanceId = `milky-${++MilkyBot.seq}`
 		this.onStatusChange = onStatusChange
 		const preview = config.accessToken ? maskSecret(config.accessToken) : '—'
-		this.status = createInitialStatus(this.instanceId, this.baseUrl, preview, this.transport)
+		this.status = createInitialStatus(this.instanceId, this.baseUrl, preview)
+		this.$control = {
+			info: { instanceId: this.instanceId, baseUrl: this.baseUrl },
+			start: () => this.startInternal(),
+			stop: () => this.stopInternal(),
+			getStatusSnapshot: () => this.snapshotStatus(),
+		}
 	}
 
 	private updateStatus(patch: Partial<MilkyBotStatus>) {
@@ -51,15 +64,15 @@ export class MilkyBot extends AbstractBot {
 		this.onStatusChange?.(this.status)
 	}
 
-	getStatusSnapshot(): MilkyBotStatus {
+	private snapshotStatus(): MilkyBotStatus {
 		return { ...this.status }
 	}
 
-	async start(): Promise<void> {
+	private async startInternal(): Promise<void> {
 		this.stopRequested = false
 		this.updateStatus({ state: 'connecting', stateMessage: '初始化中', lastError: undefined })
 
-		const impl = await this.call('get_impl_info')
+		const impl = await this.get_impl_info()
 		if (impl.ok) {
 			this.updateStatus({
 				implName: impl.data.impl_name,
@@ -70,7 +83,7 @@ export class MilkyBot extends AbstractBot {
 			})
 		}
 
-		const login = await this.call('get_login_info')
+		const login = await this.get_login_info()
 		if (!login.ok) {
 			this.updateStatus({
 				state: 'error',
@@ -89,18 +102,11 @@ export class MilkyBot extends AbstractBot {
 		await this.startEventLoop()
 	}
 
-	async stop(): Promise<void> {
+	private async stopInternal(): Promise<void> {
 		this.stopRequested = true
 		this.running = false
 		this.abort?.abort()
 		this.abort = undefined
-
-		if (this.ws) {
-			try {
-				this.ws.close(1000, 'stop')
-			} catch {}
-			this.ws = null
-		}
 
 		this.updateStatus({ state: 'stopped', stateMessage: '已断开' })
 	}
@@ -110,7 +116,7 @@ export class MilkyBot extends AbstractBot {
 		this.running = true
 		this.abort = new AbortController()
 
-		const cleanup = () => this.stop().catch(() => {})
+		const cleanup = () => this.stopInternal().catch(() => {})
 		this.ctx.scope.collectEffect(cleanup)
 
 		void this.eventLoop(this.abort.signal).catch((e) => {
@@ -130,15 +136,10 @@ export class MilkyBot extends AbstractBot {
 			try {
 				this.updateStatus({
 					state: 'connecting',
-					stateMessage: `连接事件流（${this.transport.toUpperCase()}）`,
+					stateMessage: '连接事件流（SSE）',
 					lastError: undefined,
 				})
-
-				if (this.transport === 'ws') {
-					await this.connectWsOnce(signal)
-				} else {
-					await this.connectSseOnce(signal)
-				}
+				await this.connectSseOnce(signal)
 				backoffIndex = 0
 			} catch (e) {
 				if (signal.aborted || this.stopRequested) break
@@ -192,7 +193,7 @@ export class MilkyBot extends AbstractBot {
 			if (!parsed.success) return
 
 			this.updateStatus({ lastEventAt: Date.now(), stateMessage: parsed.data.event_type })
-			dispatchMilkyEvent(this.events, this.ctx, this, parsed.data, {
+			dispatchMilkyEvent(this.events, this, parsed.data, {
 				receivedAt: Date.now(),
 				source: 'sse',
 			})
@@ -222,74 +223,6 @@ export class MilkyBot extends AbstractBot {
 
 		flush()
 		throw new Error('SSE disconnected')
-	}
-
-	private async connectWsOnce(signal: AbortSignal): Promise<void> {
-		const url = new URL(this.baseUrl)
-		url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
-		url.pathname = `${url.pathname.replace(/\/+$/, '')}/event`
-		if (this.config.accessToken) url.searchParams.set('access_token', this.config.accessToken)
-
-		const ws = new WebSocket(url.toString())
-		this.ws = ws
-
-		await new Promise<void>((resolve, reject) => {
-			const onOpen = () => resolve()
-			const onErr = () => reject(new Error('WebSocket error'))
-			ws.addEventListener('open', onOpen, { once: true })
-			ws.addEventListener('error', onErr, { once: true })
-		})
-
-		this.updateStatus({
-			state: 'online',
-			stateMessage: 'WebSocket 已连接',
-			connectedAt: Date.now(),
-		})
-
-		await new Promise<void>((resolve, reject) => {
-			const onMessage = (ev: MessageEvent) => {
-				const data = ev.data
-				const text =
-					typeof data === 'string'
-						? data
-						: data instanceof ArrayBuffer
-							? Buffer.from(data).toString('utf8')
-							: ''
-				if (!text) return
-				let json: unknown
-				try {
-					json = JSON.parse(text)
-				} catch {
-					return
-				}
-				const parsed = Event.safeParse(json)
-				if (!parsed.success) return
-
-				this.updateStatus({ lastEventAt: Date.now(), stateMessage: parsed.data.event_type })
-				dispatchMilkyEvent(this.events, this.ctx, this, parsed.data, {
-					receivedAt: Date.now(),
-					source: 'ws',
-				})
-			}
-
-			const onClose = () => resolve()
-			const onError = () => reject(new Error('WebSocket error'))
-
-			ws.addEventListener('message', onMessage)
-			ws.addEventListener('close', onClose, { once: true })
-			ws.addEventListener('error', onError, { once: true })
-
-			const abortHandler = () => {
-				try {
-					ws.close(1000, 'abort')
-				} catch {}
-			}
-
-			if (signal.aborted) abortHandler()
-			signal.addEventListener('abort', abortHandler, { once: true })
-		})
-
-		throw new Error('WebSocket disconnected')
 	}
 
 	private async sleep(ms: number, signal?: AbortSignal) {
