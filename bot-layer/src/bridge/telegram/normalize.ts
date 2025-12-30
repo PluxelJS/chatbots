@@ -1,7 +1,7 @@
 import type { MessageSession } from 'pluxel-plugin-telegram'
 import type { Attachment, BotChannel, BotUser, MentionPart, Message, MessageReference, Part } from '../../types'
-import { hasRichParts } from '../../utils'
-import { createReply, createSendHelpers } from '../../platforms/base'
+import { hasRichParts } from '../../parts'
+import { createReply, createSendHelpers } from '../../adapter'
 import { telegramAdapter } from './adapter'
 
 type TelegramMessage = MessageSession['message']
@@ -136,8 +136,8 @@ const buildTextParts = (text: string, entities: Entity[]): Part[] => {
 						type: 'mention',
 						kind: 'user',
 						id: user?.id,
-						username: user?.username ?? null,
-						displayName: buildDisplayName(user),
+						username: user?.username ?? undefined,
+						displayName: buildDisplayName(user) ?? undefined,
 						isBot: typeof user?.is_bot === 'boolean' ? user.is_bot : undefined,
 					})
 				}
@@ -159,6 +159,9 @@ const buildTextParts = (text: string, entities: Entity[]): Part[] => {
 				break
 			case 'strikethrough':
 				parts.push({ type: 'styled', style: 'strike', children: [{ type: 'text', text: segment }] })
+				break
+			case 'underline':
+				parts.push({ type: 'styled', style: 'underline', children: [{ type: 'text', text: segment }] })
 				break
 			case 'pre':
 				parts.push({ type: 'codeblock', code: segment, language: entity.language })
@@ -200,13 +203,16 @@ const normalizeContent = async (
 			kind: part.type,
 			part,
 			source,
-			fetch: resolved
-				? async (signal) => {
-						const info = await resolved
-						if (!info.downloadUrl) throw new Error('bot-layer: telegram 缺少 downloadUrl')
-						return fetchUrl(info.downloadUrl, signal)
-					}
-				: undefined,
+			fetch: async (signal) => {
+				if (resolved) {
+					const info = await resolved
+					if (info.downloadUrl) return fetchUrl(info.downloadUrl, signal)
+				}
+				if (!fileId) throw new Error('bot-layer: telegram 缺少 fileId 和 downloadUrl')
+				const info = await resolveTelegramFile(ctx, fileId)
+				if (!info.downloadUrl) throw new Error('bot-layer: telegram 缺少 downloadUrl')
+				return fetchUrl(info.downloadUrl, signal)
+			},
 		})
 		parts.push(part)
 	}
@@ -288,6 +294,90 @@ const normalizeContent = async (
 		addAttachment(part)
 	}
 
+	if (message.audio) {
+		const resolved = await resolveTelegramFile(
+			ctx,
+			message.audio.file_id,
+			message.audio.file_name ?? message.audio.title ?? 'audio',
+			message.audio.mime_type ?? undefined,
+			message.audio.file_size ?? undefined,
+		)
+		const part = {
+			type: 'audio' as const,
+			url: resolved.url,
+			fileId: message.audio.file_id,
+			name: resolved.name ?? message.audio.file_name ?? message.audio.title ?? 'audio',
+			mime: resolved.mime ?? message.audio.mime_type ?? undefined,
+			size: resolved.size ?? message.audio.file_size ?? undefined,
+			duration: message.audio.duration ?? undefined,
+		}
+		addAttachment(part)
+	}
+
+	if (message.voice) {
+		const resolved = await resolveTelegramFile(
+			ctx,
+			message.voice.file_id,
+			'voice.ogg',
+			message.voice.mime_type ?? 'audio/ogg',
+			message.voice.file_size ?? undefined,
+		)
+		const part = {
+			type: 'audio' as const,
+			url: resolved.url,
+			fileId: message.voice.file_id,
+			name: resolved.name ?? 'voice.ogg',
+			mime: resolved.mime ?? message.voice.mime_type ?? 'audio/ogg',
+			size: resolved.size ?? message.voice.file_size ?? undefined,
+			duration: message.voice.duration ?? undefined,
+		}
+		addAttachment(part)
+	}
+
+	if (message.video) {
+		const resolved = await resolveTelegramFile(
+			ctx,
+			message.video.file_id,
+			message.video.file_name ?? 'video.mp4',
+			message.video.mime_type ?? 'video/mp4',
+			message.video.file_size ?? undefined,
+		)
+		const part = {
+			type: 'video' as const,
+			url: resolved.url,
+			fileId: message.video.file_id,
+			name: resolved.name ?? message.video.file_name ?? 'video.mp4',
+			mime: resolved.mime ?? message.video.mime_type ?? 'video/mp4',
+			size: resolved.size ?? message.video.file_size ?? undefined,
+			width: message.video.width ?? undefined,
+			height: message.video.height ?? undefined,
+			duration: message.video.duration ?? undefined,
+		}
+		addAttachment(part)
+	}
+
+	if (message.video_note) {
+		const resolved = await resolveTelegramFile(
+			ctx,
+			message.video_note.file_id,
+			'video_note.mp4',
+			'video/mp4',
+			message.video_note.file_size ?? undefined,
+		)
+		const part = {
+			type: 'video' as const,
+			url: resolved.url,
+			fileId: message.video_note.file_id,
+			name: resolved.name ?? 'video_note.mp4',
+			mime: resolved.mime ?? 'video/mp4',
+			size: resolved.size ?? message.video_note.file_size ?? undefined,
+			width: message.video_note.length ?? undefined,
+			height: message.video_note.length ?? undefined,
+			duration: message.video_note.duration ?? undefined,
+		}
+		addAttachment(part)
+	}
+
 	const mentions = parts.filter((part): part is MentionPart => part.type === 'mention')
 	const rich = hasRichParts(parts)
 
@@ -364,7 +454,7 @@ export const normalizeTelegramMessage = async (session: MessageSession): Promise
 	}
 
 	const reply = createReply(telegramAdapter, session)
-	const { uploadImage, uploadFile, sendText, sendImage, sendFile } = createSendHelpers(telegramAdapter, session)
+	const { uploadImage, uploadFile, sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(telegramAdapter, session)
 
 	return {
 		platform: 'telegram',
@@ -383,6 +473,8 @@ export const normalizeTelegramMessage = async (session: MessageSession): Promise
 		reply,
 		sendText,
 		sendImage,
+		sendAudio,
+		sendVideo,
 		sendFile,
 		uploadImage,
 		uploadFile,

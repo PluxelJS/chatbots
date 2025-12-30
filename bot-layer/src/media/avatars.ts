@@ -1,6 +1,6 @@
 import { Buffer } from 'node:buffer'
 
-import type { AnyMessage, BotUser, MentionPart, Platform, PlatformRegistry } from './types'
+import type { AnyMessage, BotUser, MentionPart, Platform, PlatformRegistry } from '../types'
 
 export interface ResolvedUserProfile<P extends Platform = Platform> {
 	platform: P

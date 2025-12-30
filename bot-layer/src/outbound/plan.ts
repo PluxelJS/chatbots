@@ -1,12 +1,14 @@
-import type { FilePart, ImagePart, Part, PlatformCapabilities } from '../types'
+import type { AudioPart, FilePart, ImagePart, Part, PlatformCapabilities, VideoPart } from '../types'
 
 export type OutboundDraftOp =
 	| { type: 'text'; parts: Part[] }
 	| { type: 'image'; image: ImagePart; captionParts?: Part[]; captionPosition?: 'before' | 'after' }
+	| { type: 'audio'; audio: AudioPart }
+	| { type: 'video'; video: VideoPart; captionParts?: Part[]; captionPosition?: 'before' | 'after' }
 	| { type: 'file'; file: FilePart }
 
 const isTextLike = (part: Part): boolean =>
-	part.type !== 'image' && part.type !== 'file'
+	part.type !== 'image' && part.type !== 'audio' && part.type !== 'video' && part.type !== 'file'
 
 export const planOutbound = (parts: Part[], capabilities: PlatformCapabilities): OutboundDraftOp[] => {
 	const ops: OutboundDraftOp[] = []
@@ -60,6 +62,49 @@ export const planOutbound = (parts: Part[], capabilities: PlatformCapabilities):
 				flushText()
 				ops.push({ type: 'image', image: part })
 			}
+			continue
+		}
+
+		if (part.type === 'video') {
+			const supportsMixed = capabilities.supportsMixedMedia === true
+			// Video with caption follows same logic as image
+			if (supportsMixed && textBuffer.length && index + 1 < parts.length && isTextLike(parts[index + 1]!)) {
+				flushText()
+				ops.push({ type: 'video', video: part })
+				continue
+			}
+			if (supportsMixed && textBuffer.length) {
+				ops.push({ type: 'video', video: part, captionParts: textBuffer, captionPosition: 'before' })
+				textBuffer = []
+			} else {
+				if (supportsMixed && index + 1 < parts.length) {
+					const start = index + 1
+					let end = start
+					while (end < parts.length && isTextLike(parts[end]!)) end++
+					const hasTrailingText = end > start
+					const hasMoreMediaAfterTrailingText = end < parts.length
+
+					if (hasTrailingText && !hasMoreMediaAfterTrailingText) {
+						ops.push({
+							type: 'video',
+							video: part,
+							captionParts: parts.slice(start, end),
+							captionPosition: 'after',
+						})
+						index = end - 1
+						continue
+					}
+				}
+
+				flushText()
+				ops.push({ type: 'video', video: part })
+			}
+			continue
+		}
+
+		if (part.type === 'audio') {
+			flushText()
+			ops.push({ type: 'audio', audio: part })
 			continue
 		}
 

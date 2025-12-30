@@ -1,6 +1,6 @@
-import type { Attachment, BotChannel, BotUser, MentionPart, Message, MessageReference, Part } from '../../types'
-import { hasRichParts } from '../../utils'
-import { createReply, createSendHelpers } from '../../platforms/base'
+import type { Attachment, AudioPart, BotChannel, BotUser, MentionPart, Message, MessageReference, Part, MediaPart, MediaKind, VideoPart } from '../../types'
+import { hasRichParts } from '../../parts'
+import { createReply, createSendHelpers } from '../../adapter'
 import { milkyAdapter } from './adapter'
 
 type MilkyMessageSession = import('pluxel-plugin-milky').MilkyMessageSession
@@ -35,17 +35,22 @@ const fetchUrl = async (url: string, signal?: AbortSignal): Promise<ArrayBuffer>
 	return await res.arrayBuffer()
 }
 
-const attachmentForUrl = (
-	kind: 'image' | 'file',
-	part: Extract<Part, { type: 'image' | 'file' }>,
+const attachmentForMedia = (
+	kind: MediaKind,
+	part: MediaPart,
 	source: 'message' | 'reference',
-): Attachment<'milky'> => ({
-	platform: 'milky',
-	kind,
-	part,
-	source,
-	fetch: part.url ? (signal) => fetchUrl(part.url!, signal) : undefined,
-})
+): Attachment<'milky'> => {
+	const url = (part as any).url as string | undefined
+	return {
+		platform: 'milky',
+		kind,
+		part,
+		source,
+		fetch: url
+			? (signal) => fetchUrl(url, signal)
+			: () => Promise.reject(new Error('bot-layer: milky 附件缺少 url')),
+	}
+}
 
 const resolveFileDownloadUrl = async (
 	session: MilkyMessageSession,
@@ -111,31 +116,31 @@ const normalizeSegments = async (
 					height: typeof seg.data?.height === 'number' ? seg.data.height : undefined,
 				}
 				parts.push(part)
-				attachments.push(attachmentForUrl('image', part, source))
+				attachments.push(attachmentForMedia('image', part, source))
 				break
 			}
 			case 'record': {
 				const url = seg.data?.temp_url ? String(seg.data.temp_url) : undefined
-				const part = {
-					type: 'file' as const,
+				const part: AudioPart = {
+					type: 'audio',
 					url,
 					name: seg.data?.resource_id ? `record-${String(seg.data.resource_id)}.amr` : 'record.amr',
 					mime: 'audio/amr',
 				}
 				parts.push(part)
-				attachments.push(attachmentForUrl('file', part, source))
+				attachments.push(attachmentForMedia('audio', part, source))
 				break
 			}
 			case 'video': {
 				const url = seg.data?.temp_url ? String(seg.data.temp_url) : undefined
-				const part = {
-					type: 'file' as const,
+				const part: VideoPart = {
+					type: 'video',
 					url,
 					name: seg.data?.resource_id ? `video-${String(seg.data.resource_id)}.mp4` : 'video.mp4',
 					mime: 'video/mp4',
 				}
 				parts.push(part)
-				attachments.push(attachmentForUrl('file', part, source))
+				attachments.push(attachmentForMedia('video', part, source))
 				break
 			}
 			case 'file': {
@@ -148,7 +153,7 @@ const normalizeSegments = async (
 				}
 				if (part.url) {
 					parts.push(part)
-					attachments.push(attachmentForUrl('file', part, source))
+					attachments.push(attachmentForMedia('file', part, source))
 				} else {
 					parts.push({ type: 'text', text: `[file:${part.name}]` })
 				}
@@ -159,7 +164,7 @@ const normalizeSegments = async (
 		}
 	}
 
-	const textParts = parts.filter((p) => p.type !== 'image' && p.type !== 'file')
+	const textParts = parts.filter((p) => p.type !== 'image' && p.type !== 'audio' && p.type !== 'video' && p.type !== 'file')
 	const text = textParts.length ? milkyAdapter.render(textParts).text : ''
 	const textRaw = text
 	const mentions = parts.filter((p): p is MentionPart => p.type === 'mention')
@@ -177,7 +182,7 @@ const normalizeReference = async (
 
 	try {
 		const res = await session.bot.get_message({
-			message_scene: message.message_scene,
+			message_scene: message.message_scene as 'friend' | 'group' | 'temp',
 			peer_id: peer,
 			message_seq: replySeq,
 		})
@@ -265,7 +270,7 @@ export const normalizeMilkyMessage = async (session: MilkyMessageSession): Promi
 
 	const messageId = Number((message as any).message_seq) || null
 	const reply = createReply(milkyAdapter, session)
-	const { uploadImage, uploadFile, sendText, sendImage, sendFile } = createSendHelpers(milkyAdapter, session)
+	const { uploadImage, uploadFile, sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(milkyAdapter, session)
 
 	return {
 		platform: 'milky',
@@ -284,6 +289,8 @@ export const normalizeMilkyMessage = async (session: MilkyMessageSession): Promi
 		reply,
 		sendText,
 		sendImage,
+		sendAudio,
+		sendVideo,
 		sendFile,
 		uploadImage,
 		uploadFile,

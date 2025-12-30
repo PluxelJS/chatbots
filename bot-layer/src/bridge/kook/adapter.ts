@@ -2,6 +2,7 @@ import { Buffer } from 'node:buffer'
 import { MessageType } from 'pluxel-plugin-kook'
 
 import type {
+	AudioPart,
 	CodeBlockPart,
 	FilePart,
 	ImagePart,
@@ -11,14 +12,17 @@ import type {
 	Part,
 	PlatformCapabilities,
 	StyledPart,
+	VideoPart,
 } from '../../types'
-import type { OutboundText, PlatformAdapter, RenderResult } from '../../platforms/base'
+import type { OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
 import { toNodeBuffer } from '../../binary'
 
 const capabilities: PlatformCapabilities = {
 	format: 'markdown',
 	supportsQuote: true,
 	supportsImage: true,
+	supportsAudio: false,
+	supportsVideo: true,
 	supportsFile: true,
 	supportsMixedMedia: false,
 	supportsInlineMention: {
@@ -38,6 +42,7 @@ const renderStyled = (part: StyledPart): string => {
 		case 'italic': return `*${inner}*`
 		case 'strike': return `~~${inner}~~`
 		case 'code': return `\`${inner}\``
+		case 'underline': return `(ins)${inner}(ins)`
 		default: return inner
 	}
 }
@@ -66,6 +71,8 @@ const renderPart = (part: Part): string => {
 		case 'link': return renderLink(part)
 		case 'codeblock': return renderCodeblock(part)
 		case 'image': return part.alt ?? part.url ?? ''
+		case 'audio': return part.name ?? part.url ?? ''
+		case 'video': return part.name ?? part.url ?? ''
 		case 'file': return part.name ?? part.url ?? ''
 		default: return ''
 	}
@@ -84,7 +91,7 @@ const isPrivateSession = (session: import('pluxel-plugin-kook').MessageSession):
 
 const uploadIfNeeded = async (
 	session: import('pluxel-plugin-kook').MessageSession,
-	file: ImagePart | FilePart,
+	file: ImagePart | AudioPart | VideoPart | FilePart,
 	fallbackName: string,
 ): Promise<string> => {
 	if (!file.data) {
@@ -179,5 +186,27 @@ export const kookAdapter: PlatformAdapter<'kook'> = {
 			quote,
 		})
 		if (!res.ok) throw new Error(`KOOK sendFile failed: ${res.message}`)
+	},
+
+	sendVideo: async (session, video, _caption, options) => {
+		const quote = options?.quote ? session.data?.msg_id : undefined
+		if (!video.url) throw new Error('KOOK: video.url 为空，无法发送视频')
+		if (isPrivateSession(session)) {
+			const res = await session.bot.createDirectMessage({
+				target_id: session.userId,
+				content: video.url,
+				type: MessageType.video,
+				quote,
+			})
+			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
+			return
+		}
+		const res = await session.bot.sendMessage({
+			target_id: session.channelId,
+			content: video.url,
+			type: MessageType.video,
+			quote,
+		})
+		if (!res.ok) throw new Error(`KOOK sendVideo failed: ${res.message}`)
 	},
 }

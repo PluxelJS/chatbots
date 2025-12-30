@@ -2,7 +2,7 @@ import type { Context } from '@pluxel/hmr'
 import { EvtChannel } from '@pluxel/core/services'
 import type { BotLayerEventMap } from './events.types'
 import type { AnyMessage, PlainMessage, RichMessage } from '../types'
-import { hasRichParts } from '../utils'
+import { hasRichParts } from '../parts'
 
 export type BotEventChannel = {
 	[K in keyof BotLayerEventMap]: EvtChannel<BotLayerEventMap[K]>

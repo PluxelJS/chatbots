@@ -1,6 +1,6 @@
-import type { FilePart, ImagePart, MessageContent, Platform, PlatformRegistry, ReplyOptions } from '../types'
+import type { AudioPart, FilePart, ImagePart, MessageContent, Platform, PlatformRegistry, ReplyOptions, VideoPart } from '../types'
 import { normalizeMessageContent } from '../parts'
-import type { OutboundText, PlatformAdapter } from '../platforms/adapter'
+import type { OutboundText, PlatformAdapter } from '../adapter'
 import { assertTextOnly, normalizeTextPartsForAdapter, type TextLikePart } from '../render/normalize'
 
 export const createUploadHelpers =
@@ -80,6 +80,77 @@ export const createSendHelpers = <P extends Platform>(adapter: PlatformAdapter<P
 		await adapter.sendImage(session, uploaded, outboundCaption, safeOptions(options))
 	}
 
+	const sendAudio = async (audio: AudioPart, options?: ReplyOptions) => {
+		// 如果平台不支持音频，降级为文件
+		if (!adapter.capabilities.supportsAudio) {
+			const file: FilePart = {
+				type: 'file',
+				url: audio.url,
+				name: audio.name,
+				mime: audio.mime,
+				data: audio.data,
+				size: audio.size,
+			}
+			await sendFile(file, options)
+			return
+		}
+		if (!adapter.sendAudio) {
+			// 没有专门的 sendAudio，降级为文件
+			const file: FilePart = {
+				type: 'file',
+				url: audio.url,
+				name: audio.name,
+				mime: audio.mime,
+				data: audio.data,
+				size: audio.size,
+			}
+			await sendFile(file, options)
+			return
+		}
+		await adapter.sendAudio(session, audio, safeOptions(options))
+	}
+
+	const sendVideo = async (video: VideoPart, caption?: MessageContent, options?: ReplyOptions) => {
+		// 如果平台不支持视频，降级为文件
+		if (!adapter.capabilities.supportsVideo) {
+			const file: FilePart = {
+				type: 'file',
+				url: video.url,
+				name: video.name,
+				mime: video.mime,
+				data: video.data,
+				size: video.size,
+			}
+			await sendFile(file, options)
+			return
+		}
+		if (!adapter.sendVideo) {
+			// 没有专门的 sendVideo，降级为文件
+			const file: FilePart = {
+				type: 'file',
+				url: video.url,
+				name: video.name,
+				mime: video.mime,
+				data: video.data,
+				size: video.size,
+			}
+			await sendFile(file, options)
+			return
+		}
+
+		const captionParts = caption === undefined ? [] : normalizeOutboundText(caption, 'sendVideo(caption)')
+		const outboundCaption = captionParts.length ? toOutboundText(captionParts) : undefined
+
+		if (outboundCaption?.rendered.text) {
+			const max = adapter.capabilities.maxCaptionLength
+			if (typeof max === 'number' && outboundCaption.rendered.text.length > max) {
+				throw new Error(`bot-layer: video caption 过长(${outboundCaption.rendered.text.length} > ${max})，请自行拆分发送`)
+			}
+		}
+
+		await adapter.sendVideo(session, video, outboundCaption, safeOptions(options))
+	}
+
 	const sendFile = async (file: FilePart, options?: ReplyOptions) => {
 		if (!adapter.capabilities.supportsFile) throw new Error(`bot-layer: platform ${adapter.name} 不支持文件`)
 		if (!adapter.sendFile) throw new Error(`bot-layer: adapter ${adapter.name} 缺少 sendFile`)
@@ -87,5 +158,5 @@ export const createSendHelpers = <P extends Platform>(adapter: PlatformAdapter<P
 		await adapter.sendFile(session, uploaded, safeOptions(options))
 	}
 
-	return { sendText, sendImage, sendFile, ...uploader }
+	return { sendText, sendImage, sendAudio, sendVideo, sendFile, ...uploader }
 }

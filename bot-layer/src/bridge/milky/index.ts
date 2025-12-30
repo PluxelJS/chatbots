@@ -8,12 +8,7 @@ type MilkyInstance = InstanceType<MilkyModule['Milky']>
 export const milkyBridge: BridgeDefinition<'milky', MilkyInstance> = {
 	platform: 'milky',
 	adapter: milkyAdapter,
-	watch: (ctx, attach) => {
-		const stop = ctx.registry.optional(() => import('pluxel-plugin-milky').then((m) => m.Milky), attach, {
-			watch: true,
-		})
-		return typeof stop === 'function' ? stop : undefined
-	},
+	event: 'milky:ready',
 	attach: (ctx, milky, dispatch) => {
 		const unlisten = milky.runtime.events.message.on((session: any) => {
 			void (async () => {

@@ -8,10 +8,7 @@ type KookInstance = InstanceType<KookModule['KOOK']>
 export const kookBridge: BridgeDefinition<'kook', KookInstance> = {
 	platform: 'kook',
 	adapter: kookAdapter,
-	watch: (ctx, attach) => {
-		const stop = ctx.registry.optional(() => import('pluxel-plugin-kook').then((m) => m.KOOK), attach, { watch: true })
-		return typeof stop === 'function' ? stop : undefined
-	},
+	event: 'kook:ready',
 	attach: (ctx, kook, dispatch) => {
 		const unlisten = kook.events.message.on((session, next) => {
 			ctx.logger.debug(

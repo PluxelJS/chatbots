@@ -19,34 +19,29 @@ const startBridge = <P extends BridgeDefinition>(
 	dispatch: DispatchFn,
 	status?: BridgeStatusTracker,
 ): (() => void) => {
-	let detachInstance: (() => void) | null = null
-	let disposeWatcher: (() => void) | null = null
 	let disposed = false
 
-	const detach = () => {
-		if (!detachInstance) return
-		safeRun(ctx, `bot-layer: ${def.platform} bridge detach 失败`, detachInstance)
-		detachInstance = null
-		status?.setDetached(def.platform)
-	}
+	const attach = (instance: { ctx: Context }) => {
+		if (disposed || !instance) return
 
-	const attach = (instance?: unknown) => {
-		detach()
-		if (!instance || disposed) return
 		ctx.logger.debug({ platform: def.platform }, 'bot-layer: bridge attach')
-		const res = def.attach(ctx, instance as any, dispatch as any)
-		detachInstance = toCleanup(res)
+		const detachInstance = toCleanup(def.attach(ctx, instance as any, dispatch as any))
 		status?.setAttached(def.platform)
+
+		// 通过平台实例的 scope 自动管理生命周期
+		instance.ctx.scope.collectEffect(() => {
+			safeRun(ctx, `bot-layer: ${def.platform} bridge detach 失败`, detachInstance)
+			status?.setDetached(def.platform)
+		})
 	}
 
-	const watcher = def.watch(ctx, attach)
-	disposeWatcher = toCleanup(watcher)
+	// 监听平台 ready 事件
+	const unlisten = ctx.events.on(def.event as any, attach)
 
 	return () => {
 		if (disposed) return
 		disposed = true
-		detach()
-		safeRun(ctx, `bot-layer: ${def.platform} bridge watcher 清理失败`, disposeWatcher)
+		safeRun(ctx, `bot-layer: ${def.platform} bridge watcher 清理失败`, unlisten)
 	}
 }
 

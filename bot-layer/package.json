@@ -17,11 +17,6 @@
   "dependencies": {
     "type-flag": "^4.0.2"
   },
-  "peerDependencies": {
-    "pluxel-plugin-kook": "workspace:^",
-    "pluxel-plugin-milky": "workspace:^",
-    "pluxel-plugin-telegram": "workspace:^"
-  },
   "exports": {
     ".": {
       "@pluxel/hmr": "./src/index.ts",

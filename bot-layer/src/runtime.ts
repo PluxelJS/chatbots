@@ -1,9 +1,8 @@
 import type { Context } from '@pluxel/hmr'
 
-import { registerAllBridges, type BridgeConfig } from './bridge'
-import { createBridgeManager } from './bridge/manager'
+import { registerAllBridges, createBridgeManager, type BridgeConfig } from './bridge'
 import { createBotEventChannel, dispatchMessage, type BotEventChannel } from './events'
-import { createAdapterRegistry } from './platforms/registry'
+import { createAdapterRegistry } from './adapter'
 import { createStatusTracker, type BridgeStatusTracker } from './status'
 import type { AnyMessage } from './types'
 

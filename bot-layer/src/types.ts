@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { Buffer } from 'node:buffer'
-import type { FilePart, ImagePart, MentionPart, Part, PartInput } from './parts'
+import type { AudioPart, FilePart, ImagePart, MediaKind, MediaPart, MentionPart, Part, PartInput, VideoPart } from './parts'
 
 export type SandboxRole = 'user' | 'bot' | 'system'
 
@@ -40,16 +40,20 @@ export interface SandboxBot {
 }
 
 export type {
+	AudioPart,
 	CodeBlockPart,
 	FilePart,
 	ImagePart,
 	InlinePart,
 	LinkPart,
+	MediaKind,
+	MediaPart,
 	MentionPart,
 	Part,
 	PartInput,
 	StyledPart,
 	TextPart,
+	VideoPart,
 } from './parts'
 
 /** 
@@ -99,6 +103,8 @@ export interface PlatformCapabilities {
 	format: RenderFormat
 	supportsQuote: boolean
 	supportsImage: boolean
+	supportsAudio: boolean
+	supportsVideo: boolean
 	supportsFile: boolean
 	supportsMixedMedia?: boolean
 	supportsInlineMention: {
@@ -122,18 +128,18 @@ export type MessageContent = PartInput
 // Attachments - 富媒体附件封装
 // ============================================================================
 
-export type AttachmentKind = 'image' | 'file'
 export type AttachmentSource = 'message' | 'reference'
 
 export interface Attachment<P extends Platform = Platform> {
 	platform: P
-	kind: AttachmentKind
-	part: Extract<Part, { type: AttachmentKind }>
+	kind: MediaKind
+	part: MediaPart
 	source: AttachmentSource
-	fetch?: (signal?: AbortSignal) => Promise<ArrayBuffer | ArrayBufferView | Buffer>
+	/** 获取媒体数据（必须提供） */
+	fetch: (signal?: AbortSignal) => Promise<ArrayBuffer | ArrayBufferView | Buffer>
 }
 
-export interface ResolvedAttachment<P extends Platform = Platform> extends Attachment<P> {
+export interface ResolvedAttachment<P extends Platform = Platform> extends Omit<Attachment<P>, 'fetch'> {
 	data: Buffer
 }
 
@@ -238,6 +244,18 @@ export interface Message<P extends Platform = Platform> {
 	 * - caption 过长会直接报错（不会自动截断/拆分）
 	 */
 	sendImage?: (image: ImagePart, caption?: MessageContent, options?: ReplyOptions) => Promise<void>
+	/**
+	 * 显式发送音频（原子能力）。
+	 *
+	 * - 平台不支持音频时会降级为文件发送
+	 */
+	sendAudio?: (audio: AudioPart, options?: ReplyOptions) => Promise<void>
+	/**
+	 * 显式发送视频（原子能力）。
+	 *
+	 * - 平台不支持视频时会降级为文件发送
+	 */
+	sendVideo?: (video: VideoPart, caption?: MessageContent, options?: ReplyOptions) => Promise<void>
 	/**
 	 * 显式发送文件（原子能力）。
 	 *

@@ -1,10 +1,16 @@
 import type { MessageSession } from 'pluxel-plugin-kook'
 import type { Attachment, BotChannel, BotUser, MentionPart, Message, MessageReference, Part } from '../../types'
-import { hasRichParts } from '../../utils'
-import { createReply, createSendHelpers } from '../../platforms/base'
+import { hasRichParts } from '../../parts'
+import { createReply, createSendHelpers } from '../../adapter'
 import { kookAdapter } from './adapter'
 
 type KookAttachment = { type?: string; url?: string; name?: string; file_type?: string }
+
+const fetchUrl = async (url: string, signal?: AbortSignal): Promise<ArrayBuffer> => {
+	const res = await fetch(url, signal ? { signal } : undefined)
+	if (!res.ok) throw new Error(`bot-layer: kook 下载失败 http ${res.status}`)
+	return await res.arrayBuffer()
+}
 
 interface NormalizedContent {
 	text: string
@@ -66,21 +72,29 @@ const normalizeContent = (payload: any, source: 'message' | 'reference'): Normal
 
 	const pushAttachment = (att: KookAttachment) => {
 		if (!att?.type || !att.url) return
+		const url = att.url
+		const fetch = (signal?: AbortSignal) => fetchUrl(url, signal)
 		if (att.type === 'image') {
 			const part = { type: 'image' as const, url: att.url, alt: att.name, name: att.name }
 			parts.push(part)
-			attachments.push({ platform: 'kook', kind: 'image', part, source })
+			attachments.push({ platform: 'kook', kind: 'image', part, source, fetch })
+			return
+		}
+		if (att.type === 'video') {
+			const part = { type: 'video' as const, url: att.url, name: att.name, mime: att.file_type }
+			parts.push(part)
+			attachments.push({ platform: 'kook', kind: 'video', part, source, fetch })
 			return
 		}
 		if (att.type === 'file') {
 			const part = { type: 'file' as const, url: att.url, name: att.name, mime: att.file_type }
 			parts.push(part)
-			attachments.push({ platform: 'kook', kind: 'file', part, source })
+			attachments.push({ platform: 'kook', kind: 'file', part, source, fetch })
 			return
 		}
 		const part = { type: 'file' as const, url: att.url, name: att.name, mime: att.file_type }
 		parts.push(part)
-		attachments.push({ platform: 'kook', kind: 'file', part, source })
+		attachments.push({ platform: 'kook', kind: 'file', part, source, fetch })
 	}
 
 	const attachmentsRaw = extra?.attachments
@@ -91,7 +105,7 @@ const normalizeContent = (payload: any, source: 'message' | 'reference'): Normal
 		}
 	}
 
-	const textParts = parts.filter((p) => p.type !== 'image' && p.type !== 'file')
+	const textParts = parts.filter((p) => p.type !== 'image' && p.type !== 'audio' && p.type !== 'video' && p.type !== 'file')
 	const text = textParts.length ? kookAdapter.render(textParts).text : textRaw
 	const mentions = parts.filter((part): part is MentionPart => part.type === 'mention')
 	return {
@@ -158,7 +172,7 @@ export const normalizeKookMessage = (session: MessageSession): Message<'kook'> =
 	}
 
 	const reply = createReply(kookAdapter, session)
-	const { uploadImage, uploadFile, sendText, sendImage, sendFile } = createSendHelpers(kookAdapter, session)
+	const { uploadImage, uploadFile, sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(kookAdapter, session)
 
 	return {
 		platform: 'kook',
@@ -177,6 +191,8 @@ export const normalizeKookMessage = (session: MessageSession): Message<'kook'> =
 		reply,
 		sendText,
 		sendImage,
+		sendAudio,
+		sendVideo,
 		sendFile,
 		uploadImage,
 		uploadFile,

@@ -4,10 +4,12 @@ import type {
 	AnyMessage,
 	Attachment,
 	AttachmentSource,
+	MediaKind,
+	MediaPart,
 	ResolvedAttachment,
 	Part,
 	Platform,
-} from './types'
+} from '../types'
 
 export interface AttachmentCollectOptions {
 	includeReferences?: boolean
@@ -20,11 +22,13 @@ export interface ResolveAttachmentsOptions extends AttachmentCollectOptions {
 	signal?: AbortSignal
 }
 
-const isAttachmentPart = (part: Part): part is Extract<Part, { type: 'image' | 'file' }> =>
-	part.type === 'image' || part.type === 'file'
+const MEDIA_TYPES: Set<string> = new Set(['image', 'audio', 'video', 'file'])
+
+const isMediaPart = (part: Part): part is MediaPart => MEDIA_TYPES.has(part.type)
 
 const toAttachmentKey = (attachment: Attachment): string | null => {
-	const id = (attachment.part as any).fileId ?? attachment.part.url ?? null
+	const part = attachment.part
+	const id = part.fileId ?? part.url ?? null
 	return id ? `${attachment.platform}:${attachment.source}:${id}` : null
 }
 
@@ -48,21 +52,10 @@ const throwIfAborted = (signal?: AbortSignal) => {
 
 const downloadAttachment = async (attachment: Attachment, signal?: AbortSignal): Promise<Buffer> => {
 	throwIfAborted(signal)
-	if (attachment.fetch) {
-		const data = await attachment.fetch(signal)
-		return toBuffer(data)
-	}
 
-	const part = attachment.part
-	if ((part as any).data) {
-		return toBuffer((part as any).data)
-	}
-
-	if (part.url) {
-		return fetchUrl(part.url, signal)
-	}
-
-	throw new Error('bot-layer: attachment 无可用下载方式')
+	// fetch 现在是必须的
+	const data = await attachment.fetch(signal)
+	return toBuffer(data)
 }
 
 const normalizeConcurrency = (value: number | undefined, total: number): number => {
@@ -71,15 +64,26 @@ const normalizeConcurrency = (value: number | undefined, total: number): number 
 	return Math.min(base, Math.max(1, total))
 }
 
+/** 从 URL 或 data 创建 fetch 函数 */
+export const createMediaFetch = (part: MediaPart): Attachment['fetch'] => {
+	if (part.data) {
+		const buffer = toBuffer(part.data as ArrayBuffer | ArrayBufferView)
+		return async () => buffer
+	}
+	if (part.url) {
+		return (signal) => fetchUrl(part.url!, signal)
+	}
+	throw new Error('bot-layer: media part 无 url 或 data，无法创建 fetch')
+}
+
 const toAttachments = (parts: Part[], platform: Platform, source: AttachmentSource): Attachment[] =>
-	parts
-		.filter(isAttachmentPart)
-		.map((part) => ({
-			platform,
-			kind: part.type,
-			part: part as Extract<Part, { type: 'image' | 'file' }>,
-			source,
-		}))
+	parts.filter(isMediaPart).map((part) => ({
+		platform,
+		kind: part.type as MediaKind,
+		part,
+		source,
+		fetch: createMediaFetch(part),
+	}))
 
 export const collectAttachments = (msg: AnyMessage, opts?: AttachmentCollectOptions): Attachment[] => {
 	const includeReferences = opts?.includeReferences ?? true
@@ -110,7 +114,10 @@ export const collectAttachments = (msg: AnyMessage, opts?: AttachmentCollectOpti
 	return attachments
 }
 
-export const resolveAttachments = async (msg: AnyMessage, opts?: ResolveAttachmentsOptions): Promise<ResolvedAttachment[]> => {
+export const resolveAttachments = async (
+	msg: AnyMessage,
+	opts?: ResolveAttachmentsOptions,
+): Promise<ResolvedAttachment[]> => {
 	const includeReferences = opts?.includeReferences ?? true
 	const filtered = collectAttachments(msg, { includeReferences }).filter((att) =>
 		typeof opts?.filter === 'function' ? opts.filter(att) : true,
@@ -130,7 +137,7 @@ export const resolveAttachments = async (msg: AnyMessage, opts?: ResolveAttachme
 			if (index >= limited.length) return
 			const att = limited[index]
 			const data = await downloadAttachment(att, signal)
-			results[index] = { ...att, data }
+			results[index] = { platform: att.platform, kind: att.kind, part: att.part, source: att.source, data }
 		}
 	}
 

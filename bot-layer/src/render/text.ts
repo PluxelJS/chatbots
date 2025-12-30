@@ -1,5 +1,5 @@
 import type { Part, Platform } from '../types'
-import { getAdapter } from '../platforms/registry'
+import { getAdapter } from '../adapter'
 import { normalizePartsForAdapter } from './normalize'
 
 export const partsToText = (parts: Part[], platform: Platform): string => {

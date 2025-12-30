@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer'
 
 import type {
+	AudioPart,
 	CodeBlockPart,
 	FilePart,
 	ImagePart,
@@ -10,8 +11,9 @@ import type {
 	Part,
 	PlatformCapabilities,
 	StyledPart,
+	VideoPart,
 } from '../../types'
-import type { OutboundText, PlatformAdapter, RenderResult } from '../../platforms/base'
+import type { OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
 import { toNodeBuffer } from '../../binary'
 
 type MilkyMessageSession = import('pluxel-plugin-milky').MilkyMessageSession
@@ -21,6 +23,8 @@ const capabilities: PlatformCapabilities = {
 	format: 'plain',
 	supportsQuote: true,
 	supportsImage: true,
+	supportsAudio: true,
+	supportsVideo: true,
 	supportsFile: true,
 	supportsMixedMedia: true,
 	supportsInlineMention: {
@@ -64,6 +68,10 @@ const renderPart = (part: Part): string => {
 			return renderCodeblock(part)
 		case 'image':
 			return part.alt ?? part.url ?? ''
+		case 'audio':
+			return part.name ?? part.url ?? ''
+		case 'video':
+			return part.name ?? part.url ?? ''
 		case 'file':
 			return part.name ?? part.url ?? ''
 		default:
@@ -87,7 +95,7 @@ type OutgoingSegment =
 
 const base64Uri = (data: ArrayBufferLike | ArrayBufferView): string => `base64://${toNodeBuffer(data).toString('base64')}`
 
-const uriFromPart = (part: ImagePart | FilePart, label: string): string => {
+const uriFromPart = (part: ImagePart | AudioPart | VideoPart | FilePart, label: string): string => {
 	if (part.data) return base64Uri(part.data as ArrayBufferLike | ArrayBufferView)
 	if (part.url) return part.url
 	throw new Error(`Milky: 缺少 url，且未提供 data，无法发送${label}`)
@@ -194,4 +202,20 @@ export const milkyAdapter: PlatformAdapter<'milky'> = {
 
 	uploadImage: async (_session, image) => image,
 	uploadFile: async (_session, file) => file,
+
+	sendAudio: async (session, audio, options) => {
+		const uri = uriFromPart(audio, '音频')
+		const seg: OutgoingSegment = { type: 'record', data: { uri } }
+		const segments = withQuote(session, [seg], options?.quote)
+		await sendMessage(session, segments)
+	},
+
+	sendVideo: async (session, video, caption, options) => {
+		const uri = uriFromPart(video, '视频')
+		const thumb_uri = video.thumbnail?.url ?? null
+		const seg: OutgoingSegment = { type: 'video', data: { uri, thumb_uri } }
+		const captionSegs = caption ? toOutgoingTextSegments(caption) : []
+		const segments = withQuote(session, [seg, ...captionSegs], options?.quote)
+		await sendMessage(session, segments)
+	},
 }

@@ -1,9 +1,13 @@
-import type { FilePart, ImagePart, InlinePart, MentionPart, Part, Platform } from '../types'
-import type { PlatformAdapter } from '../platforms/adapter'
+import type { AudioPart, FilePart, ImagePart, InlinePart, MediaPart, MentionPart, Part, Platform, VideoPart } from '../types'
+import type { PlatformAdapter } from '../adapter'
 
-export type TextLikePart = Exclude<Part, ImagePart | FilePart>
+export type TextLikePart = Exclude<Part, MediaPart>
 
-export const isTextLike = (part: Part): part is TextLikePart => part.type !== 'image' && part.type !== 'file'
+export const isTextLike = (part: Part): part is TextLikePart =>
+	part.type !== 'image' && part.type !== 'audio' && part.type !== 'video' && part.type !== 'file'
+
+export const isMediaPart = (part: Part): part is MediaPart =>
+	part.type === 'image' || part.type === 'audio' || part.type === 'video' || part.type === 'file'
 
 export const assertTextOnly = (parts: Part[], label: string) => {
 	const bad = parts.find((p) => !isTextLike(p))
@@ -101,13 +105,28 @@ export const normalizeTextPartsForAdapter = <P extends Platform>(
 		.filter((p): p is TextLikePart => Boolean(p))
 }
 
-export const imageToText = (part: ImagePart): string => part.alt || part.url || '[image]'
+export const imageToText = (part: ImagePart): string => part.alt || part.name || part.url || '[image]'
+export const audioToText = (part: AudioPart): string => part.name || part.url || '[audio]'
+export const videoToText = (part: VideoPart): string => part.name || part.url || '[video]'
 export const fileToText = (part: FilePart): string => part.name || part.url || '[file]'
 
+export const mediaToText = (part: MediaPart): string => {
+	switch (part.type) {
+		case 'image':
+			return imageToText(part)
+		case 'audio':
+			return audioToText(part)
+		case 'video':
+			return videoToText(part)
+		case 'file':
+			return fileToText(part)
+	}
+}
+
 /**
- * 将任意 `Part[]` 归一化为“可渲染为文本”的 Part[]：
+ * 将任意 `Part[]` 归一化为"可渲染为文本"的 Part[]：
  * - 文本类 Part 会根据 format/mention 支持做降级
- * - image/file 会退化为可读文本（alt/url/name）
+ * - 媒体 Part 会退化为可读文本
  */
 export const normalizePartsForAdapter = <P extends Platform>(
 	parts: Part[],
@@ -115,12 +134,8 @@ export const normalizePartsForAdapter = <P extends Platform>(
 ): TextLikePart[] => {
 	const normalized: TextLikePart[] = []
 	for (const part of parts) {
-		if (part.type === 'image') {
-			normalized.push({ type: 'text', text: imageToText(part) })
-			continue
-		}
-		if (part.type === 'file') {
-			normalized.push({ type: 'text', text: fileToText(part) })
+		if (isMediaPart(part)) {
+			normalized.push({ type: 'text', text: mediaToText(part) })
 			continue
 		}
 		normalized.push(part)

@@ -8,14 +8,7 @@ type TelegramInstance = InstanceType<TelegramModule['TelegramPlugin']>
 export const telegramBridge: BridgeDefinition<'telegram', TelegramInstance> = {
 	platform: 'telegram',
 	adapter: telegramAdapter,
-	watch: (ctx, attach) => {
-		const stop = ctx.registry.optional(
-			() => import('pluxel-plugin-telegram').then((m) => m.TelegramPlugin ?? (m as any).Telegram),
-			attach,
-			{ watch: true },
-		)
-		return typeof stop === 'function' ? stop : undefined
-	},
+	event: 'telegram:ready',
 	attach: (ctx, telegram, dispatch) => {
 		// 使用 onFront 保证优先于命令/会话处理，从而不漏掉以 “/” 开头的消息
 		const register =

@@ -33,7 +33,37 @@ export interface ImagePart {
 	size?: number
 }
 
-/** 文件 */
+/** 音频 */
+export interface AudioPart {
+	type: 'audio'
+	url?: string
+	name?: string
+	mime?: string
+	fileId?: string
+	data?: Uint8Array | ArrayBufferLike
+	size?: number
+	/** 时长（秒） */
+	duration?: number
+}
+
+/** 视频 */
+export interface VideoPart {
+	type: 'video'
+	url?: string
+	name?: string
+	mime?: string
+	fileId?: string
+	data?: Uint8Array | ArrayBufferLike
+	size?: number
+	width?: number
+	height?: number
+	/** 时长（秒） */
+	duration?: number
+	/** 缩略图 */
+	thumbnail?: ImagePart
+}
+
+/** 通用文件/文档 */
 export interface FilePart {
 	type: 'file'
 	url?: string
@@ -51,10 +81,10 @@ export interface LinkPart {
 	label?: string
 }
 
-/** 格式化文本（大多数平台支持） */
+/** 格式化文本（跨平台共性样式） */
 export interface StyledPart {
 	type: 'styled'
-	style: 'bold' | 'italic' | 'code' | 'strike'
+	style: 'bold' | 'italic' | 'code' | 'strike' | 'underline'
 	children: InlinePart[]
 }
 
@@ -68,8 +98,14 @@ export interface CodeBlockPart {
 /** 内联元素 */
 export type InlinePart = TextPart | StyledPart | MentionPart | LinkPart
 
+/** 媒体元素 */
+export type MediaPart = ImagePart | AudioPart | VideoPart | FilePart
+
+/** 媒体类型标识 */
+export type MediaKind = MediaPart['type']
+
 /** 所有 Part 类型 */
-export type Part = InlinePart | ImagePart | FilePart | CodeBlockPart
+export type Part = InlinePart | MediaPart | CodeBlockPart
 
 /**
  * Outbound 输入内容（`reply/sendText` 等的参数类型）。
@@ -83,4 +119,3 @@ export type PartInput =
 	| Iterable<PartInput | null | undefined>
 	| null
 	| undefined
-

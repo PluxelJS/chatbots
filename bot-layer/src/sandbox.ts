@@ -1,9 +1,7 @@
 import type { Attachment, BotChannel, BotUser, Message, MentionPart, Part, PlatformCapabilities, SandboxSession, SandboxBot } from './types'
-import { normalizeMessageContent } from './parts'
-import { hasRichParts } from './utils'
-import { createReply, createSendHelpers, normalizePartsForAdapter } from './platforms/base'
-import type { OutboundText, PlatformAdapter, RenderResult } from './platforms/base'
-import { registerAdapter } from './platforms/registry'
+import { normalizeMessageContent, hasRichParts } from './parts'
+import { createReply, createSendHelpers, normalizePartsForAdapter, registerAdapter } from './adapter'
+import type { OutboundText, PlatformAdapter, RenderResult } from './adapter'
 
 const DEFAULT_USER_ID = 'sandbox-user'
 const DEFAULT_CHANNEL_ID = 'sandbox-channel'
@@ -12,6 +10,8 @@ export const sandboxCapabilities: PlatformCapabilities = {
 	format: 'plain',
 	supportsQuote: true,
 	supportsImage: true,
+	supportsAudio: true,
+	supportsVideo: true,
 	supportsFile: true,
 	supportsMixedMedia: true,
 	supportsInlineMention: {
@@ -100,12 +100,22 @@ export const createSandboxMessage = (input: SandboxMessageInput): Message<'sandb
 	const renderText = input.session.renderText ?? ((data) => adapter.render(normalizePartsForAdapter(data, adapter)).text)
 	const mentions = parts.filter((part): part is MentionPart => part.type === 'mention')
 	const attachments: Attachment<'sandbox'>[] = parts
-		.filter((part): part is Extract<Part, { type: 'image' | 'file' }> => part.type === 'image' || part.type === 'file')
+		.filter((part): part is Extract<Part, { type: 'image' | 'audio' | 'video' | 'file' }> =>
+			part.type === 'image' || part.type === 'audio' || part.type === 'video' || part.type === 'file')
 		.map((part) => ({
 			platform: 'sandbox',
 			kind: part.type,
 			part,
 			source: 'message',
+			fetch: part.data
+				? async () => part.data as ArrayBuffer
+				: part.url
+					? async () => {
+						const res = await fetch(part.url!)
+						if (!res.ok) throw new Error(`sandbox: 下载附件失败 ${res.status}`)
+						return await res.arrayBuffer()
+					}
+					: async () => { throw new Error('sandbox: 附件缺少 url 或 data') },
 		}))
 
 	const userId = input.session.userId ?? DEFAULT_USER_ID

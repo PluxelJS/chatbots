@@ -26,6 +26,7 @@ export class Milky extends BasePlugin {
 		await this.runtime.bootstrap(this.ctx, this.config, abort)
 		if (abort.aborted) return
 		registerMilkyExtensions({ ctx: this.ctx, runtime: this.runtime })
+		this.ctx.events.emit('milky:ready', this)
 	}
 
 	override async stop(): Promise<void> {
@@ -71,5 +72,8 @@ declare module '@pluxel/hmr/services' {
 	}
 	interface SseEvents {
 		Milky: MilkySnapshot
+	}
+	interface Events {
+		'milky:ready': Milky
 	}
 }

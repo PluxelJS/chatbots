@@ -28,6 +28,7 @@ export class KOOK extends BasePlugin {
 		await this.runtime.bootstrap(this.ctx, this.config, abort)
 		if (abort.aborted) return
 		registerKookExtensions({ ctx: this.ctx, runtime: this.runtime })
+		this.ctx.events.emit('kook:ready', this)
 	}
 
 	override async stop(): Promise<void> {
@@ -81,5 +82,8 @@ declare module '@pluxel/hmr/services' {
 	}
 	interface SseEvents {
 		KOOK: KookSnapshot
+	}
+	interface Events {
+		'kook:ready': KOOK
 	}
 }

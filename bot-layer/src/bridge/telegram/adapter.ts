@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer'
 
 import type {
+	AudioPart,
 	CodeBlockPart,
 	FilePart,
 	ImagePart,
@@ -10,8 +11,9 @@ import type {
 	Part,
 	PlatformCapabilities,
 	StyledPart,
+	VideoPart,
 } from '../../types'
-import type { OutboundText, PlatformAdapter, RenderResult } from '../../platforms/base'
+import type { OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
 import { toNodeBuffer } from '../../binary'
 
 const escapeHtml = (input: string): string =>
@@ -26,6 +28,8 @@ const capabilities: PlatformCapabilities = {
 	format: 'html',
 	supportsQuote: true,
 	supportsImage: true,
+	supportsAudio: true,
+	supportsVideo: true,
 	supportsFile: true,
 	supportsMixedMedia: true,
 	supportsInlineMention: {
@@ -48,6 +52,8 @@ const renderStyled = (part: StyledPart): string => {
 			return `<i>${inner}</i>`
 		case 'strike':
 			return `<s>${inner}</s>`
+		case 'underline':
+			return `<u>${inner}</u>`
 		case 'code':
 			return `<code>${inner}</code>`
 		default:
@@ -79,6 +85,10 @@ const renderPart = (part: Part): string => {
 			return renderCodeblock(part)
 		case 'image':
 			return escapeHtml(part.alt ?? part.url ?? '')
+		case 'audio':
+			return escapeHtml(part.name ?? part.url ?? '')
+		case 'video':
+			return escapeHtml(part.name ?? part.url ?? '')
 		case 'file':
 			return escapeHtml(part.name ?? part.url ?? '')
 		default:
@@ -91,7 +101,9 @@ const render = (parts: Part[]): RenderResult => ({
 	format: capabilities.format,
 })
 
-const toInputFile = (part: ImagePart | FilePart, fallbackName: string) =>
+type MediaInput = ImagePart | AudioPart | VideoPart | FilePart
+
+const toInputFile = (part: MediaInput, fallbackName: string) =>
 	part.data
 		? {
 				data: toNodeBuffer(part.data as ArrayBufferLike | ArrayBufferView),
@@ -169,6 +181,33 @@ export const telegramAdapter: PlatformAdapter<'telegram'> = {
 			})
 			if (!res.ok) throw new Error(`Telegram sendPhoto failed: ${res.message}`)
 		}
+	},
+
+	sendAudio: async (session, audio, options) => {
+		const replyTo = options?.quote ? session.message.message_id : undefined
+		const payload = toInputFile(audio, audio.name ?? 'audio')
+		if (!payload) throw new Error('Telegram: audio.url 为空，且未提供 data，无法发送音频')
+		const res = await session.bot.sendAudio({
+			chat_id: session.chatId,
+			audio: payload,
+			reply_to_message_id: replyTo,
+		})
+		if (!res.ok) throw new Error(`Telegram sendAudio failed: ${res.message}`)
+	},
+
+	sendVideo: async (session, video, caption, options) => {
+		const replyTo = options?.quote ? session.message.message_id : undefined
+		const parseMode = caption ? toParseMode(caption.rendered.format) : undefined
+		const payload = toInputFile(video, video.name ?? 'video.mp4')
+		if (!payload) throw new Error('Telegram: video.url 为空，且未提供 data，无法发送视频')
+		const res = await session.bot.sendVideo({
+			chat_id: session.chatId,
+			video: payload,
+			caption: caption?.rendered.text || undefined,
+			reply_to_message_id: replyTo,
+			parse_mode: parseMode,
+		})
+		if (!res.ok) throw new Error(`Telegram sendVideo failed: ${res.message}`)
 	},
 
 	sendFile: async (session, file, options) => {

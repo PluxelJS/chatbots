@@ -28,6 +28,7 @@ export class TelegramPlugin extends BasePlugin {
 		await this.runtime.bootstrap(this.ctx, this.config, abort)
 		if (abort.aborted) return
 		registerTelegramExtensions({ ctx: this.ctx, runtime: this.runtime })
+		this.ctx.events.emit('telegram:ready', this)
 	}
 
 	override async stop(): Promise<void> {
@@ -53,5 +54,8 @@ declare module '@pluxel/hmr/services' {
 	}
 	interface SseEvents {
 		Telegram: TelegramSnapshot
+	}
+	interface Events {
+		'telegram:ready': TelegramPlugin
 	}
 }

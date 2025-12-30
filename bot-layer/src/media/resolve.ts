@@ -1,17 +1,17 @@
 import { Buffer } from 'node:buffer'
 
-import type { AnyMessage, AttachmentSource, Part, Platform } from './types'
+import type { AnyMessage, AttachmentSource, MediaKind as PartMediaKind, Part, Platform } from '../types'
 import { collectAttachments } from './attachments'
 import { resolveAuthorAvatarImage, resolveMentionedUsers, resolveUserAvatarImage, type ResolvedAvatarImage } from './avatars'
 
-export type MediaKind = 'avatar' | 'image' | 'file'
+export type CollectedMediaKind = 'avatar' | PartMediaKind
 export type MediaSource = AttachmentSource | 'author' | 'mention'
 
 export interface MediaItem<P extends Platform = Platform> {
 	platform: P
-	kind: MediaKind
+	kind: CollectedMediaKind
 	source: MediaSource
-	part?: Extract<Part, { type: 'image' | 'file' }>
+	part?: Extract<Part, { type: 'image' | 'audio' | 'video' | 'file' }>
 	user?: { id?: string | number | null; username?: string | null; displayName?: string | null }
 	/** Optional URL (may be absent for security reasons, e.g. Telegram token-file URLs). */
 	url?: string
