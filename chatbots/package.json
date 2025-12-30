@@ -24,8 +24,7 @@
     "bench:perm": "bun ./permissions/test/permissions.bench.ts"
   },
   "dependencies": {
-    "@pluxel/bot-layer": "workspace:*",
-    "@pluxel/parts": "workspace:*"
+    "@pluxel/bot-layer": "workspace:*"
   },
   "peerDependencies": {
     "pluxel-plugin-kook": "workspace:^",

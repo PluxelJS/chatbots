@@ -34,15 +34,15 @@ import { IconCommand, IconPlus, IconSearch, IconTrash, IconX } from '@tabler/ico
 import { hmrWebClient, rpcErrorMessage } from '@pluxel/hmr/web'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import type { Part } from '@pluxel/bot-layer'
-import { normalizeMessageContent } from '@pluxel/parts'
+import type { Part } from '@pluxel/bot-layer/web'
+import { normalizeMessageContent } from '@pluxel/bot-layer/web'
 import {
 	PartsMessage,
 	PartsShowcasePanel,
 	quickReplies,
 	sampleInputs,
 	sampleSections,
-} from '@pluxel/parts/ui-chatui'
+} from './parts-ui-chatui'
 import { useRoles } from './hooks'
 import { useChatUiColorScheme } from './styles'
 

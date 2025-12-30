@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { Buffer } from 'node:buffer'
-import type { FilePart, ImagePart, MentionPart, Part, PartInput } from '@pluxel/parts'
+import type { FilePart, ImagePart, MentionPart, Part, PartInput } from './parts'
 
 export type SandboxRole = 'user' | 'bot' | 'system'
 
@@ -50,7 +50,7 @@ export type {
 	PartInput,
 	StyledPart,
 	TextPart,
-} from '@pluxel/parts'
+} from './parts'
 
 /** 
  * 平台元信息注册表
@@ -112,7 +112,7 @@ export interface PlatformCapabilities {
 }
 
 // ============================================================================
-// Parts - 消息内容的原子单元（来自 @pluxel/parts）
+// Parts - 消息内容的原子单元
 // ============================================================================
 
 /** 消息内容（对外统一类型别名） */

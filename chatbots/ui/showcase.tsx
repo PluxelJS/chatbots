@@ -2,7 +2,7 @@ import { Badge, Box, Divider, Group, Paper, ScrollArea, Stack, Text } from '@man
 import { useMediaQuery } from '@mantine/hooks'
 import { IconLayoutGrid } from '@tabler/icons-react'
 
-import { PartsShowcasePanel, sampleSections } from '@pluxel/parts/ui-chatui'
+import { PartsShowcasePanel, sampleSections } from './parts-ui-chatui'
 import { ChatUiShowcasePanel } from './chatui-showcase'
 import { useChatUiColorScheme } from './styles'
 

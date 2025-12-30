@@ -1,5 +1,5 @@
 import type { Context } from '@pluxel/hmr'
-import { Bot } from './bot'
+import { Bot } from '../bot'
 import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import type { SseChannel } from '@pluxel/hmr/services'
@@ -10,11 +10,11 @@ import {
 	type KookBotPublic,
 	type KookBotRecord,
 	type UpdateBotInput,
-} from './runtime/bot-registry'
-import { createKookChannel, type KookChannel } from './events'
-import { internalWebhook } from './event-trigger'
+} from './bot-registry'
+import { createKookChannel, type KookChannel } from '../events'
+import { dispatchKookEvent } from '../events/dispatcher'
 
-export class BotManager {
+export class KookBotManager {
 	public readonly bots: Record<string, Bot> = {}
 	private readonly botInstances = new Map<string, Bot>()
 	private readonly botsByVerify = new Map<string, Bot>()
@@ -39,7 +39,7 @@ export class BotManager {
 		const active = snapshot.filter((status) => healthyStates.has(status.state)).length
 		const configured = snapshot.length
 		return {
-			name: this.ctx.pluginInfo.name,
+			name: this.ctx.pluginInfo.id,
 			configuredBots: configured,
 			activeBots: active,
 			totalBots: snapshot.length,
@@ -175,7 +175,7 @@ export class BotManager {
 					return c.json({ challenge: data.challenge })
 				}
 
-				void Promise.resolve().then(() => internalWebhook(this.events, this.ctx, bot, data))
+				void Promise.resolve().then(() => dispatchKookEvent(this.events, this.ctx, bot, data))
 				return c.json({ ok: true })
 			})
 		})

@@ -12,6 +12,7 @@ import type {
 	StyledPart,
 } from '../../types'
 import type { OutboundText, PlatformAdapter, RenderResult } from '../../platforms/base'
+import { toNodeBuffer } from '../../binary'
 
 const escapeHtml = (input: string): string =>
 	input
@@ -20,12 +21,6 @@ const escapeHtml = (input: string): string =>
 		.replace(/>/g, '&gt;')
 
 const escapeAttr = (input: string): string => escapeHtml(input).replace(/"/g, '&quot;')
-
-const toNodeBuffer = (data: ArrayBufferLike | ArrayBufferView): Buffer => {
-	if (Buffer.isBuffer(data)) return data
-	if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-	return Buffer.from(new Uint8Array(data as ArrayBufferLike))
-}
 
 const capabilities: PlatformCapabilities = {
 	format: 'html',
@@ -124,7 +119,9 @@ export const telegramAdapter: PlatformAdapter<'telegram'> = {
 		if (!text.rendered.text) return
 		const replyTo = options?.quote ? session.message.message_id : undefined
 		const parseMode = toParseMode(text.rendered.format)
-		const res = await session.bot.sendMessage(session.chatId, text.rendered.text, {
+		const res = await session.bot.sendMessage({
+			chat_id: session.chatId,
+			text: text.rendered.text,
 			reply_to_message_id: replyTo,
 			parse_mode: parseMode,
 		})
@@ -140,18 +137,20 @@ export const telegramAdapter: PlatformAdapter<'telegram'> = {
 		const payload = toInputFile(image, image.name ?? image.alt ?? 'image.png')
 		if (!payload) throw new Error('Telegram: image.url 为空，且未提供 data，无法发送图片')
 
-		if (isAnimationLike(image) && typeof (session.bot as any).sendAnimation === 'function') {
-			const res = await (session.bot as any).sendAnimation(session.chatId, payload, {
+		if (isAnimationLike(image)) {
+			const res = await session.bot.sendAnimation({
+				chat_id: session.chatId,
+				animation: payload,
 				caption: caption?.rendered.text || undefined,
 				reply_to_message_id: replyTo,
 				parse_mode: parseMode,
 			})
 			if (!res.ok) {
-				// Some environments may still fail to send as animation (multipart quirks / invalid body).
-				// Fallback to sendDocument so the command doesn't hard-fail.
 				const msg = String(res.message ?? '')
-				if (msg.includes('no animation in the request') && typeof (session.bot as any).sendDocument === 'function') {
-					const doc = await (session.bot as any).sendDocument(session.chatId, payload, {
+				if (msg.includes('no animation in the request')) {
+					const doc = await session.bot.sendDocument({
+						chat_id: session.chatId,
+						document: payload,
 						caption: caption?.rendered.text || undefined,
 						reply_to_message_id: replyTo,
 					})
@@ -161,7 +160,9 @@ export const telegramAdapter: PlatformAdapter<'telegram'> = {
 				}
 			}
 		} else {
-			const res = await session.bot.sendPhoto(session.chatId, payload, {
+			const res = await session.bot.sendPhoto({
+				chat_id: session.chatId,
+				photo: payload,
 				caption: caption?.rendered.text || undefined,
 				reply_to_message_id: replyTo,
 				parse_mode: parseMode,
@@ -174,7 +175,9 @@ export const telegramAdapter: PlatformAdapter<'telegram'> = {
 		const replyTo = options?.quote ? session.message.message_id : undefined
 		const payload = toInputFile(file, file.name ?? 'file')
 		if (!payload) throw new Error('Telegram: file.url 为空，且未提供 data，无法发送文件')
-		const res = await session.bot.sendDocument(session.chatId, payload, {
+		const res = await session.bot.sendDocument({
+			chat_id: session.chatId,
+			document: payload,
 			reply_to_message_id: replyTo,
 		})
 		if (!res.ok) throw new Error(`Telegram sendDocument failed: ${res.message}`)

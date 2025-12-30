@@ -1,5 +1,5 @@
 import type { Attachment, BotChannel, BotUser, Message, MentionPart, Part, PlatformCapabilities, SandboxSession, SandboxBot } from './types'
-import { normalizeMessageContent } from '@pluxel/parts'
+import { normalizeMessageContent } from './parts'
 import { hasRichParts } from './utils'
 import { createReply, createSendHelpers, normalizePartsForAdapter } from './platforms/base'
 import type { OutboundText, PlatformAdapter, RenderResult } from './platforms/base'

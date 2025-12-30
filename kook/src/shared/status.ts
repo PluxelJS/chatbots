@@ -1,4 +1,4 @@
-import type { Snapshot, GatewayState } from './websocket'
+import type { Snapshot, GatewayState } from '../bot/websocket'
 
 export type KookBotLifecycleState =
 	| 'initializing'

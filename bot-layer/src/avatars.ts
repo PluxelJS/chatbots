@@ -61,16 +61,10 @@ export interface ResolveMentionedUsersOptions {
 }
 
 const buildTelegramFileUrl = (bot: any, filePath: string): string => {
-	const base =
-		typeof bot?.apiBase === 'string'
-			? bot.apiBase
-			: typeof bot?.api?.apiBase === 'string'
-				? bot.api.apiBase
-				: 'https://api.telegram.org'
+	const base = bot.apiBase
 	const cleanedBase = base.replace(/\/+$/, '')
 	const cleanedPath = filePath.replace(/^\/+/, '')
-	const token = typeof bot?.token === 'string' ? bot.token : ''
-	return token ? `${cleanedBase}/file/bot${token}/${cleanedPath}` : `${cleanedBase}/file/${cleanedPath}`
+	return `${cleanedBase}/file/bot${bot.token}/${cleanedPath}`
 }
 
 const normalizeUserRef = (ref: UserRef | null | undefined) => {
@@ -139,8 +133,6 @@ const resolveTelegramAvatarImage = async (
 	},
 ): Promise<ResolvedAvatarImage | null> => {
 	const bot: any = msg.bot
-	const api = typeof bot?.getFile === 'function' ? bot : bot?.api
-	if (!api) return null
 	const prefer = opts?.prefer ?? 'any'
 	const signal = opts?.signal
 	const trace = opts?.trace
@@ -153,9 +145,9 @@ const resolveTelegramAvatarImage = async (
 		(typeof idRaw === 'string' && numericId === null ? resolveName(idRaw.replace(/^@/, '')) : null)
 
 	const fetchByFileId = async (fileId: string): Promise<ResolvedAvatarImage | null> => {
-		if (!fileId || typeof api.getFile !== 'function') return null
+		if (!fileId) return null
 		try {
-			const file = await api.getFile({ file_id: fileId })
+			const file = await bot.getFile({ file_id: fileId })
 			const path = file?.ok ? file.data?.file_path : null
 			if (!path) return null
 			const url = buildTelegramFileUrl(bot, path)
@@ -188,10 +180,10 @@ const resolveTelegramAvatarImage = async (
 	}
 
 	// Best effort: profile photos API by numeric user_id (requires bot token).
-	if (prefer === 'any' && numericId !== null && typeof api.getUserProfilePhotos === 'function') {
+	if (prefer === 'any' && numericId !== null) {
 		trace?.({ kind: 'try', step: 'telegram.getUserProfilePhotos' })
 		try {
-			const photos = await api.getUserProfilePhotos({ user_id: numericId, limit: 1 })
+			const photos = await bot.getUserProfilePhotos({ user_id: numericId, limit: 1 })
 			if (!photos?.ok) {
 				trace?.({ kind: 'miss', step: 'telegram.getUserProfilePhotos', reason: `not ok: ${photos?.message ?? 'unknown'}` })
 				// keep going
@@ -345,8 +337,6 @@ const resolveUserProfileUncached = async (
 			return profile
 		}
 
-		const bot: any = msg.bot
-		if (!bot || typeof bot.getUserView !== 'function') return profile
 		try {
 			const res = await bot.getUserView({
 				user_id: id,
@@ -367,7 +357,6 @@ const resolveUserProfileUncached = async (
 
 	if (msg.platform === 'telegram') {
 		const bot: any = msg.bot
-		const api = typeof bot?.getFile === 'function' ? bot : bot?.api
 		const idRaw = ref.id
 		const numericId = toTelegramNumericId(idRaw)
 		const username =
@@ -386,14 +375,12 @@ const resolveUserProfileUncached = async (
 			})
 		}
 
-		if (!api || typeof api.getFile !== 'function') return profile
-
 		const needsIdentity = !profile || profile.username === null || profile.displayName === null || profile.isBot === null
 		const needsAvatar = !profile || profile.avatar === null
 
 		const applyChatPhoto = async (fileId: string, id: number) => {
 			try {
-				const file = await api.getFile({ file_id: fileId })
+				const file = await bot.getFile({ file_id: fileId })
 				const path = file?.ok ? file.data?.file_path : null
 				if (path) {
 					profile = mergeTelegramProfile(profile, { avatar: buildTelegramFileUrl(bot, path), id })
@@ -403,9 +390,9 @@ const resolveUserProfileUncached = async (
 			}
 		}
 
-		if (numericId !== null && needsIdentity && typeof api.getChatMember === 'function') {
+		if (numericId !== null && needsIdentity) {
 			try {
-				const res = await api.getChatMember({ chat_id: msg.channel.id, user_id: numericId })
+				const res = await bot.getChatMember({ chat_id: msg.channel.id, user_id: numericId })
 				const userInfo = res?.ok ? res.data?.user : null
 				if (userInfo) {
 					profile = mergeTelegramProfile(profile, {
@@ -423,9 +410,9 @@ const resolveUserProfileUncached = async (
 			}
 		}
 
-		if (numericId !== null && (needsIdentity || needsAvatar) && typeof api.getChat === 'function') {
+		if (numericId !== null && (needsIdentity || needsAvatar)) {
 			try {
-				const chat = await api.getChat({ chat_id: numericId })
+				const chat = await bot.getChat({ chat_id: numericId })
 				const data = chat?.ok ? chat.data : null
 				if (data) {
 					profile = mergeTelegramProfile(profile, {
@@ -444,9 +431,9 @@ const resolveUserProfileUncached = async (
 			}
 		}
 
-		if (numericId !== null && needsAvatar && typeof api.getUserProfilePhotos === 'function') {
+		if (numericId !== null && needsAvatar) {
 			try {
-				const photos = await api.getUserProfilePhotos({ user_id: numericId, limit: 1 })
+				const photos = await bot.getUserProfilePhotos({ user_id: numericId, limit: 1 })
 				const list = photos?.ok ? photos.data?.photos : null
 				if (list?.length) {
 					const sizes = list[0]
@@ -458,9 +445,9 @@ const resolveUserProfileUncached = async (
 			}
 		}
 
-		if (!profile && username && typeof api.getChat === 'function') {
+		if (!profile && username) {
 			try {
-				const chat = await api.getChat({ chat_id: `@${username}` })
+				const chat = await bot.getChat({ chat_id: `@${username}` })
 				const data = chat?.ok ? chat.data : null
 				if (data && typeof data.id === 'number') {
 					profile = mergeTelegramProfile(profile, {

@@ -88,3 +88,4 @@ export const normalizeMessageContent = (input: PartInput): Part[] => {
 }
 
 export const toPartArray = (content: PartInput): Part[] => normalizeMessageContent(content)
+

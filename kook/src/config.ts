@@ -9,13 +9,6 @@ const sections = {
 } as const
 
 export const common = v.object({
-	cmdPrefix: v.pipe(
-		v.optional(v.string(), '/'),
-		v.minLength(1),
-		v.maxLength(1),
-		f.formMeta({ label: '指令前缀', description: '用于识别指令的前缀字符', section: sections.basic }),
-		f.stringMeta({ placeholder: '/' }),
-	),
 	apiBase: v.pipe(
 		v.optional(v.pipe(v.string(), v.url()), 'https://www.kookapp.cn'),
 		f.formMeta({ label: 'API 基础 URL', description: '覆盖默认 KOOK API 域名', section: sections.basic }),

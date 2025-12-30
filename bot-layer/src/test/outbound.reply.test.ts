@@ -99,5 +99,17 @@ describe('bot-layer outbound reply()', () => {
 		await reply([img(), '1234'], undefined)
 		expect(calls).toEqual([{ type: 'image', url: 'https://example.com/a.png', caption: '1234' }])
 	})
-})
 
+	it('does not bind caption when text appears on both sides of an image', async () => {
+		const calls: Call[] = []
+		const adapter = makeAdapter(baseCaps({ supportsMixedMedia: true, maxCaptionLength: 10 }), calls)
+		const reply = createReply(adapter, {} as any)
+
+		await reply(['pre', img(), 'post'], undefined)
+		expect(calls).toEqual([
+			{ type: 'text', text: 'pre' },
+			{ type: 'image', url: 'https://example.com/a.png', caption: undefined },
+			{ type: 'text', text: 'post' },
+		])
+	})
+})

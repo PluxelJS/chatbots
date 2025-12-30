@@ -1,5 +1,5 @@
 import type { SseChannel } from '@pluxel/hmr/services'
-import type { TelegramBotManager } from '../bot-manager'
+import type { TelegramBotManager } from './bot-manager'
 import type { TelegramBotRegistry } from './bot-registry'
 import type { TelegramBotPublic } from './bot-registry'
 

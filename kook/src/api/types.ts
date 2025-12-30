@@ -30,52 +30,13 @@ export type KookRequest = <T>(
 
 /* ------------------------- Public API surface ------------------------- */
 
-export interface ManualKookApi {
-  sendMessage(
-    target_id: string,
-    content: string,
-    options?: {
-      type?: Kook.MessageType
-      temp_target_id?: string
-      quote?: string
-      template_id?: string
-    },
-  ): Promise<Result<Kook.MessageReturn>>
-
-  createTempMessageBuilder(
-    target_id: string,
-    user_id: string,
-    builderOptions?: { type?: Kook.MessageType; quote?: string; template_id?: string },
-  ): KookConversation['send']
-
-  createMessageBuilder(
-    target_id: string,
-    builderOptions?: { type?: Kook.MessageType; quote?: string; template_id?: string; temp_target_id?: string },
-  ): KookConversation['send']
-
-  createConversation(
-    target_id: string,
-    builderOptions?: { type?: Kook.MessageType; quote?: string; template_id?: string; temp_target_id?: string },
-  ): KookConversation
-
-  updateMessage(
-    msg_id: string,
-    content: string,
-    options?: {
-      type?: Kook.MessageType.kmarkdown | Kook.MessageType.card
-      temp_target_id?: string
-      quote?: string
-      template_id?: string
-    },
-  ): Promise<Result<void>>
-
-  deleteMessage(msg_id: string): Promise<Result<void>>
-
-  createAsset(file: Buffer | Blob | string | FormData, name?: string): Promise<Result<string>>
-}
-
 /* biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intended interface merge for API typing */
-export interface KookApi extends ManualKookApi, KookAutoApi {}
+export interface KookApi extends KookAutoApi {
+  /** Escape hatch for low-level requests / typed call. */
+  $raw: import('./raw').KookRawApi
+  /** Domain helpers (sessions/builders/uploads). */
+  $tool: import('./tool').KookApiTools
+}
 
 export interface KookConversation {
   target_id: string
@@ -107,7 +68,7 @@ export interface KookConversation {
       temp_target_id?: string
     },
   ): Promise<Result<void>>
-  editTracked(
+  editLast(
     content: string,
     options?: {
       type?: Kook.MessageType.kmarkdown | Kook.MessageType.card
@@ -117,7 +78,7 @@ export interface KookConversation {
     },
   ): Promise<Result<void>>
   delete(msg_id: string): Promise<Result<void>>
-  deleteTracked(): Promise<Result<void>>
+  deleteLast(): Promise<Result<void>>
   upsert(
     content: string,
     options?: { type?: Kook.MessageType; quote?: string; template_id?: string; temp_target_id?: string },
@@ -133,10 +94,83 @@ export interface KookConversation {
   ): KookConversation
 }
 
+export interface KookDirectConversation {
+  direct: DirectMessageGetType
+  readonly defaults?:
+    | {
+        type?: Kook.MessageType
+        quote?: string
+        template_id?: string
+      }
+    | undefined
+  readonly lastMessageId?: string
+  send(
+    content: string,
+    options?: { type?: Kook.MessageType; quote?: string; template_id?: string },
+  ): Promise<Result<Kook.MessageReturn>>
+  reply(
+    quote: string,
+    content: string,
+    options?: { type?: Kook.MessageType; template_id?: string },
+  ): Promise<Result<Kook.MessageReturn>>
+  edit(
+    msg_id: string,
+    content: string,
+    options?: {
+      quote?: string
+      template_id?: string
+    },
+  ): Promise<Result<void>>
+  editLast(
+    content: string,
+    options?: {
+      quote?: string
+      template_id?: string
+    },
+  ): Promise<Result<void>>
+  delete(msg_id: string): Promise<Result<void>>
+  deleteLast(): Promise<Result<void>>
+  upsert(
+    content: string,
+    options?: { type?: Kook.MessageType; quote?: string; template_id?: string },
+  ): Promise<Result<Kook.MessageReturn | void>>
+  transient(
+    content: string,
+    options?: { type?: Kook.MessageType; quote?: string; template_id?: string },
+    ttlMs?: number,
+  ): Promise<Result<Kook.MessageReturn>>
+  track(msg_id?: string | null): string | undefined
+  withDefaults(
+    overrides: { type?: Kook.MessageType; quote?: string; template_id?: string },
+  ): KookDirectConversation
+}
+
 /* ------------------------- Auto endpoints typing ------------------------- */
 
 /* biome-ignore lint/suspicious/noUnsafeDeclarationMerging: intended for dynamic endpoints typing */
 export interface KookAutoApi {
+  // message basics
+  sendMessage(param: {
+    target_id: string
+    content: string
+    type?: Kook.MessageType
+    temp_target_id?: string
+    quote?: string
+    template_id?: string
+  }): Promise<Result<Kook.MessageReturn>>
+  updateMessage(param: {
+    msg_id: string
+    content: string
+    type?: Kook.MessageType.kmarkdown | Kook.MessageType.card
+    temp_target_id?: string
+    quote?: string
+    template_id?: string
+  }): Promise<Result<void>>
+  deleteMessage(param: { msg_id: string }): Promise<Result<void>>
+
+  // asset upload (raw endpoint: expects multipart body)
+  createAsset(body: FormData): Promise<Result<{ url: string }>>
+
   // guild
   getGuildList(param?: Kook.Pagination): Promise<Result<Kook.GuildList>>
   getGuildView(param: { guild_id: string }): Promise<Result<Kook.Guild>>

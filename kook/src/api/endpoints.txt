@@ -33,6 +33,11 @@ getMessageReactionList GET /message/reaction-list
 addMessageReaction POST /message/add-reaction
 deleteMessageReaction POST /message/delete-reaction
 sendPipeMessage POST /message/send-pipemsg
+sendMessage POST /message/create
+updateMessage POST /message/update
+deleteMessage POST /message/delete
+
+createAsset POST /asset/create
 
 getUserJoinedChannelList GET /channel-user/get-joined-channel
 
@@ -97,4 +102,3 @@ getTemplateList GET /template/list
 createTemplate POST /template/create
 updateTemplate POST /template/update
 deleteTemplate POST /template/delete
-

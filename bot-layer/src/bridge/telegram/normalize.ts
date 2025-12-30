@@ -15,7 +15,10 @@ type Entity = {
 }
 
 interface ResolvedTelegramFile {
+	/** Sendable ref for Telegram (usually file_id). */
 	url: string
+	/** Token-file download URL (kept out of parts). */
+	downloadUrl?: string
 	name?: string
 	mime?: string
 	size?: number
@@ -46,6 +49,12 @@ const buildFileUrl = (session: MessageSession, filePath: string): string => {
 	return `${base}/file/bot${session.bot.token}/${cleaned}`
 }
 
+const fetchUrl = async (url: string, signal?: AbortSignal): Promise<ArrayBuffer> => {
+	const res = await fetch(url, { signal })
+	if (!res.ok) throw new Error(`bot-layer: telegram 下载失败 http ${res.status}`)
+	return await res.arrayBuffer()
+}
+
 const resolveTelegramFile = async (
 	ctx: TelegramNormalizeContext,
 	fileId: string,
@@ -59,20 +68,20 @@ const resolveTelegramFile = async (
 			(async () => {
 				try {
 					const info = await ctx.session.bot.getFile({ file_id: fileId })
-					if (!info.ok || !info.data.file_path) {
-						throw new Error(`getFile failed for ${fileId}`)
-					}
-					const url = buildFileUrl(ctx.session, info.data.file_path)
-					const name = fallbackName ?? info.data.file_path.split('/').pop() ?? fileId
+					const filePath = info.ok ? info.data.file_path : undefined
+					const downloadUrl = filePath ? buildFileUrl(ctx.session, filePath) : undefined
+					const name = fallbackName ?? (filePath ? filePath.split('/').pop() : null) ?? fileId
 					return {
-						url,
+						url: fileId,
+						downloadUrl,
 						name,
 						mime: fallbackMime ?? undefined,
-						size: info.data.file_size ?? fallbackSize,
+						size: info.ok ? (info.data.file_size ?? fallbackSize) : fallbackSize,
 					}
 				} catch {
 					return {
 						url: fileId,
+						downloadUrl: undefined,
 						name: fallbackName ?? fileId,
 						mime: fallbackMime ?? undefined,
 						size: fallbackSize,
@@ -184,7 +193,21 @@ const normalizeContent = async (
 	const textOnly = textParts.length ? telegramAdapter.render(textParts).text : textRaw
 
 	const addAttachment = (part: Attachment<'telegram'>['part']) => {
-		attachments.push({ platform: 'telegram', kind: part.type, part, source })
+		const fileId = (part as any).fileId as string | undefined
+		const resolved = fileId ? ctx.fileCache.get(fileId) : undefined
+		attachments.push({
+			platform: 'telegram',
+			kind: part.type,
+			part,
+			source,
+			fetch: resolved
+				? async (signal) => {
+						const info = await resolved
+						if (!info.downloadUrl) throw new Error('bot-layer: telegram 缺少 downloadUrl')
+						return fetchUrl(info.downloadUrl, signal)
+					}
+				: undefined,
+		})
 		parts.push(part)
 	}
 

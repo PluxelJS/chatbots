@@ -1,7 +1,9 @@
 import { TelegramBotRpc } from './runtime/rpc'
-import type { TelegramRuntime } from './runtime/runtime'
+import type { TelegramRuntime } from './runtime'
 
 export function registerTelegramExtensions(plugin: { ctx: any; runtime: TelegramRuntime }) {
+	if (!plugin.ctx.env.isHmrRuntime) return
+
 	plugin.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })
 	plugin.ctx.ext.rpc.registerExtension(() => new TelegramBotRpc(plugin.runtime))
 
@@ -9,4 +11,3 @@ export function registerTelegramExtensions(plugin: { ctx: any; runtime: Telegram
 		plugin.ctx.ext.sse.registerExtension(() => plugin.runtime.createSseHandler())
 	}
 }
-

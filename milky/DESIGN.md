@@ -54,6 +54,7 @@
 - `const session = bot.$tool.createGroupSession(123)`
 - `await session.send('hello')`
 - `await session.reply(456, 'reply')`
+- `await session.delete()` / `await session.delete(456)`
 - `const sendmsg = bot.$tool.createGroupMessageBuilder(123); await sendmsg('hi')`
 
 ### 2) endpoint 方法的性能实现（共享原型）

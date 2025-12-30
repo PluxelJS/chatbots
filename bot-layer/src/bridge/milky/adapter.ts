@@ -12,8 +12,10 @@ import type {
 	StyledPart,
 } from '../../types'
 import type { OutboundText, PlatformAdapter, RenderResult } from '../../platforms/base'
+import { toNodeBuffer } from '../../binary'
 
 type MilkyMessageSession = import('pluxel-plugin-milky').MilkyMessageSession
+type Result<T> = import('pluxel-plugin-milky').Result<T>
 
 const capabilities: PlatformCapabilities = {
 	format: 'plain',
@@ -83,12 +85,6 @@ type OutgoingSegment =
 	| { type: 'record'; data: { uri: string } }
 	| { type: 'video'; data: { uri: string; thumb_uri?: string | null } }
 
-const toNodeBuffer = (data: ArrayBufferLike | ArrayBufferView): Buffer => {
-	if (Buffer.isBuffer(data)) return data
-	if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-	return Buffer.from(new Uint8Array(data as ArrayBufferLike))
-}
-
 const base64Uri = (data: ArrayBufferLike | ArrayBufferView): string => `base64://${toNodeBuffer(data).toString('base64')}`
 
 const uriFromPart = (part: ImagePart | FilePart, label: string): string => {
@@ -131,20 +127,25 @@ const withQuote = (session: MilkyMessageSession, segs: OutgoingSegment[], quote?
 	return [{ type: 'reply', data: { message_seq: seq } }, ...segs]
 }
 
-	const sendMessage = async (session: MilkyMessageSession, message: OutgoingSegment[]) => {
-		const scene = session.message?.message_scene
-		const peer = Number(session.message?.peer_id)
-		if (!Number.isFinite(peer)) throw new Error('Milky: 缺少 peer_id')
+const expectOk = <T>(res: Result<T>, name: string) => {
+	if (res.ok) return
+	throw new Error(res.message || `${name} failed`)
+}
 
-		if (scene === 'group') {
-			const res = await (session.bot as any).call('send_group_message', { group_id: peer, message })
-			if (!res?.ok) throw new Error(res?.message ?? 'send_group_message failed')
-			return
-		}
+const sendMessage = async (session: MilkyMessageSession, message: OutgoingSegment[]) => {
+	const scene = session.message?.message_scene
+	const peer = Number(session.message?.peer_id)
+	if (!Number.isFinite(peer)) throw new Error('Milky: 缺少 peer_id')
 
-		const res = await (session.bot as any).call('send_private_message', { user_id: peer, message })
-		if (!res?.ok) throw new Error(res?.message ?? 'send_private_message failed')
+	if (scene === 'group') {
+		const res = await session.bot.send_group_message({ group_id: peer, message })
+		expectOk(res, 'send_group_message')
+		return
 	}
+
+	const res = await session.bot.send_private_message({ user_id: peer, message })
+	expectOk(res, 'send_private_message')
+}
 
 export const milkyAdapter: PlatformAdapter<'milky'> = {
 	name: 'milky',
@@ -173,22 +174,22 @@ export const milkyAdapter: PlatformAdapter<'milky'> = {
 		const file_name = file.name ?? 'file'
 
 		if (scene === 'group') {
-			const res = await (session.bot as any).call('upload_group_file', {
+			const res = await session.bot.upload_group_file({
 				group_id: peer,
 				parent_folder_id: '/',
 				file_uri,
 				file_name,
 			})
-			if (!res?.ok) throw new Error(res?.message ?? 'upload_group_file failed')
+			expectOk(res, 'upload_group_file')
 			return
 		}
 
-		const res = await (session.bot as any).call('upload_private_file', {
+		const res = await session.bot.upload_private_file({
 			user_id: peer,
 			file_uri,
 			file_name,
 		})
-		if (!res?.ok) throw new Error(res?.message ?? 'upload_private_file failed')
+		expectOk(res, 'upload_private_file')
 	},
 
 	uploadImage: async (_session, image) => image,

@@ -9,7 +9,7 @@
 
 ## 目录结构
 
-- `chatbots/bot-layer/parts/src/`
+- `chatbots/bot-layer/src/parts/`
   - `normalize.ts`：`PartInput -> Part[]` 的规范化/扁平化（合并相邻 text）
   - `dsl.ts`：构建 Part 的便捷函数（含 `imageData/fileData`）
   - `jsx-runtime.ts`：TSX/JSX 运行时（把 JSX 转成 `Part | Part[]`）
@@ -60,6 +60,7 @@ bot-layer 的 Outbound 入口（`reply/sendText` 等）支持：
 - 图片与文件会成为独立发送操作
 - 当平台 `supportsMixedMedia=true` 且满足“单图 caption”形态时，会将相邻文本作为 caption 与图片同条发送：
   - caption 必须位于图片同一侧（全在前或全在后）
+  - 若图片两侧都有相邻文本，则不会绑定 caption（保持原始顺序，拆成 `text -> image -> text`）
   - 若图片后仍有其它媒体，则不会把 trailing text 当 caption（避免 caption 误绑定）
 - 当平台 `supportsMixedMedia=false` 时，图片与文字必然拆成多条（顺序与输入一致）
 

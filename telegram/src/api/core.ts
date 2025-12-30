@@ -1,20 +1,16 @@
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import type {
-	Methods,
 	ApiMethodName,
-	ChatSession,
 	HttpMethod,
 	JsonLike,
-	MethodArgs,
-	MethodReturn,
 	Result,
-	SendMessageOptions,
 	TelegramApi,
 	TelegramApiOptions,
-	TelegramBinaryLike,
-	TelegramInputFile,
 	TelegramRequest,
 } from './types'
+import { createTelegramRawApiFromRequest } from './raw'
+import { TELEGRAM_API_PROTO } from './prototype'
+import { createTelegramTools } from './tool'
 
 export type TelegramApiDefinition = readonly [ApiMethodName, HttpMethod]
 
@@ -24,7 +20,22 @@ export function createTelegramApiWithDefinitions(
 	definitions: ReadonlyArray<TelegramApiDefinition>,
 ): TelegramApi {
 	const request = createTelegramRequest(http, options)
-	return buildTelegramApi(request, definitions)
+
+	const proto = Object.create(TELEGRAM_API_PROTO) as Record<string, unknown>
+	for (const [name] of definitions) {
+		if (name in proto) continue
+		Object.defineProperty(proto, name, {
+			enumerable: true,
+			value(payload?: unknown) {
+				return this.$raw.call(name as any, payload)
+			},
+		})
+	}
+
+	const api = Object.create(proto) as TelegramApi
+	api.$raw = createTelegramRawApiFromRequest(request, definitions)
+	api.$tool = createTelegramTools(api)
+	return api
 }
 
 export function createTelegramRequest(http: HttpClient, options?: TelegramApiOptions): TelegramRequest {
@@ -40,116 +51,6 @@ export function createTelegramRequest(http: HttpClient, options?: TelegramApiOpt
 		return requestWithClient<T>(http, method, url, payload)
 	}
 }
-
-function buildTelegramApi(request: TelegramRequest, definitions: ReadonlyArray<TelegramApiDefinition>): TelegramApi {
-	type P<K extends keyof Methods> = MethodArgs<K>
-	type R<K extends keyof Methods> = MethodReturn<K>
-
-	const api: Partial<TelegramApi> = {
-		/** 发送消息 */
-		sendMessage: (chatId: P<'sendMessage'>['chat_id'], text: P<'sendMessage'>['text'], options?: Omit<P<'sendMessage'>, 'chat_id' | 'text'>): Promise<Result<R<'sendMessage'>>> =>
-			request<R<'sendMessage'>>('POST', 'sendMessage', { chat_id: chatId, text, ...options }),
-
-		/** 创建消息构建器 */
-		createMessageBuilder: (chatId: P<'sendMessage'>['chat_id'], defaults?: Omit<P<'sendMessage'>, 'chat_id' | 'text'>) =>
-			makeChatSession(chatId, request, defaults).send,
-
-		/** 会话级 builder，封装常用 send/edit/delete/typing/upsert 操作 */
-		createChatSession: (chatId, defaults) => makeChatSession(chatId, request, defaults),
-
-		/** 转发消息 */
-		forwardMessage: (
-			chatId: P<'forwardMessage'>['chat_id'],
-			fromChatId: P<'forwardMessage'>['from_chat_id'],
-			messageId: P<'forwardMessage'>['message_id'],
-			options?: Omit<P<'forwardMessage'>, 'chat_id' | 'from_chat_id' | 'message_id'>,
-		): Promise<Result<R<'forwardMessage'>>> =>
-			request<R<'forwardMessage'>>('POST', 'forwardMessage', {
-				chat_id: chatId,
-				from_chat_id: fromChatId,
-				message_id: messageId,
-				...options,
-		}),
-
-		/** 编辑消息文本 */
-		editMessageText: (text: P<'editMessageText'>['text'], options: Omit<P<'editMessageText'>, 'text'>): Promise<Result<R<'editMessageText'>>> =>
-			request<R<'editMessageText'>>('POST', 'editMessageText', { text, ...options }),
-
-		/** 删除消息 */
-		deleteMessage: (chatId: P<'deleteMessage'>['chat_id'], messageId: P<'deleteMessage'>['message_id']): Promise<Result<R<'deleteMessage'>>> =>
-			request<R<'deleteMessage'>>('POST', 'deleteMessage', { chat_id: chatId, message_id: messageId }),
-
-		/** 发送照片 */
-		sendPhoto: (chatId: P<'sendPhoto'>['chat_id'], photo: P<'sendPhoto'>['photo'], options?: Omit<P<'sendPhoto'>, 'chat_id' | 'photo'>): Promise<Result<R<'sendPhoto'>>> => {
-			const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
-			return request<R<'sendPhoto'>>('POST', 'sendPhoto', buildInputFilePayload('photo', photo, payload))
-		},
-
-		/** 发送文档 */
-		sendDocument: (chatId: P<'sendDocument'>['chat_id'], document: P<'sendDocument'>['document'], options?: Omit<P<'sendDocument'>, 'chat_id' | 'document'>): Promise<Result<R<'sendDocument'>>> => {
-			const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
-			return request<R<'sendDocument'>>('POST', 'sendDocument', buildInputFilePayload('document', document, payload))
-		},
-
-		/** 发送动图（GIF/MP4 等） */
-		sendAnimation: (chatId: P<'sendAnimation'>['chat_id'], animation: P<'sendAnimation'>['animation'], options?: Omit<P<'sendAnimation'>, 'chat_id' | 'animation'>): Promise<Result<R<'sendAnimation'>>> => {
-			const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
-			return request<R<'sendAnimation'>>(
-				'POST',
-				'sendAnimation',
-				buildInputFilePayload('animation', animation, payload),
-			)
-		},
-
-		/** 回复回调查询 */
-		answerCallbackQuery: (
-			callbackQueryId: P<'answerCallbackQuery'>['callback_query_id'],
-			options?: Omit<P<'answerCallbackQuery'>, 'callback_query_id'>,
-		): Promise<Result<R<'answerCallbackQuery'>>> =>
-			request<R<'answerCallbackQuery'>>('POST', 'answerCallbackQuery', { callback_query_id: callbackQueryId, ...options }),
-
-		/** 设置 Webhook */
-		setWebhook: (url: P<'setWebhook'>['url'], options?: Omit<P<'setWebhook'>, 'url'>): Promise<Result<R<'setWebhook'>>> =>
-			request<R<'setWebhook'>>('POST', 'setWebhook', { url, ...options }),
-
-		/** 删除 Webhook */
-		deleteWebhook: (options?: P<'deleteWebhook'>): Promise<Result<R<'deleteWebhook'>>> =>
-			request<R<'deleteWebhook'>>('POST', 'deleteWebhook', options),
-
-		/** 获取 Webhook 信息 */
-		getWebhookInfo: (): Promise<Result<R<'getWebhookInfo'>>> => request<R<'getWebhookInfo'>>('GET', 'getWebhookInfo'),
-
-		/** 获取更新（用于 polling） */
-		getUpdates: (options?: P<'getUpdates'>): Promise<Result<R<'getUpdates'>>> =>
-			request<R<'getUpdates'>>('POST', 'getUpdates', options),
-	}
-
-	const define = defineResult(api, request)
-
-	const RESERVED_SHORTCUTS = new Set<ApiMethodName>([
-		'sendMessage',
-		'forwardMessage',
-		'editMessageText',
-		'deleteMessage',
-		'sendPhoto',
-		'sendDocument',
-		'sendAnimation',
-		'answerCallbackQuery',
-		'setWebhook',
-		'deleteWebhook',
-		'getUpdates',
-	])
-
-	for (const [name, method] of definitions) {
-		if (RESERVED_SHORTCUTS.has(name)) {
-			throw new Error(`[telegram-api] define(${name}) would override a shortcut implementation`)
-		}
-		define(name, method)
-	}
-
-	return api as TelegramApi
-}
-
 /* ----------------------------- Helpers ----------------------------- */
 
 type JsonChain = { json(): Promise<unknown> }
@@ -199,175 +100,6 @@ function requestWithClient<T>(
 		})) as Promise<Result<T>>
 }
 
-function makeChatSession(
-	chatId: MethodArgs<'sendMessage'>['chat_id'],
-	request: TelegramRequest,
-	defaults?: Partial<SendMessageOptions>,
-): ChatSession {
-	const baseDefaults = defaults ? { ...defaults } : undefined
-	let trackedId: number | undefined
-
-	const mergeSendOptions = (options?: Partial<SendMessageOptions>) =>
-		baseDefaults || options ? { ...baseDefaults, ...options } : undefined
-
-	const send: ChatSession['send'] = async (text, options) => {
-		const merged = mergeSendOptions(options)
-		const res = await request<MethodReturn<'sendMessage'>>('POST', 'sendMessage', {
-			chat_id: chatId,
-			text,
-			...(merged ?? {}),
-		})
-		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
-			trackedId = (res.data as any).message_id
-		}
-		return res
-	}
-
-	const reply: ChatSession['reply'] = async (toMessageId, text, options) => {
-		const merged = mergeSendOptions(options)
-		const replyParameters =
-			merged?.reply_parameters || options?.reply_parameters
-				? {
-						...(merged?.reply_parameters as Record<string, unknown>),
-						...(options?.reply_parameters as Record<string, unknown>),
-						message_id: toMessageId,
-					}
-				: { message_id: toMessageId }
-
-		const res = await request<MethodReturn<'sendMessage'>>('POST', 'sendMessage', {
-			chat_id: chatId,
-			text,
-			...(merged ?? {}),
-			reply_parameters: replyParameters,
-		})
-		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
-			trackedId = (res.data as any).message_id
-		}
-		return res
-	}
-
-	const edit: ChatSession['edit'] = (messageId, text, options) =>
-		request<MethodReturn<'editMessageText'>>('POST', 'editMessageText', {
-			chat_id: chatId,
-			message_id: messageId,
-			text,
-			...options,
-		})
-
-	const editLast: ChatSession['editLast'] = (text, options) => {
-		if (!trackedId) return missingTracked('edit')
-		return edit(trackedId, text, options)
-	}
-
-	const del: ChatSession['delete'] = (messageId) =>
-		request<MethodReturn<'deleteMessage'>>('POST', 'deleteMessage', {
-			chat_id: chatId,
-			message_id: messageId,
-		})
-
-	const deleteLast: ChatSession['deleteLast'] = () => {
-		if (!trackedId) return missingTracked('delete')
-		return del(trackedId)
-	}
-
-	const typing: ChatSession['typing'] = (action = 'typing', options) =>
-		request<MethodReturn<'sendChatAction'>>('POST', 'sendChatAction', {
-			chat_id: chatId,
-			action,
-			...options,
-		})
-
-	const sendPhoto: ChatSession['sendPhoto'] = async (photo, options) => {
-		const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
-		const res = await request<MethodReturn<'sendPhoto'>>('POST', 'sendPhoto', buildInputFilePayload('photo', photo, payload))
-		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
-			trackedId = (res.data as any).message_id
-		}
-		return res
-	}
-
-	const sendDocument: ChatSession['sendDocument'] = async (document, options) => {
-		const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
-		const res = await request<MethodReturn<'sendDocument'>>('POST', 'sendDocument', buildInputFilePayload('document', document, payload))
-		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
-			trackedId = (res.data as any).message_id
-		}
-		return res
-	}
-
-	const sendAnimation: ChatSession['sendAnimation'] = async (animation, options) => {
-		const payload: Record<string, unknown> = { chat_id: chatId, ...(options ?? {}) }
-		const res = await request<MethodReturn<'sendAnimation'>>(
-			'POST',
-			'sendAnimation',
-			buildInputFilePayload('animation', animation, payload),
-		)
-		if (res.ok && typeof (res.data as any)?.message_id === 'number') {
-			trackedId = (res.data as any).message_id
-		}
-		return res
-	}
-
-	const upsert: ChatSession['upsert'] = async (text, options) => {
-		if (trackedId) {
-			const res = await edit(trackedId, text, options)
-			if (res.ok) return res
-			trackedId = undefined
-		}
-		return send(text, options)
-	}
-
-	const transient: ChatSession['transient'] = async (text, options, ttlMs = 5000) => {
-		const res = await send(text, options)
-		const messageId = res.ok ? (res.data as any)?.message_id : undefined
-		if (res.ok && messageId && ttlMs > 0) {
-			scheduleDelete(() => del(messageId), ttlMs)
-		}
-		return res
-	}
-
-	const track: ChatSession['track'] = (messageId) => {
-		trackedId = typeof messageId === 'number' ? messageId : undefined
-		return trackedId
-	}
-
-	const withDefaults: ChatSession['withDefaults'] = (overrides) => {
-		const next = makeChatSession(chatId, request, { ...baseDefaults, ...overrides })
-		if (trackedId) next.track(trackedId)
-		return next
-	}
-
-	const session: ChatSession = {
-		chatId,
-		defaults: baseDefaults,
-		get lastMessageId() {
-			return trackedId
-		},
-		send,
-		reply,
-		edit,
-		editLast,
-		delete: del,
-		deleteLast,
-		sendPhoto,
-		sendDocument,
-		sendAnimation,
-		typing,
-		upsert,
-		transient,
-		track,
-		withDefaults,
-	}
-
-	return session
-}
-
-function defineResult(target: Partial<TelegramApi>, request: TelegramRequest) {
-	return <K extends ApiMethodName>(name: K, method: HttpMethod) => {
-		target[name] = ((arg?: MethodArgs<K>) => request(method, name as string, arg as JsonLike)) as TelegramApi[K]
-	}
-}
-
 function appendQuery(path: string, params: Record<string, unknown>): string {
 	const search = new URLSearchParams()
 	let has = false
@@ -406,110 +138,3 @@ export function normalizeErrMsg(e: unknown): string {
 	if (typeof m.statusText === 'string') return m.statusText
 	return 'Network Error'
 }
-
-function missingTracked(action: 'edit' | 'delete') {
-	return {
-		ok: false,
-		code: -404,
-		message: `No tracked message to ${action}`,
-	} as Result<never>
-}
-
-function scheduleDelete(task: () => Promise<unknown>, ttlMs: number) {
-	const timer = setTimeout(() => {
-		void task().catch(() => {})
-	}, ttlMs)
-	;(timer as any).unref?.()
-}
-
-type NormalizedInputFile =
-	| { kind: 'text'; value: string }
-	| { kind: 'binary'; value: Blob; filename?: string }
-
-function buildInputFilePayload(fieldName: string, file: TelegramInputFile, payload: Record<string, unknown>): JsonLike {
-	const normalized = normalizeInputFile(file)
-	if (normalized.kind === 'text') {
-		return {
-			...payload,
-			[fieldName]: normalized.value,
-		}
-	}
-
-	const form = new FormData()
-	for (const [key, value] of Object.entries(payload)) {
-		appendFormField(form, key, value)
-	}
-	// Only pass filename when it is explicitly present.
-	// Passing `undefined` as the 3rd arg may cause some FormData implementations to omit filename metadata.
-	if (normalized.filename) {
-		form.append(fieldName, normalized.value, normalized.filename)
-	} else {
-		form.append(fieldName, normalized.value)
-	}
-	return form
-}
-
-function normalizeInputFile(file: TelegramInputFile): NormalizedInputFile {
-	if (typeof file === 'string') {
-		return { kind: 'text', value: file }
-	}
-
-	if (isBinaryLike(file)) {
-		return { kind: 'binary', value: toBlob(file) }
-	}
-
-	if (isTelegramFileWrapper(file)) {
-		return {
-			kind: 'binary',
-			value: toBlob(file.data, file.contentType),
-			filename: file.filename,
-		}
-	}
-
-	throw new TypeError('Unsupported input file value for Telegram API')
-}
-
-function appendFormField(form: FormData, key: string, value: unknown) {
-	if (value === undefined || value === null) return
-	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
-		form.append(key, String(value))
-		return
-	}
-	if (value instanceof Blob) {
-		form.append(key, value)
-		return
-	}
-	form.append(key, JSON.stringify(value))
-}
-
-function isBinaryLike(value: unknown): value is TelegramBinaryLike {
-	if (typeof Blob !== 'undefined' && value instanceof Blob) return true
-	if (value instanceof ArrayBuffer) return true
-	if (ArrayBuffer.isView(value)) return true
-	return false
-}
-
-function isTelegramFileWrapper(value: unknown): value is { data: TelegramBinaryLike; filename?: string; contentType?: string } {
-	if (typeof value !== 'object' || value === null) return false
-	if (!('data' in value)) return false
-	const data = (value as Record<string, unknown>).data
-	return isBinaryLike(data)
-}
-
-function toBlob(data: TelegramBinaryLike, contentType?: string): Blob {
-	if (typeof Blob === 'undefined') {
-		throw new TypeError('Blob is unavailable in this environment')
-	}
-	if (data instanceof Blob) {
-		if (!contentType || data.type === contentType) return data
-		return data.slice(0, data.size, contentType)
-	}
-	if (data instanceof ArrayBuffer) {
-		return new Blob([data], { type: contentType })
-	}
-	if (ArrayBuffer.isView(data)) {
-		return new Blob([data], { type: contentType })
-	}
-	throw new TypeError('Unsupported binary data')
-}
-

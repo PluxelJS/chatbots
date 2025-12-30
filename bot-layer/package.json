@@ -15,8 +15,7 @@
     "build": "pluxel build"
   },
   "dependencies": {
-    "type-flag": "^4.0.2",
-    "@pluxel/parts": "workspace:*"
+    "type-flag": "^4.0.2"
   },
   "peerDependencies": {
     "pluxel-plugin-kook": "workspace:^",
@@ -32,12 +31,17 @@
       "@pluxel/hmr": "./src/jsx-runtime.ts",
       "default": "./dist/jsx-runtime.mjs"
     },
+    "./web": {
+      "@pluxel/hmr": "./src/web.ts",
+      "default": "./dist/web.mjs"
+    },
     "./package.json": "./package.json"
   },
   "publishConfig": {
     "exports": {
       ".": "./dist/index.mjs",
       "./jsx-runtime": "./dist/jsx-runtime.mjs",
+      "./web": "./dist/web.mjs",
       "./package.json": "./package.json"
     }
   }

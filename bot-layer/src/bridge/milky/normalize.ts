@@ -56,21 +56,21 @@ const resolveFileDownloadUrl = async (
 	if (!file_id) return null
 
 	if (message.message_scene === 'group') {
-		const res = await (session.bot as any).call('get_group_file_download_url', {
+		const res = await session.bot.get_group_file_download_url({
 			group_id: Number(message.peer_id),
 			file_id,
 		})
-		return res?.ok ? (res.data?.download_url ?? null) : null
+		return res.ok ? (res.data?.download_url ?? null) : null
 	}
 
 	const file_hash = segData?.file_hash
 	if (!file_hash) return null
-	const res = await (session.bot as any).call('get_private_file_download_url', {
+	const res = await session.bot.get_private_file_download_url({
 		user_id: Number(message.peer_id),
 		file_id,
 		file_hash,
 	})
-	return res?.ok ? (res.data?.download_url ?? null) : null
+	return res.ok ? (res.data?.download_url ?? null) : null
 }
 
 const normalizeSegments = async (
@@ -176,12 +176,12 @@ const normalizeReference = async (
 	if (!Number.isFinite(peer)) return undefined
 
 	try {
-		const res = await (session.bot as any).call('get_message', {
+		const res = await session.bot.get_message({
 			message_scene: message.message_scene,
 			peer_id: peer,
 			message_seq: replySeq,
 		})
-		if (!res?.ok || !res.data?.message) {
+		if (!res.ok || !res.data?.message) {
 			return {
 				platform: 'milky',
 				messageId: replySeq,

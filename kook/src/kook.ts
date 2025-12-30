@@ -4,13 +4,14 @@ import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import { KookConfig, type KookConfigType } from './config'
 import { KookRuntime, type KookSnapshot } from './runtime'
-import { BotManager } from './bot-manager'
 import { registerKookExtensions } from './extensions'
 import type { KOOKBotRpc } from './runtime/rpc'
 
+export * from './api'
+export * from './bot'
+export * from './events'
 export * from './types'
 export type { KookSnapshot }
-export { BotManager }
 
 @Plugin({ name: 'KOOK', type: 'service', startTimeoutMs: 10_000 })
 export class KOOK extends BasePlugin {
@@ -26,7 +27,7 @@ export class KOOK extends BasePlugin {
 	override async init(abort: AbortSignal): Promise<void> {
 		await this.runtime.bootstrap(this.ctx, this.config, abort)
 		if (abort.aborted) return
-		registerKookExtensions(this)
+		registerKookExtensions({ ctx: this.ctx, runtime: this.runtime })
 	}
 
 	override async stop(): Promise<void> {
@@ -35,10 +36,6 @@ export class KOOK extends BasePlugin {
 
 	get baseClient() {
 		return this.runtime.baseClient
-	}
-
-	get cmd() {
-		return this.runtime.cmd
 	}
 
 	getOverview() {

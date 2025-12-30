@@ -1,6 +1,6 @@
 import type { QuickReplyItemProps } from '@chatui/core'
 
-import type { PartInput } from '../../model'
+import type { PartInput } from '@pluxel/bot-layer/web'
 
 export type SampleItem = {
 	key: string
@@ -191,7 +191,7 @@ export const sampleSections: SampleSection[] = [
 					{
 						type: 'codeblock',
 						language: 'ts',
-						code: 'reply([text("hello"), image("..."), file("...")])',
+						code: 'reply([text(\"hello\"), image(\"...\"), file(\"...\")])',
 					},
 				],
 			},

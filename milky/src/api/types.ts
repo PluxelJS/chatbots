@@ -16,7 +16,7 @@ export type MilkyOk<T> = {
 
 export type MilkyErr = {
 	ok: false
-	retcode: number
+	code: number
 	message: string
 	status?: string
 	raw: unknown
@@ -113,7 +113,12 @@ export type MilkyGroupSession = {
 	readonly lastMessageSeq?: number
 	send(message: MilkyMessage): Promise<Result<SendGroupMessageOutput>>
 	reply(messageSeq: number, message: MilkyMessage): Promise<Result<SendGroupMessageOutput>>
-	recall(messageSeq?: number): Promise<Result<void>>
+	/** Recall/delete a message; defaults to the tracked last message. */
+	delete(messageSeq?: number): Promise<Result<void>>
+	/** Upsert via recall+send when tracking is available. */
+	upsert(message: MilkyMessage): Promise<Result<SendGroupMessageOutput>>
+	/** Send then auto-recall after ttlMs (default 5s). */
+	transient(message: MilkyMessage, ttlMs?: number): Promise<Result<SendGroupMessageOutput>>
 	track(messageSeq?: number | null): number | undefined
 }
 
@@ -122,6 +127,11 @@ export type MilkyPrivateSession = {
 	readonly lastMessageSeq?: number
 	send(message: MilkyMessage): Promise<Result<SendPrivateMessageOutput>>
 	reply(messageSeq: number, message: MilkyMessage): Promise<Result<SendPrivateMessageOutput>>
-	recall(messageSeq?: number): Promise<Result<void>>
+	/** Recall/delete a message; defaults to the tracked last message. */
+	delete(messageSeq?: number): Promise<Result<void>>
+	/** Upsert via recall+send when tracking is available. */
+	upsert(message: MilkyMessage): Promise<Result<SendPrivateMessageOutput>>
+	/** Send then auto-recall after ttlMs (default 5s). */
+	transient(message: MilkyMessage, ttlMs?: number): Promise<Result<SendPrivateMessageOutput>>
 	track(messageSeq?: number | null): number | undefined
 }

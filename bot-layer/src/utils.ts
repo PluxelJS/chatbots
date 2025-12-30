@@ -1,3 +1,3 @@
-export { hasRichParts } from '@pluxel/parts'
-export { toPartArray } from '@pluxel/parts'
+export { hasRichParts } from './parts'
+export { toPartArray } from './parts'
 export { partsToText } from './render/text'

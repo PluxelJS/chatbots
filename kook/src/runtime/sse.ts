@@ -1,18 +1,18 @@
 import type { SseChannel } from '@pluxel/hmr/services'
-import type { BotManager } from '../bot-manager'
+import type { KookBotManager } from './bot-manager'
 import type { KookBotRegistry } from './bot-registry'
 import type { KookBotPublic } from './bot-registry'
 
 export type KookSnapshot = {
 	bots: KookBotPublic[]
-	overview: ReturnType<BotManager['getOverview']>
+	overview: ReturnType<KookBotManager['getOverview']>
 	updatedAt: number
 }
 
 export class KookSseBridge {
 	constructor(
 		private readonly repo: KookBotRegistry,
-		private readonly manager: BotManager,
+		private readonly manager: KookBotManager,
 	) {}
 
 	async snapshot(limit = 64): Promise<KookSnapshot> {

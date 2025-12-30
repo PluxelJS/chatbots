@@ -41,14 +41,14 @@ export function createMilkyRequest(http: HttpClient, baseUrl: string, accessToke
 
 			const env = MilkyEnvelope.safeParse(res)
 			if (!env.success) {
-				return { ok: false, retcode: -1, message: 'invalid milky response envelope', raw: res }
+				return { ok: false, code: -1, message: 'invalid milky response envelope', raw: res }
 			}
 
 			if (env.data.status !== 'ok') {
 				return {
 					ok: false,
 					status: env.data.status,
-					retcode: env.data.retcode,
+					code: env.data.retcode,
 					message: env.data.message ?? 'milky api failed',
 					raw: res,
 				}
@@ -59,8 +59,7 @@ export function createMilkyRequest(http: HttpClient, baseUrl: string, accessToke
 				schemas?.output && rawData !== undefined ? (schemas.output.parse(rawData) as T) : (rawData as T)
 			return { ok: true, data: parsed, raw: res }
 		} catch (e) {
-			return { ok: false, retcode: -1, message: normalizeErrMsg(e), raw: e }
+			return { ok: false, code: -1, message: normalizeErrMsg(e), raw: e }
 		}
 	}
 }
-

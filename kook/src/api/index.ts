@@ -1,12 +1,20 @@
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import type { KookApi, KookApiOptions } from './types'
-import { AUTO_ENDPOINTS } from './endpoints'
-import { createKookApiWithEndpoints, createKookRequest } from './core'
+import { createKookRawApi } from './raw'
+import { KOOK_API_PROTO } from './prototype'
+import { createKookTools } from './tool'
+import { createKookRequest } from './core'
 
 export function createKookApi(http: HttpClient, options?: KookApiOptions): KookApi {
-  return createKookApiWithEndpoints(http, options, AUTO_ENDPOINTS as any)
+	const api = Object.create(KOOK_API_PROTO) as KookApi
+	api.$raw = createKookRawApi(http, options)
+	api.$tool = createKookTools(api)
+	return api
 }
 
 export { createKookRequest }
 export * from './core'
+export * from './prototype'
+export * from './raw'
+export * from './tool'
 export * from './types'

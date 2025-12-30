@@ -3,30 +3,23 @@ import type { Config } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import { middlewares, WretchPlugin } from 'pluxel-plugin-wretch'
 import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
-import { BotManager, type KookBotPublic } from './bot-manager'
-import { KookBotRegistry, type CreateBotInput, type UpdateBotInput } from './runtime/bot-registry'
-import { createCommandBus } from './cmd'
-import { createCommandKit } from './cmd/kit'
-import type { MessageSession } from './types'
-import type { KookConfigType } from './config'
-import { KookSseBridge, type KookSnapshot } from './runtime/sse'
-import type { KookChannel } from './events'
-
-type CMDCTX = MessageSession
+import { KookBotManager, type KookBotPublic } from './bot-manager'
+import { KookBotRegistry, type CreateBotInput, type UpdateBotInput } from './bot-registry'
+import type { KookConfigType } from '../config'
+import { KookSseBridge, type KookSnapshot } from './sse'
+import type { KookChannel } from '../events'
 
 /**
- * KOOK 插件运行时：集中管理 Bot 生命周期、RPC/SSE、指令流水线。
+ * KOOK 插件运行时：集中管理 Bot 生命周期、RPC/SSE。
  */
 export class KookRuntime {
 	/** 共享实例：其他插件直接用它 */
 	public baseClient!: HttpClient
-	private readonly bus = createCommandBus<CMDCTX>({})
-	public readonly cmd = createCommandKit<CMDCTX>(this.bus)
 
 	private ctx!: Context
 	private config!: Config<KookConfigType>
 	private repo!: KookBotRegistry
-	public manager!: BotManager
+	public manager!: KookBotManager
 	public events!: KookChannel
 	private sseBridge: KookSseBridge | null = null
 	private autoConnectScheduled = false
@@ -45,14 +38,13 @@ export class KookRuntime {
 		await this.setupClients()
 		this.repo = new KookBotRegistry(this.ctx)
 		await this.repo.init()
-		this.manager = new BotManager(this.ctx, this.repo, this.websocket, this.baseClient)
+		this.manager = new KookBotManager(this.ctx, this.repo, this.websocket, this.baseClient)
 		this.events = this.manager.events
 		this.sseBridge = new KookSseBridge(this.repo, this.manager)
 
 		if (this.abort?.aborted) return
 
 		this.registerWebhook()
-		this.registerMessagePipeline()
 		this.scheduleAutoConnect()
 	}
 
@@ -130,19 +122,6 @@ export class KookRuntime {
 	private registerWebhook() {
 		const path = this.config.common.path ?? '/kook/webhook'
 		this.manager.registerWebhook(path)
-	}
-
-	private registerMessagePipeline() {
-		this.events.message.on((session, next) => {
-			const msg = session.data.content
-			if (!msg || msg[0] !== this.config.common.cmdPrefix) return next(session)
-
-			this.bus
-				.dispatch(msg.slice(1), session)
-				.catch((e) => this.ctx.logger.error(e, `执行 ${msg} 遇到以下问题：`))
-
-			return next(session)
-		})
 	}
 
 	private async autoConnectBots() {

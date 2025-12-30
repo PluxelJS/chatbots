@@ -2,8 +2,8 @@ import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core'
 import { IconSparkles } from '@tabler/icons-react'
 import { useMemo } from 'react'
 
-import type { PartInput } from '../../model'
-import { normalizeMessageContent } from '../../normalize'
+import type { PartInput } from '@pluxel/bot-layer/web'
+import { normalizeMessageContent } from '@pluxel/bot-layer/web'
 import { PartsMessage } from './renderer'
 import type { SampleItem, SampleSection } from './samples'
 

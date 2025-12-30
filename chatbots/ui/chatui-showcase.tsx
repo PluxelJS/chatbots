@@ -66,7 +66,7 @@ import type { FilterValue, QuickReplyItemProps } from '@chatui/core'
 import { Group, Paper, Stack, Text } from '@mantine/core'
 import { useMemo, useState, type ReactNode } from 'react'
 
-import { demoImage } from '@pluxel/parts/ui-chatui'
+import { demoImage } from './parts-ui-chatui'
 
 type SectionProps = {
 	title: string

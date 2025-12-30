@@ -13,12 +13,7 @@ import type {
 	StyledPart,
 } from '../../types'
 import type { OutboundText, PlatformAdapter, RenderResult } from '../../platforms/base'
-
-const toNodeBuffer = (data: ArrayBufferLike | ArrayBufferView): Buffer => {
-	if (Buffer.isBuffer(data)) return data
-	if (ArrayBuffer.isView(data)) return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-	return Buffer.from(new Uint8Array(data as ArrayBufferLike))
-}
+import { toNodeBuffer } from '../../binary'
 
 const capabilities: PlatformCapabilities = {
 	format: 'markdown',
@@ -97,9 +92,10 @@ const uploadIfNeeded = async (
 		return file.url
 	}
 
-	const api = session.bot.api
-	if (!api?.createAsset) throw new Error('KOOK: createAsset 不可用，无法上传文件')
-	const res = await api.createAsset(toNodeBuffer(file.data as ArrayBufferLike | ArrayBufferView), file.name ?? fallbackName)
+	const res = await session.bot.$tool.createAsset(
+		toNodeBuffer(file.data as ArrayBufferLike | ArrayBufferView),
+		file.name ?? fallbackName,
+	)
 	if (!res.ok) throw new Error(`KOOK createAsset failed: ${res.message}`)
 	return res.data
 }
@@ -113,9 +109,7 @@ export const kookAdapter: PlatformAdapter<'kook'> = {
 		const quote = options?.quote ? session.data?.msg_id : undefined
 		const type = needsMarkdown(text.parts) ? MessageType.kmarkdown : undefined
 		if (isPrivateSession(session)) {
-			const api = session.bot.api ?? session.bot
-			if (!api?.createDirectMessage) throw new Error('KOOK: createDirectMessage 不可用，无法发送私聊')
-			const res = await api.createDirectMessage({
+			const res = await session.bot.createDirectMessage({
 				target_id: session.userId,
 				content: text.rendered.text,
 				type,
@@ -124,7 +118,12 @@ export const kookAdapter: PlatformAdapter<'kook'> = {
 			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
 			return
 		}
-		const res = await session.bot.sendMessage(session.channelId, text.rendered.text, { type, quote })
+		const res = await session.bot.sendMessage({
+			target_id: session.channelId,
+			content: text.rendered.text,
+			type,
+			quote,
+		})
 		if (!res.ok) throw new Error(`KOOK sendMessage failed: ${res.message}`)
 	},
 
@@ -142,9 +141,7 @@ export const kookAdapter: PlatformAdapter<'kook'> = {
 		const quote = options?.quote ? session.data?.msg_id : undefined
 		if (!image.url) throw new Error('KOOK: image.url 为空，无法发送图片')
 		if (isPrivateSession(session)) {
-			const api = session.bot.api ?? session.bot
-			if (!api?.createDirectMessage) throw new Error('KOOK: createDirectMessage 不可用，无法发送私聊')
-			const res = await api.createDirectMessage({
+			const res = await session.bot.createDirectMessage({
 				target_id: session.userId,
 				content: image.url,
 				type: MessageType.image,
@@ -153,7 +150,12 @@ export const kookAdapter: PlatformAdapter<'kook'> = {
 			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
 			return
 		}
-		const res = await session.bot.sendMessage(session.channelId, image.url, { type: MessageType.image, quote })
+		const res = await session.bot.sendMessage({
+			target_id: session.channelId,
+			content: image.url,
+			type: MessageType.image,
+			quote,
+		})
 		if (!res.ok) throw new Error(`KOOK sendImage failed: ${res.message}`)
 	},
 
@@ -161,9 +163,7 @@ export const kookAdapter: PlatformAdapter<'kook'> = {
 		const quote = options?.quote ? session.data?.msg_id : undefined
 		if (!file.url) throw new Error('KOOK: file.url 为空，无法发送文件')
 		if (isPrivateSession(session)) {
-			const api = session.bot.api ?? session.bot
-			if (!api?.createDirectMessage) throw new Error('KOOK: createDirectMessage 不可用，无法发送私聊')
-			const res = await api.createDirectMessage({
+			const res = await session.bot.createDirectMessage({
 				target_id: session.userId,
 				content: file.url,
 				type: MessageType.file,
@@ -172,7 +172,12 @@ export const kookAdapter: PlatformAdapter<'kook'> = {
 			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
 			return
 		}
-		const res = await session.bot.sendMessage(session.channelId, file.url, { type: MessageType.file, quote })
+		const res = await session.bot.sendMessage({
+			target_id: session.channelId,
+			content: file.url,
+			type: MessageType.file,
+			quote,
+		})
 		if (!res.ok) throw new Error(`KOOK sendFile failed: ${res.message}`)
 	},
 }

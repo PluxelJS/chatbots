@@ -24,9 +24,7 @@
   "scripts": {
     "build": "pluxel build"
   },
-  "dependencies": {
-    "type-flag": "^4.0.2"
-  },
+  "dependencies": {},
   "peerDependencies": {
     "pluxel-plugin-websocket": "workspace:*",
     "pluxel-plugin-wretch": "workspace:*"

@@ -39,3 +39,4 @@ export const bold = (...children: InlinePart[]): Part => ({ type: 'styled', styl
 export const italic = (...children: InlinePart[]): Part => ({ type: 'styled', style: 'italic', children })
 export const code = (t: string): Part => ({ type: 'styled', style: 'code', children: [{ type: 'text', text: t }] })
 export const strike = (...children: InlinePart[]): Part => ({ type: 'styled', style: 'strike', children })
+

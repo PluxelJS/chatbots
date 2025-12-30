@@ -6,7 +6,19 @@ import type { TelegramChannel } from '../events'
 import type { UpdateMeta } from '../types'
 import { AbstractBot } from './api'
 import { dispatchUpdate } from '../events/dispatcher'
-import { createInitialStatus, type TelegramBotStatus } from '../status'
+import { createInitialStatus, type TelegramBotStatus } from '../shared/status'
+
+export type TelegramBotControl = {
+	info: {
+		instanceId: string
+		apiBase: string
+		mode: 'polling' | 'webhook' | 'api'
+		tokenSuffix: string
+	}
+	start(): Promise<void>
+	stop(): Promise<void>
+	getStatusSnapshot(): TelegramBotStatus
+}
 
 export interface PollingOptions {
 	/** 超时时间（毫秒），默认 25000 */
@@ -59,6 +71,7 @@ const DEFAULT_POLLING: PollingOptions = {
 }
 
 export class Bot extends AbstractBot {
+	public readonly $control: TelegramBotControl
 	public selfInfo?: UserFromGetMe
 	public readonly token: string
 	public readonly apiBase: string
@@ -100,6 +113,17 @@ export class Bot extends AbstractBot {
 		this.instanceId = `tg-bot-${++Bot.seq}`
 		this.status = createInitialStatus(this.instanceId, this.mode, this.token)
 		this.onStatusChange = onStatusChange
+		this.$control = {
+			info: {
+				instanceId: this.instanceId,
+				apiBase: this.apiBase,
+				mode: this.mode,
+				tokenSuffix: this.status.tokenSuffix,
+			},
+			start: () => this.start(),
+			stop: () => this.stop(),
+			getStatusSnapshot: () => this.getStatusSnapshot(),
+		}
 	}
 
 	private updateStatus(patch: Partial<TelegramBotStatus>) {

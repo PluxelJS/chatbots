@@ -2,14 +2,13 @@ import { BasePlugin, Plugin } from '@pluxel/core'
 import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { TelegramConfig, type TelegramConfigType } from './config'
-import { TelegramRuntime, type TelegramSnapshot } from './runtime/runtime'
+import { TelegramRuntime, type TelegramSnapshot } from './runtime'
 import { registerTelegramExtensions } from './extensions'
 import type { TelegramBotRpc } from './runtime/rpc'
 
 export * from './types'
 export * from './bot'
 export * from './events'
-export * from './cmd'
 export type { TelegramSnapshot }
 
 /* ======================== Plugin ======================== */
@@ -28,7 +27,7 @@ export class TelegramPlugin extends BasePlugin {
 	override async init(abort: AbortSignal): Promise<void> {
 		await this.runtime.bootstrap(this.ctx, this.config, abort)
 		if (abort.aborted) return
-		registerTelegramExtensions(this)
+		registerTelegramExtensions({ ctx: this.ctx, runtime: this.runtime })
 	}
 
 	override async stop(): Promise<void> {

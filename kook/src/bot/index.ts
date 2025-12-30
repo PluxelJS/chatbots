@@ -1,14 +1,25 @@
 import type { Context } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
-import { internalWebhook } from '../event-trigger'
 import type { KookChannel } from '../events'
 import type { User } from '../types'
 import { AbstractBot } from './api'
-import { createInitialStatus, type KookBotStatus } from './status'
+import { dispatchKookEvent } from '../events/dispatcher'
+import { createInitialStatus, type KookBotStatus } from '../shared/status'
 import { KookGatewayClient, type GatewayState } from './websocket'
 
+export type KookBotControl = {
+	info: {
+		instanceId: string
+		mode: 'gateway' | 'webhook' | 'api'
+	}
+	start(): Promise<string>
+	stop(): Promise<void>
+	getStatusSnapshot(): KookBotStatus
+}
+
 export class Bot extends AbstractBot {
+	public readonly $control: KookBotControl
 	public selfInfo?: User
 	client?: KookGatewayClient
 	public readonly instanceId: string
@@ -31,6 +42,12 @@ export class Bot extends AbstractBot {
 		this.status = createInitialStatus(this.instanceId)
 		this.mode = mode
 		this.onStatusChange = onStatusChange
+		this.$control = {
+			info: { instanceId: this.instanceId, mode: this.mode },
+			start: () => this.start(),
+			stop: () => this.stop(),
+			getStatusSnapshot: () => this.getStatusSnapshot(),
+		}
 	}
 
 	private updateStatus(patch: Partial<KookBotStatus>) {
@@ -131,7 +148,7 @@ export class Bot extends AbstractBot {
 						lastEventAt: Date.now(),
 						lastSequence: sn,
 					})
-					internalWebhook(this.events, this.ctx, this, data)
+					dispatchKookEvent(this.events, this.ctx, this, data)
 				},
 				onError: (e) => {
 					const msg = e instanceof Error ? e.message : String(e)

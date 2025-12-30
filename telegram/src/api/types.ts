@@ -65,78 +65,30 @@ export type DeleteWebhookArgs = MethodArgs<'deleteWebhook'>
 export type GetUpdatesArgs = MethodArgs<'getUpdates'>
 export type SendChatActionArgs = MethodArgs<'sendChatAction'>
 
-export interface TelegramHelpers {
+export type TelegramApiCall = {
+	<K extends ApiMethodName>(
+		apiMethod: K,
+		payload?: MethodArgs<K>,
+	): Promise<Result<MethodReturn<K>>>
+	<T = unknown>(apiMethod: string, payload?: JsonLike): Promise<Result<T>>
+}
+
+export type TelegramRawApi = {
+	call: TelegramApiCall
+	request: TelegramRequest
+}
+
+export type TelegramApiTools = {
 	createMessageBuilder(
-		chatId: number | string,
-		defaults?: Partial<SendMessageOptions>,
-	): ChatSession['send']
-
-	createChatSession(
 		chatId: SendMessageArgs['chat_id'],
 		defaults?: Partial<SendMessageOptions>,
-	): ChatSession
+	): TelegramConversation['send']
+	createConversation(chatId: SendMessageArgs['chat_id'], defaults?: Partial<SendMessageOptions>): TelegramConversation
 }
 
-export interface TelegramShortcuts {
-	sendMessage(
-		chatId: SendMessageArgs['chat_id'],
-		text: SendMessageArgs['text'],
-		options?: SendMessageOptions,
-	): Promise<Result<MethodReturn<'sendMessage'>>>
-	forwardMessage(
-		chatId: ForwardMessageArgs['chat_id'],
-		fromChatId: ForwardMessageArgs['from_chat_id'],
-		messageId: ForwardMessageArgs['message_id'],
-		options?: ForwardMessageOptions,
-	): Promise<Result<MethodReturn<'forwardMessage'>>>
-	editMessageText(
-		text: EditMessageTextArgs['text'],
-		options: Omit<EditMessageTextArgs, 'text'>,
-	): Promise<Result<MethodReturn<'editMessageText'>>>
-	deleteMessage(
-		chatId: DeleteMessageArgs['chat_id'],
-		messageId: DeleteMessageArgs['message_id'],
-	): Promise<Result<MethodReturn<'deleteMessage'>>>
-	sendPhoto(
-		chatId: SendPhotoArgs['chat_id'],
-		photo: SendPhotoArgs['photo'],
-		options?: SendPhotoOptions,
-	): Promise<Result<MethodReturn<'sendPhoto'>>>
-	sendDocument(
-		chatId: SendDocumentArgs['chat_id'],
-		document: SendDocumentArgs['document'],
-		options?: SendDocumentOptions,
-	): Promise<Result<MethodReturn<'sendDocument'>>>
-	sendAnimation(
-		chatId: SendAnimationArgs['chat_id'],
-		animation: SendAnimationArgs['animation'],
-		options?: SendAnimationOptions,
-	): Promise<Result<MethodReturn<'sendAnimation'>>>
-	answerCallbackQuery(
-		callbackQueryId: AnswerCallbackQueryArgs['callback_query_id'],
-		options?: Omit<AnswerCallbackQueryArgs, 'callback_query_id'>,
-	): Promise<Result<MethodReturn<'answerCallbackQuery'>>>
-	setWebhook(url: SetWebhookArgs['url'], options?: Omit<SetWebhookArgs, 'url'>): Promise<Result<MethodReturn<'setWebhook'>>>
-	deleteWebhook(options?: DeleteWebhookArgs): Promise<Result<MethodReturn<'deleteWebhook'>>>
-	getWebhookInfo(): Promise<Result<MethodReturn<'getWebhookInfo'>>>
-	getUpdates(options?: GetUpdatesArgs): Promise<Result<MethodReturn<'getUpdates'>>>
-}
+export type TelegramApi = TelegramCoreApi & { $raw: TelegramRawApi; $tool: TelegramApiTools }
 
-export type ShortcutKeys =
-	| 'sendMessage'
-	| 'forwardMessage'
-	| 'editMessageText'
-	| 'deleteMessage'
-	| 'sendPhoto'
-	| 'sendDocument'
-	| 'sendAnimation'
-	| 'answerCallbackQuery'
-	| 'setWebhook'
-	| 'deleteWebhook'
-
-export type TelegramApi = Omit<TelegramCoreApi, ShortcutKeys> & TelegramHelpers & TelegramShortcuts
-
-export interface ChatSession {
+export interface TelegramConversation {
 	chatId: SendMessageArgs['chat_id']
 	readonly defaults?: Partial<SendMessageOptions>
 	readonly lastMessageId?: number
@@ -186,7 +138,7 @@ export interface ChatSession {
 		ttlMs?: number,
 	): Promise<Result<MethodReturn<'sendMessage'>>>
 	track(messageId?: number | null): number | undefined
-	withDefaults(overrides: Partial<SendMessageOptions>): ChatSession
+	withDefaults(overrides: Partial<SendMessageOptions>): TelegramConversation
 }
 
 export type ApiMethodName = keyof Methods

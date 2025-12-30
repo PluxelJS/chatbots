@@ -1,10 +1,10 @@
 import type { Context } from '@pluxel/hmr'
 import type { SseChannel } from '@pluxel/hmr/services'
 import type { HttpClient } from 'pluxel-plugin-wretch'
-import type { WebhookOptions } from './bot'
-import { Bot } from './bot'
-import { createTelegramChannel, type TelegramChannel } from './events'
-import type { BotConfig } from './bot'
+import type { WebhookOptions } from '../bot'
+import { Bot } from '../bot'
+import { createTelegramChannel, type TelegramChannel } from '../events'
+import type { BotConfig } from '../bot'
 import {
 	TelegramBotRegistry,
 	type BotState,
@@ -12,7 +12,7 @@ import {
 	type TelegramBotPublic,
 	type TelegramBotRecord,
 	type UpdateBotInput,
-} from './runtime/bot-registry'
+} from './bot-registry'
 
 export class TelegramBotManager {
 	public readonly botsById = new Map<string, Bot>()

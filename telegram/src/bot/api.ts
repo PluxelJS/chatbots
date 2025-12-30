@@ -1,16 +1,21 @@
 import type { HttpClient } from 'pluxel-plugin-wretch'
-import type { TelegramApiOptions, TelegramApi } from '../api'
-import { createTelegramApi } from '../api'
+import type { TelegramApi, TelegramApiOptions } from '../api'
+import { createTelegramRawApi } from '../api/raw'
+import { TELEGRAM_API_PROTO } from '../api/prototype'
+import { createTelegramTools } from '../api/tool'
 
 export class AbstractBot {
-	public readonly api: TelegramApi
+	public readonly $raw: TelegramApi['$raw']
+	public readonly $tool: TelegramApi['$tool']
 
 	constructor(public readonly http: HttpClient, options?: TelegramApiOptions) {
-		this.api = createTelegramApi(http, options)
-		// Expose api methods directly on the bot instance for ergonomic calls.
-		Object.assign(this, this.api)
+		this.$raw = createTelegramRawApi(http, options)
+		this.$tool = createTelegramTools(this as unknown as TelegramApi)
 	}
 }
+
+// Make api endpoints available on every bot instance via prototype chain.
+Object.setPrototypeOf(AbstractBot.prototype, TELEGRAM_API_PROTO)
 
 /* biome-ignore lint/suspicious/noUnsafeDeclarationMerging: extend class shape with API methods */
 export interface AbstractBot extends TelegramApi {}

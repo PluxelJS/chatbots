@@ -1,5 +1,5 @@
 import type { FilePart, ImagePart, MessageContent, Platform, PlatformRegistry, ReplyOptions } from '../types'
-import { normalizeMessageContent } from '@pluxel/parts'
+import { normalizeMessageContent } from '../parts'
 import type { OutboundText, PlatformAdapter } from '../platforms/adapter'
 import { assertTextOnly, normalizeTextPartsForAdapter, type TextLikePart } from '../render/normalize'
 

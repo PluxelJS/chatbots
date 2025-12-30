@@ -1,1 +1,1 @@
-export * from '@pluxel/parts/jsx-runtime'
+export * from './parts/jsx-runtime'

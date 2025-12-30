@@ -27,6 +27,13 @@ export const planOutbound = (parts: Part[], capabilities: PlatformCapabilities):
 
 		if (part.type === 'image') {
 			const supportsMixed = capabilities.supportsMixedMedia === true
+			// Only treat adjacent text as caption when it's one-sided (all before or all after).
+			// If text exists on both sides of the image, keep the original order and don't bind a caption.
+			if (supportsMixed && textBuffer.length && index + 1 < parts.length && isTextLike(parts[index + 1]!)) {
+				flushText()
+				ops.push({ type: 'image', image: part })
+				continue
+			}
 			if (supportsMixed && textBuffer.length) {
 				ops.push({ type: 'image', image: part, captionParts: textBuffer, captionPosition: 'before' })
 				textBuffer = []

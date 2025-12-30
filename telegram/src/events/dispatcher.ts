@@ -29,7 +29,7 @@ export function dispatchUpdate(
 		const result = events.message.waterfall(session)
 		if (result.value) {
 			void bot
-				.sendMessage(session.chatId, result.value)
+				.sendMessage({ chat_id: session.chatId, text: result.value })
 				.catch((e: unknown) => ctx.logger.error(e, 'telegram: message 监听器返回的信息发送失败。'))
 		}
 		return

@@ -18,7 +18,7 @@ import type {
 	InlinePart,
 	MentionPart,
 	Part,
-} from '../../model'
+} from '@pluxel/bot-layer/web'
 
 const isTextLike = (part: Part): part is InlinePart | CodeBlockPart => {
 	return part.type !== 'image' && part.type !== 'file'

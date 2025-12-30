@@ -10,7 +10,7 @@ import type {
 
 const err = <T>(message: string, raw?: unknown): Result<T> => ({
 	ok: false,
-	retcode: -1,
+	code: -1,
 	message,
 	raw: raw ?? message,
 })
@@ -41,10 +41,27 @@ export function createMilkyTools(api: MilkyApi): MilkyApiTools {
 			return send([{ type: 'reply', data: { message_seq: messageSeq } } as const, ...segs])
 		}
 
-		const recall: MilkyGroupSession['recall'] = async (messageSeq) => {
+		const deleteMessage: MilkyGroupSession['delete'] = async (messageSeq) => {
 			const seq = messageSeq ?? lastMessageSeq
 			if (!seq) return err<void>('no message_seq to recall')
 			return api.recall_group_message({ group_id: groupId, message_seq: seq })
+		}
+
+		const upsert: MilkyGroupSession['upsert'] = async (message) => {
+			if (lastMessageSeq) {
+				const res = await deleteMessage(lastMessageSeq)
+				if (res.ok) lastMessageSeq = undefined
+			}
+			return send(message)
+		}
+
+		const transient: MilkyGroupSession['transient'] = async (message, ttlMs = 5000) => {
+			const res = await send(message)
+			const seq = res.ok ? res.data.message_seq : undefined
+			if (res.ok && typeof seq === 'number' && ttlMs > 0) {
+				scheduleDelete(() => deleteMessage(seq), ttlMs)
+			}
+			return res
 		}
 
 		const track: MilkyGroupSession['track'] = (messageSeq) => {
@@ -63,7 +80,9 @@ export function createMilkyTools(api: MilkyApi): MilkyApiTools {
 			},
 			send,
 			reply,
-			recall,
+			delete: deleteMessage,
+			upsert,
+			transient,
 			track,
 		}
 	}
@@ -85,10 +104,27 @@ export function createMilkyTools(api: MilkyApi): MilkyApiTools {
 			return send([{ type: 'reply', data: { message_seq: messageSeq } } as const, ...segs])
 		}
 
-		const recall: MilkyPrivateSession['recall'] = async (messageSeq) => {
+		const deleteMessage: MilkyPrivateSession['delete'] = async (messageSeq) => {
 			const seq = messageSeq ?? lastMessageSeq
 			if (!seq) return err<void>('no message_seq to recall')
 			return api.recall_private_message({ user_id: userId, message_seq: seq })
+		}
+
+		const upsert: MilkyPrivateSession['upsert'] = async (message) => {
+			if (lastMessageSeq) {
+				const res = await deleteMessage(lastMessageSeq)
+				if (res.ok) lastMessageSeq = undefined
+			}
+			return send(message)
+		}
+
+		const transient: MilkyPrivateSession['transient'] = async (message, ttlMs = 5000) => {
+			const res = await send(message)
+			const seq = res.ok ? res.data.message_seq : undefined
+			if (res.ok && typeof seq === 'number' && ttlMs > 0) {
+				scheduleDelete(() => deleteMessage(seq), ttlMs)
+			}
+			return res
 		}
 
 		const track: MilkyPrivateSession['track'] = (messageSeq) => {
@@ -107,7 +143,9 @@ export function createMilkyTools(api: MilkyApi): MilkyApiTools {
 			},
 			send,
 			reply,
-			recall,
+			delete: deleteMessage,
+			upsert,
+			transient,
 			track,
 		}
 	}
@@ -120,3 +158,9 @@ export function createMilkyTools(api: MilkyApi): MilkyApiTools {
 	}
 }
 
+function scheduleDelete(task: () => Promise<unknown>, ttlMs: number) {
+	const timer = setTimeout(() => {
+		void task().catch(() => {})
+	}, ttlMs)
+	;(timer as any).unref?.()
+}

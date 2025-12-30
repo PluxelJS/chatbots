@@ -2,32 +2,19 @@ import type { Context } from '@pluxel/hmr'
 import type { Config } from '@pluxel/hmr'
 import type { HttpClient } from 'pluxel-plugin-wretch'
 import { middlewares, WretchPlugin } from 'pluxel-plugin-wretch'
-import {
-	createCommandRegistry,
-	createConversationManager,
-	type CommandRegistry,
-	type ConversationManager,
-} from '../cmd'
-import type { MessageSession } from '../types'
 import type { TelegramConfigType } from '../config'
-import { TelegramBotManager, type TelegramBotPublic } from '../bot-manager'
+import { TelegramBotManager, type TelegramBotPublic } from './bot-manager'
 import { TelegramBotRegistry, type CreateBotInput, type UpdateBotInput } from './bot-registry'
 import type { TelegramChannel } from '../events'
 import { TelegramSseBridge, type TelegramSnapshot } from './sse'
 
 /**
- * 将 Telegram 插件运行时（命令流水线、SSE、RPC、Bot 管理）集中到一个可测试的 orchestrator。
+ * 将 Telegram 插件运行时（SSE、RPC、Bot 管理）集中到一个可测试的 orchestrator。
  * 便于前端/插件侧共享单一的数据源与生命周期。
  */
 export class TelegramRuntime {
 	/** 共享 HTTP 客户端，供 API/子模块重用 */
 	public readonly baseClient: HttpClient
-
-	/** 指令注册表 */
-	public readonly commands: CommandRegistry
-
-	/** 对话管理器 */
-	public readonly conversations: ConversationManager
 
 	/** 事件通道 */
 	public events!: TelegramChannel
@@ -41,8 +28,6 @@ export class TelegramRuntime {
 	private abort?: AbortSignal
 
 	constructor(wretch: WretchPlugin) {
-		this.commands = createCommandRegistry()
-		this.conversations = createConversationManager()
 		this.baseClient = wretch
 			.createClient({
 				throwHttpErrors: true,
@@ -62,8 +47,6 @@ export class TelegramRuntime {
 
 		await this.setupRepoAndManager()
 		if (this.abort?.aborted) return
-		this.commands.onChange(() => this.syncCommandsToActiveBots())
-		this.registerPipelines()
 		this.scheduleAutoConnect()
 	}
 
@@ -110,9 +93,7 @@ export class TelegramRuntime {
 	}
 
 	async connectBot(id: string) {
-		const result = await this.manager.connectBot(id)
-		await this.syncCommandsToActiveBots()
-		return result
+		return this.manager.connectBot(id)
 	}
 
 	async disconnectBot(id: string) {
@@ -147,38 +128,6 @@ export class TelegramRuntime {
 		this.sseBridge = new TelegramSseBridge(this.repo, this.manager)
 	}
 
-	private registerPipelines() {
-		// 消息处理流水线 - 同步部分处理指令识别，异步部分单独处理
-		this.events.message.on((session, next) => {
-			const text = (session.message.text ?? session.message.caption ?? '').trim()
-			if (!text) return next(session)
-
-			// 检查是否在对话中 - 异步处理
-			if (this.conversations.isInConversation(session.userId, session.chatId)) {
-				void this.handleConversation(session)
-				return undefined
-			}
-
-			// 检查是否是指令
-			if (text.startsWith('/')) {
-				void this.handleCommand(session, text)
-				return undefined
-			}
-
-			// 不是指令，继续流水线
-			return next(session)
-		})
-
-		// 注册内置 /cancel 指令
-		this.commands.register({
-			command: 'cancel',
-			description: '取消当前对话',
-			handler: async (session) => {
-				return this.conversations.cancel(session.userId, session.chatId)
-			},
-		})
-	}
-
 	private async autoConnectBots() {
 		if (this.abort?.aborted) return
 		if (this.config.autoConnect === false) return
@@ -195,7 +144,6 @@ export class TelegramRuntime {
 				}
 			}),
 		)
-		await this.syncCommandsToActiveBots()
 	}
 
 	private scheduleAutoConnect() {
@@ -209,56 +157,6 @@ export class TelegramRuntime {
 		}, 0)
 	}
 
-	private async syncCommandsToActiveBots() {
-		if (!this.config.syncCommands || !this.manager) return
-		const bots = this.manager.getConnectedBots()
-		if (bots.length === 0) return
-
-		await Promise.allSettled(
-			bots.map(async (bot) => {
-				try {
-					await this.commands.syncCommands(bot)
-				} catch (e) {
-					this.ctx.logger.warn(e, 'telegram: 同步指令菜单失败')
-				}
-			}),
-		)
-	}
-
-	/** 处理对话消息（异步） */
-	private async handleConversation(session: MessageSession): Promise<void> {
-		try {
-			const result = await this.conversations.handleMessage(session)
-			if (result.handled && result.reply) {
-				await session.bot.sendMessage(session.chatId, result.reply)
-			}
-		} catch (e) {
-			this.ctx.logger.error(e, 'telegram: 处理对话失败')
-		}
-	}
-
-	/** 处理指令（异步） */
-	private async handleCommand(session: MessageSession, text: string): Promise<void> {
-		try {
-			// 提取指令名和参数
-			const spaceIndex = text.indexOf(' ')
-			let cmdPart = spaceIndex === -1 ? text.slice(1) : text.slice(1, spaceIndex)
-			const args = spaceIndex === -1 ? '' : text.slice(spaceIndex + 1).trim()
-
-			// 处理 /command@botname 格式
-			const atIndex = cmdPart.indexOf('@')
-			if (atIndex !== -1) {
-				cmdPart = cmdPart.slice(0, atIndex)
-			}
-
-			const reply = await this.commands.dispatch(cmdPart, args, session)
-			if (reply) {
-				await session.bot.sendMessage(session.chatId, reply)
-			}
-		} catch (e) {
-			this.ctx.logger.error(e, 'telegram: 执行指令失败')
-		}
-	}
 }
 
 export type { TelegramSnapshot }

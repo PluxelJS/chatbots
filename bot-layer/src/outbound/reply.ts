@@ -1,5 +1,5 @@
 import type { FilePart, ImagePart, MessageContent, Part, Platform, PlatformRegistry, ReplyOptions } from '../types'
-import { normalizeMessageContent } from '@pluxel/parts'
+import { normalizeMessageContent } from '../parts'
 import { planOutbound } from './plan'
 import type { PlatformAdapter } from '../platforms/adapter'
 import { createSendHelpers } from './send-helpers'

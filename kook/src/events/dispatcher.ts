@@ -1,9 +1,9 @@
 import type { Context } from '@pluxel/hmr'
-import type { Bot } from './bot'
-import type { KookChannel } from './events'
-import type { Session } from './types'
+import type { Bot } from '../bot'
+import type { KookChannel } from './index'
+import type { Session } from '../types'
 
-export function internalWebhook(events: KookChannel, ctx: Context, bot: Bot, data: any) {
+export function dispatchKookEvent(events: KookChannel, ctx: Context, bot: Bot, data: any) {
 	// 高频字段本地缓存，减少链式取址
 	const ex = data?.extra
 	const body = ex?.body
@@ -28,12 +28,11 @@ export function internalWebhook(events: KookChannel, ctx: Context, bot: Bot, dat
 		session.guildId = ex?.guild_id || ''
 		session.channelId = targetId || ''
 
-		// 你的流水线语义（返回 { value }）
 		const result = events.message.waterfall(session)
 		const { value } = result
 		if (value) {
 			void session.bot
-				.sendMessage(session.channelId, value)
+				.sendMessage({ target_id: session.channelId, content: value })
 				.catch((e) => ctx.logger.error(e, 'message 监听器返回的信息发送失败。'))
 		}
 
@@ -41,14 +40,13 @@ export function internalWebhook(events: KookChannel, ctx: Context, bot: Bot, dat
 		if (chType === 'GROUP') {
 			events.messageCreated.emit(session)
 		} else if (chType === 'PERSON') {
-			session.guildId = targetId || session.guildId
 			events.privateMessageCreated.emit(session)
 		}
 		return
 	}
 
 	// —— 特殊类型（按钮/系统回调等） —— //
-	session.guildId = body?.guild_id || targetId || session.guildId
+	session.guildId = body?.guild_id || session.guildId
 	session.channelId = body?.channel_id || targetId || session.channelId
 
 	const t = ex?.type
