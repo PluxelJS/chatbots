@@ -39,6 +39,10 @@ export class ChatbotsPermissionApi {
 		return this.perms.updateRole(roleId, patch)
 	}
 
+	deleteRole(roleId: number) {
+		return this.perms.deleteRole(roleId)
+	}
+
 	assignRoleToUser(userId: number, roleId: number) {
 		return this.perms.assignRoleToUser(userId, roleId)
 	}

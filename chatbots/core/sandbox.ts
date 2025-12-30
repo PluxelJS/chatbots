@@ -224,6 +224,10 @@ export class ChatbotsSandboxRpc extends RpcTarget {
 		await this.permissions.updateRole(roleId, patch)
 	}
 
+	async deleteRole(roleId: number): Promise<void> {
+		await this.permissions.deleteRole(roleId)
+	}
+
 	async assignRoleToUser(userId: number, roleId: number): Promise<void> {
 		await this.permissions.assignRoleToUser(userId, roleId)
 	}

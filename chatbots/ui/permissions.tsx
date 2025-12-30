@@ -17,6 +17,8 @@ import {
 	Text,
 	TextInput,
 	Tooltip,
+	UnstyledButton,
+	ThemeIcon,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
 import {
@@ -74,6 +76,22 @@ type PendingRoleChange = {
 
 const getGrantNode = (grant: PermissionGrantDto & { node?: string }) => formatGrantNode(grant)
 
+const parseGrantNodeForUi = (value: string) => {
+	const s = value.trim()
+	const dot = s.indexOf('.')
+	if (dot <= 0) return null
+	const nsKey = s.slice(0, dot).trim()
+	const localRaw = s.slice(dot + 1).trim()
+	if (!nsKey || !localRaw) return null
+	if (localRaw === '*') return { nsKey, kind: 'star' as const, local: '' }
+	if (localRaw.endsWith('.*')) {
+		const prefix = localRaw.slice(0, -2)
+		if (!prefix) return null
+		return { nsKey, kind: 'star' as const, local: prefix }
+	}
+	return { nsKey, kind: 'exact' as const, local: localRaw }
+}
+
 const applyPendingGrantSelection = (
 	next: Map<string, PendingChange>,
 	node: string,
@@ -120,6 +138,7 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 	const [newName, setNewName] = useState('')
 	const [newRank, setNewRank] = useState<number | ''>(0)
 	const [newParentId, setNewParentId] = useState<string | null>(null)
+	const [roleSearch, setRoleSearch] = useState('')
 
 	const handleCreate = useCallback(async () => {
 		const rank = typeof newRank === 'number' ? newRank : 0
@@ -131,6 +150,18 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 		setNewParentId(null)
 		setNewRank(0)
 	}, [newName, newParentId, newRank, onSelectRole, roles])
+
+	const visibleRoles = useMemo(() => {
+		const q = roleSearch.trim().toLowerCase()
+		if (!q) return roles.roles
+		return roles.roles.filter((role) => {
+			if (String(role.roleId).includes(q)) return true
+			if (String(role.rank).includes(q)) return true
+			if (role.parentRoleId !== null && String(role.parentRoleId).includes(q)) return true
+			if ((role.name ?? '').toLowerCase().includes(q)) return true
+			return false
+		})
+	}, [roleSearch, roles.roles])
 
 	return (
 		<Panel title="Roles">
@@ -164,7 +195,13 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 								data={[{ value: '', label: 'No parent' }, ...roles.options]}
 								onChange={(v) => setNewParentId(v || null)}
 							/>
-							<NumberInput label="Rank" size="xs" value={newRank} onChange={setNewRank} min={0} />
+							<NumberInput
+								label="Rank"
+								size="xs"
+								value={newRank}
+								onChange={(v) => setNewRank(typeof v === 'number' ? v : '')}
+								min={0}
+							/>
 							<Button size="xs" variant="light" color="teal" onClick={handleCreate} leftSection={<IconPlus size={14} />}>
 								Create
 							</Button>
@@ -172,6 +209,20 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 					</Paper>
 				</Collapse>
 			</Box>
+
+			<Group gap="xs" align="center" mb="xs">
+				<TextInput
+					placeholder="Filter roles…"
+					size="xs"
+					leftSection={<IconSearch size={14} />}
+					value={roleSearch}
+					onChange={(e) => setRoleSearch(e.currentTarget.value)}
+					style={{ flex: 1 }}
+				/>
+				<Text size="xs" c="dimmed">
+					{visibleRoles.length}/{roles.roles.length}
+				</Text>
+			</Group>
 
 			<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
 				<Table highlightOnHover withTableBorder verticalSpacing="xs" horizontalSpacing="xs">
@@ -183,14 +234,14 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 						</Table.Tr>
 					</Table.Thead>
 					<Table.Tbody>
-						{roles.roles.map((role) => (
+						{visibleRoles.map((role) => (
 							<Table.Tr
 								key={role.roleId}
 								onClick={() => onSelectRole(role.roleId)}
 								style={{
 									cursor: 'pointer',
 									backgroundColor:
-										role.roleId === selectedRoleId ? 'var(--mantine-color-blue-light)' : undefined,
+										role.roleId === selectedRoleId ? 'var(--mantine-color-gray-light)' : undefined,
 								}}
 							>
 								<Table.Td>
@@ -230,6 +281,7 @@ type RoleGrantsPanelProps = {
 
 function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProps) {
 	const role = useMemo(() => roles.roles.find((r) => r.roleId === roleId), [roleId, roles.roles])
+	const isDefaultRole = role ? (role.name ?? '').trim().toUpperCase() === 'DEFAULT' : false
 
 	const [selectedNodes, setSelectedNodes] = useState<string[]>([])
 	const [effect, setEffect] = useState<PermissionEffect>('allow')
@@ -284,9 +336,14 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 		// New pending grants
 		for (const [node, change] of pendingChanges) {
 			if (change.type === 'grant' && !seen.has(node)) {
+				const parsed = parseGrantNodeForUi(node) ?? { nsKey: '', kind: node.endsWith('.*') ? ('star' as const) : ('exact' as const), local: '' }
 				result.push({
 					id: -Date.now() - Math.random(), // Temp ID
-					kind: node.endsWith('.*') ? 'star' : 'exact',
+					subjectType: 'role',
+					subjectId: roleId ?? 0,
+					nsKey: parsed.nsKey,
+					kind: parsed.kind,
+					local: parsed.local,
 					node,
 					effect: change.effect!,
 					updatedAt: new Date().toISOString(),
@@ -452,12 +509,48 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 
 	const handleSave = useCallback(async () => {
 		if (!role) return
-		await roles.updateRole(role.roleId, {
-			name: name.trim() || null,
-			parentRoleId: parentId ? Number(parentId) : null,
-			rank: typeof rank === 'number' ? rank : role.rank,
-		})
+		try {
+			await roles.updateRole(role.roleId, {
+				name: name.trim() || null,
+				parentRoleId: parentId ? Number(parentId) : null,
+				rank: typeof rank === 'number' ? rank : role.rank,
+			})
+		} catch (err) {
+			alert(err instanceof Error ? err.message : String(err))
+		}
 	}, [name, parentId, rank, role, roles])
+
+	const isRoleDirty = useMemo(() => {
+		if (!role) return false
+		const normalizeName = (value: string | null | undefined) => {
+			const trimmed = typeof value === 'string' ? value.trim() : ''
+			return trimmed ? trimmed : null
+		}
+		const nextName = normalizeName(name)
+		const nextParent = parentId ? Number(parentId) : null
+		const nextRank = typeof rank === 'number' ? rank : role.rank
+
+		const curName = normalizeName(role.name)
+		const curParent = role.parentRoleId ?? null
+		const curRank = role.rank
+
+		return nextName !== curName || nextParent !== curParent || nextRank !== curRank
+	}, [name, parentId, rank, role])
+
+	const handleDeleteRole = useCallback(async () => {
+		if (!role) return
+		if (isDefaultRole) {
+			alert('DEFAULT role cannot be deleted.')
+			return
+		}
+		const label = role.name?.trim() ? `"${role.name}"` : `#${role.roleId}`
+		if (!confirm(`Delete role ${label}?\n\nThis will also remove:\n- all grants assigned to this role\n- all user assignments to this role\n\nChild roles will be re-parented.`)) return
+		try {
+			await roles.deleteRole(role.roleId)
+		} catch (err) {
+			alert(err instanceof Error ? err.message : String(err))
+		}
+	}, [isDefaultRole, role, roles])
 
 	if (!role) {
 		return (
@@ -485,6 +578,7 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 						placeholder="Role name"
 						value={name}
 						onChange={(e) => setName(e.currentTarget.value)}
+						onKeyDown={(e) => e.key === 'Enter' && handleSave()}
 					/>
 					<Select
 						label="Parent"
@@ -498,9 +592,23 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 						onChange={(v) => setParentId(v || null)}
 					/>
 					<NumberInput label="Rank" size="xs" style={{ width: 80 }} value={rank} onChange={(v) => setRank(typeof v === 'number' ? v : '')} min={0} />
-					<Button size="xs" variant="light" onClick={handleSave}>
+					<Button size="xs" variant="light" onClick={handleSave} disabled={!isRoleDirty}>
 						Save
 					</Button>
+					<Tooltip label={isDefaultRole ? 'DEFAULT role cannot be deleted' : 'Delete role'} disabled={!isDefaultRole}>
+						<span>
+							<Button
+								size="xs"
+								variant="light"
+								color="red"
+								onClick={handleDeleteRole}
+								leftSection={<IconTrash size={14} />}
+								disabled={isDefaultRole}
+							>
+								Delete
+							</Button>
+						</span>
+					</Tooltip>
 				</Group>
 
 				<PermissionPicker
@@ -652,6 +760,7 @@ function GrantsTableWithPending({
 							indeterminate={someSelected && !allSelected}
 							onChange={toggleAll}
 							disabled={disabled}
+							aria-label={allSelected ? 'Deselect all grants' : 'Select all grants'}
 						/>
 					</Table.Th>
 					<Table.Th>Node</Table.Th>
@@ -668,6 +777,7 @@ function GrantsTableWithPending({
 								checked={selectedIds.has(grant.id)}
 								onChange={() => toggleOne(grant.id)}
 								disabled={disabled}
+								aria-label={`Select grant ${getGrantNode(grant)}`}
 							/>
 						</Table.Td>
 						<Table.Td>
@@ -683,6 +793,7 @@ function GrantsTableWithPending({
 									color={grant.effect === 'allow' ? 'teal' : 'red'}
 									onClick={() => onToggleEffect(grant)}
 									disabled={disabled || grant.pending === 'remove'}
+									aria-label={grant.effect === 'allow' ? 'Set effect to deny' : 'Set effect to allow'}
 								>
 									{grant.effect === 'allow' ? <IconCheck size={14} /> : <IconX size={14} />}
 								</ActionIcon>
@@ -698,10 +809,11 @@ function GrantsTableWithPending({
 							<Tooltip label={grant.pending === 'remove' ? 'Undo remove' : 'Revoke'}>
 								<ActionIcon
 									variant="subtle"
-									color={grant.pending === 'remove' ? 'blue' : 'red'}
+									color={grant.pending === 'remove' ? 'gray' : 'red'}
 									size="sm"
 									onClick={() => onRevoke(grant)}
 									disabled={disabled}
+									aria-label={grant.pending === 'remove' ? `Undo revoke ${getGrantNode(grant)}` : `Revoke ${getGrantNode(grant)}`}
 								>
 									<IconTrash size={14} />
 								</ActionIcon>
@@ -810,6 +922,17 @@ function UserQueuePanel({
 									return (
 										<Paper
 											key={user.id}
+											onKeyDown={(e) => {
+												if (alreadyAdded) return
+												if (e.key === 'Enter' || e.key === ' ') {
+													e.preventDefault()
+													handleAddToQueue(user)
+												}
+											}}
+											tabIndex={alreadyAdded ? -1 : 0}
+											role="button"
+											aria-disabled={alreadyAdded}
+											aria-label={`${user.displayName || `User #${user.id}`}, #${user.id}${alreadyAdded ? ', already added' : ', add to queue'}`}
 											withBorder
 											p="xs"
 											radius="sm"
@@ -821,7 +944,7 @@ function UserQueuePanel({
 										>
 											<Group justify="space-between" align="center" wrap="nowrap">
 												<Group gap="xs" wrap="nowrap">
-													<Avatar size="xs" radius="xl" color="blue">
+													<Avatar size="xs" radius="xl" color="gray">
 														{(user.displayName?.[0] ?? '#').toUpperCase()}
 													</Avatar>
 													<Text size="xs" fw={500} lineClamp={1}>
@@ -832,11 +955,13 @@ function UserQueuePanel({
 													</Badge>
 												</Group>
 												{alreadyAdded ? (
-													<Badge size="xs" color="gray">Added</Badge>
+													<Badge size="xs" variant="light" color="gray">
+														Added
+													</Badge>
 												) : (
-													<ActionIcon size="xs" variant="light" color="teal">
+													<ThemeIcon size="sm" variant="light" color="teal" aria-hidden>
 														<IconPlus size={12} />
-													</ActionIcon>
+													</ThemeIcon>
 												)}
 											</Group>
 										</Paper>
@@ -861,19 +986,28 @@ function UserQueuePanel({
 							{selectedUsers.map((user) => (
 								<Paper
 									key={user.id}
+									onClick={() => handleSelectActive(user)}
+									onKeyDown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault()
+											handleSelectActive(user)
+										}
+									}}
+									tabIndex={0}
+									role="button"
+									aria-label={`Select user ${user.displayName || `#${user.id}`} (#${user.id})`}
 									withBorder
 									p="xs"
 									radius="sm"
 									style={{
 										cursor: 'pointer',
-										borderColor: activeUser?.id === user.id ? 'var(--mantine-color-blue-5)' : undefined,
-										background: activeUser?.id === user.id ? 'var(--mantine-color-blue-light)' : undefined,
+										borderColor: activeUser?.id === user.id ? 'var(--mantine-color-teal-6)' : undefined,
+										background: activeUser?.id === user.id ? 'var(--mantine-color-teal-light)' : undefined,
 									}}
-									onClick={() => handleSelectActive(user)}
 								>
 									<Group justify="space-between" align="center" wrap="nowrap">
 										<Group gap="xs" wrap="nowrap">
-											<Avatar size="sm" radius="xl" color="blue">
+											<Avatar size="sm" radius="xl" color="gray">
 												{(user.displayName?.[0] ?? '#').toUpperCase()}
 											</Avatar>
 											<Stack gap={0}>
@@ -896,6 +1030,7 @@ function UserQueuePanel({
 											size="sm"
 											variant="subtle"
 											color="red"
+											aria-label={`Remove user #${user.id} from selection`}
 											onClick={(e) => {
 												e.stopPropagation()
 												handleRemoveFromQueue(user.id)
@@ -932,6 +1067,8 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 	const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 	const [search, setSearch] = useState('')
 	const [showPendingOnly, setShowPendingOnly] = useState(false)
+	const [roleSearch, setRoleSearch] = useState('')
+	const [showAssignedOnly, setShowAssignedOnly] = useState(false)
 
 	// Batch pending changes
 	const [pendingGrants, setPendingGrants] = useState<Map<string, PendingChange>>(new Map())
@@ -966,9 +1103,14 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 
 		for (const [node, change] of pendingGrants) {
 			if (change.type === 'grant' && !seen.has(node)) {
+				const parsed = parseGrantNodeForUi(node) ?? { nsKey: '', kind: node.endsWith('.*') ? ('star' as const) : ('exact' as const), local: '' }
 				result.push({
 					id: -Date.now() - Math.random(),
-					kind: node.endsWith('.*') ? 'star' : 'exact',
+					subjectType: 'user',
+					subjectId: user?.id ?? 0,
+					nsKey: parsed.nsKey,
+					kind: parsed.kind,
+					local: parsed.local,
 					node,
 					effect: change.effect!,
 					updatedAt: new Date().toISOString(),
@@ -998,7 +1140,7 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 	}, [displayGrants, search, showPendingOnly])
 
 	// Role assignments with pending
-	const roleAssignments = useMemo(() => {
+	const rawRoleAssignments = useMemo(() => {
 		return roles.roles.map((role) => {
 			const assigned = userPerms.roleIds.includes(role.roleId)
 			const pendingKey = `${user?.id ?? 0}:${role.roleId}`
@@ -1019,6 +1161,38 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 			return { role, assigned, displayAssigned, pendingStatus }
 		})
 	}, [roles.roles, userPerms.roleIds, pendingRoles, user?.id])
+
+	const defaultRole = useMemo(
+		() => roles.roles.find((r) => (r.name ?? '').trim().toUpperCase() === 'DEFAULT') ?? null,
+		[roles.roles],
+	)
+
+	const assignedCount = useMemo(
+		() => rawRoleAssignments.reduce((acc, r) => acc + (r.displayAssigned ? 1 : 0), 0),
+		[rawRoleAssignments],
+	)
+
+	const roleAssignments = useMemo(() => {
+		const q = roleSearch.trim().toLowerCase()
+		const roleMatches = (role: (typeof rawRoleAssignments)[number]['role']) => {
+			if (!q) return true
+			const name = (role.name ?? '').toLowerCase()
+			if (name.includes(q)) return true
+			if (String(role.roleId).includes(q)) return true
+			if (`r${role.rank}`.includes(q) || String(role.rank).includes(q)) return true
+			return false
+		}
+
+		const filtered = rawRoleAssignments.filter((r) => roleMatches(r.role)).filter((r) => !showAssignedOnly || r.displayAssigned)
+
+		return [...filtered].sort((a, b) => {
+			const assignedDelta = Number(b.displayAssigned) - Number(a.displayAssigned)
+			if (assignedDelta !== 0) return assignedDelta
+			const rankDelta = b.role.rank - a.role.rank
+			if (rankDelta !== 0) return rankDelta
+			return a.role.roleId - b.role.roleId
+		})
+	}, [rawRoleAssignments, roleSearch, showAssignedOnly])
 
 	const hasPendingChanges = pendingGrants.size > 0 || pendingRoles.size > 0
 	const existingByNode = useMemo(() => {
@@ -1101,6 +1275,22 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 			return next
 		})
 	}, [user])
+
+	const handleClearRoles = useCallback(() => {
+		if (!user) return
+		if (!confirm(`Clear all explicit roles for ${user.displayName || `#${user.id}`}?\n\nDEFAULT will still apply implicitly.`)) return
+		setPendingRoles((prev) => {
+			const next = new Map(prev)
+			const prefix = `${user.id}:`
+			for (const key of next.keys()) {
+				if (key.startsWith(prefix)) next.delete(key)
+			}
+			for (const roleId of userPerms.roleIds) {
+				next.set(`${user.id}:${roleId}`, { userId: user.id, roleId, action: 'unassign' })
+			}
+			return next
+		})
+	}, [user, userPerms.roleIds])
 
 	// Bulk operations
 	const handleBulkAllow = useCallback(() => {
@@ -1199,7 +1389,7 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 			icon={<IconKey size={16} />}
 			badge={
 				<Group gap="xs">
-					<Avatar size="xs" radius="xl" color="blue">
+					<Avatar size="xs" radius="xl" color="gray">
 						{(user.displayName?.[0] ?? '#').toUpperCase()}
 					</Avatar>
 					<Badge variant="light" color="gray">{user.displayName || `#${user.id}`}</Badge>
@@ -1233,28 +1423,100 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 
 				{/* Role Assignments */}
 				<Paper withBorder p="xs" radius="md">
-					<Text fw={600} size="sm" mb="xs">
-						Role assignments
+					<Group justify="space-between" align="center" mb="xs">
+						<Text fw={600} size="sm">
+							Role assignments
+						</Text>
+						<Text size="xs" c="dimmed">
+							{assignedCount}/{roles.roles.length} assigned
+						</Text>
+					</Group>
+					<Group gap="sm" align="center" mb="xs">
+						<TextInput
+							placeholder="Filter roles…"
+							size="xs"
+							leftSection={<IconSearch size={14} />}
+							value={roleSearch}
+							onChange={(e) => setRoleSearch(e.currentTarget.value)}
+							style={{ flex: 1, maxWidth: 240 }}
+						/>
+						<Checkbox
+							size="xs"
+							label="Assigned only"
+							checked={showAssignedOnly}
+							onChange={(e) => setShowAssignedOnly(e.currentTarget.checked)}
+						/>
+						<Button
+							size="xs"
+							variant="light"
+							color="gray"
+							onClick={handleClearRoles}
+							disabled={assignedCount === 0 && pendingRoles.size === 0}
+						>
+							Clear roles
+						</Button>
+						<Text size="xs" c="dimmed">
+							{roleAssignments.length}/{roles.roles.length}
+						</Text>
+					</Group>
+					<Text size="xs" c="dimmed" mb="xs">
+						Tip: click a role badge (or press Enter/Space) to toggle assignment.
 					</Text>
+					{assignedCount === 0 && defaultRole && (
+						<Text size="xs" c="dimmed" mb="xs">
+							No explicit roles assigned. DEFAULT role ({defaultRole.name || `#${defaultRole.roleId}`} · r{defaultRole.rank}) applies implicitly.
+						</Text>
+					)}
 					<ScrollArea style={{ maxHeight: 120 }} type="auto" offsetScrollbars>
 						<Group gap="xs">
 							{roleAssignments.map(({ role, assigned, displayAssigned, pendingStatus }) => (
-								<Badge
+								<Tooltip
 									key={role.roleId}
-									variant={displayAssigned ? 'filled' : 'outline'}
-									color={pendingStatus === 'add' ? 'teal' : pendingStatus === 'remove' ? 'red' : displayAssigned ? 'blue' : 'gray'}
-									style={{ cursor: 'pointer' }}
-									onClick={() => handleToggleRole(role.roleId, assigned)}
-									rightSection={
-										pendingStatus && (
-											<Text size="xs" span>
-												{pendingStatus === 'add' ? '+' : '−'}
-											</Text>
-										)
+									label={
+										[
+											role.name?.trim() ? `${role.name}` : `Role #${role.roleId}`,
+											`#${role.roleId}`,
+											`r${role.rank}`,
+											role.parentRoleId === null ? null : `parent #${role.parentRoleId}`,
+											displayAssigned ? 'assigned' : 'not assigned',
+											pendingStatus === 'add' ? '(pending assign)' : pendingStatus === 'remove' ? '(pending unassign)' : null,
+										].filter(Boolean).join(' · ')
 									}
 								>
-									{role.name || `#${role.roleId}`}
-								</Badge>
+									<UnstyledButton
+										onClick={() => handleToggleRole(role.roleId, assigned)}
+										onKeyDown={(e) => {
+											if (e.key === 'Enter' || e.key === ' ') {
+												e.preventDefault()
+												handleToggleRole(role.roleId, assigned)
+											}
+										}}
+										aria-pressed={displayAssigned}
+										aria-label={`${role.name?.trim() ? role.name : `Role #${role.roleId}`}, rank ${role.rank}, ${displayAssigned ? 'assigned' : 'not assigned'}${pendingStatus === 'add' ? ', pending assign' : pendingStatus === 'remove' ? ', pending unassign' : ''}`}
+										style={{ display: 'inline-flex' }}
+									>
+										<Badge
+											variant={displayAssigned ? 'light' : 'outline'}
+											color={pendingStatus === 'add' ? 'teal' : pendingStatus === 'remove' ? 'red' : 'gray'}
+											style={{ cursor: 'pointer' }}
+											rightSection={
+												<Group gap={4} wrap="nowrap">
+													<Text size="xs" span c="dimmed">
+														r{role.rank}
+													</Text>
+													{displayAssigned && <IconCheck size={12} aria-hidden />}
+													{pendingStatus && (
+														<Text size="xs" span aria-hidden>
+															{pendingStatus === 'add' ? '+' : '−'}
+														</Text>
+													)}
+												</Group>
+											}
+										>
+											{role.name || `#${role.roleId}`}
+										</Badge>
+									</UnstyledButton>
+								</Tooltip>
 							))}
 						</Group>
 					</ScrollArea>
@@ -1332,9 +1594,13 @@ export function ChatbotsPermissionsPage() {
 	const roleGrants = useRoleGrants(selectedRoleId)
 	const userPerms = useUserPermissions(activeUser?.id ?? null)
 
-	// Auto-select first role
+	// Auto-select first role (and recover if selection was deleted)
 	useEffect(() => {
-		if (roles.roles.length && selectedRoleId === null) {
+		if (!roles.roles.length) {
+			if (selectedRoleId !== null) setSelectedRoleId(null)
+			return
+		}
+		if (selectedRoleId === null || !roles.roles.some((r) => r.roleId === selectedRoleId)) {
 			setSelectedRoleId(roles.roles[0]!.roleId)
 		}
 	}, [roles.roles, selectedRoleId])

@@ -203,6 +203,34 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 		})
 	})
 
+	it('deleteRole cleans grants/assignments and reparents children', async () => {
+		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
+			host.getOrThrow(PermCallerA).declareCommands()
+			await perms.permission.canUser(0, 'PermCallerA.cmd.reload')
+
+			const roleParent = await perms.permission.createRole(null, 0, 'Parent')
+			const roleChild = await perms.permission.createRole(roleParent, 0, 'Child')
+			await perms.permission.assignRoleToUser(1, roleParent)
+			await perms.permission.grant('role', roleParent, 'allow', 'PermCallerA.cmd.*')
+			expect(await perms.permission.canUser(1, 'PermCallerA.cmd.reload')).toBe(true)
+
+			await perms.permission.deleteRole(roleParent)
+
+			expect(await perms.permission.canUser(1, 'PermCallerA.cmd.reload')).toBe(false)
+			expect(await perms.permissions.listUserRoleIds(1)).toEqual([])
+
+			const roles = await perms.permissions.listRoles()
+			expect(roles.some((r) => r.roleId === roleParent)).toBe(false)
+			const child = roles.find((r) => r.roleId === roleChild)
+			expect(child?.parentRoleId ?? null).toBe(null)
+
+			const store = (perms.permissions as any).store as {
+				listGrants: (subjectType: 'user' | 'role', subjectId: number) => Promise<Array<{ id: number }>>
+			}
+			expect((await store.listGrants('role', roleParent)).length).toBe(0)
+		})
+	})
+
 	it('revoke works after plugin unload (offline cleanup; revoke does not depend on catalog)', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
 			const declared = host.getOrThrow(PermCallerA).declareCommands()

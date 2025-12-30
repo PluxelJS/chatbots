@@ -30,11 +30,12 @@ type PermissionsRpc = {
 	listUserGrants: (userId: number) => Promise<PermissionGrantDto[]>
 	createRole: (parentRoleId: number | null, rank: number, name?: string | null) => Promise<number>
 	updateRole: (roleId: number, patch: { parentRoleId?: number | null; rank?: number; name?: string | null }) => Promise<void>
+	deleteRole: (roleId: number) => Promise<void>
 	assignRoleToUser: (userId: number, roleId: number) => Promise<void>
 	unassignRoleFromUser: (userId: number, roleId: number) => Promise<void>
 	grant: (subjectType: 'user' | 'role', subjectId: number, effect: PermissionEffect, node: string) => Promise<void>
 	revoke: (subjectType: 'user' | 'role', subjectId: number, node: string) => Promise<void>
-	searchUsers: (query: string, limit?: number) => Promise<UserSearchResult[]>
+	searchUsersByName: (query: string, limit?: number) => Promise<UserSearchResult[]>
 	getUser: (userId: number) => Promise<UserSearchResult | null>
 }
 
@@ -124,7 +125,12 @@ export function useRoles() {
 		setLoading(true)
 		try {
 			const data = await getPermissionsRpc().listRoles()
-			setRoles(data)
+			const sorted = [...data].sort((a, b) => {
+				const rankDelta = b.rank - a.rank
+				if (rankDelta !== 0) return rankDelta
+				return a.roleId - b.roleId
+			})
+			setRoles(sorted)
 			setError(null)
 		} catch (err) {
 			setError(rpcErrorMessage(err, 'Failed to load roles'))
@@ -140,7 +146,7 @@ export function useRoles() {
 	const options = useMemo(
 		() => roles.map((role) => ({
 			value: String(role.roleId),
-			label: role.name ? `${role.name} (#${role.roleId})` : `Role #${role.roleId}`,
+			label: role.name ? `${role.name} · r${role.rank} (#${role.roleId})` : `Role #${role.roleId} · r${role.rank}`,
 		})),
 		[roles],
 	)
@@ -159,7 +165,12 @@ export function useRoles() {
 		[refresh],
 	)
 
-	return { roles, options, loading, error, refresh, createRole, updateRole }
+	const deleteRole = useCallback(async (roleId: number) => {
+		await getPermissionsRpc().deleteRole(roleId)
+		await refresh()
+	}, [refresh])
+
+	return { roles, options, loading, error, refresh, createRole, updateRole, deleteRole }
 }
 
 export function useRoleGrants(roleId: number | null) {
@@ -372,7 +383,7 @@ export function useUserSearch() {
 		}
 		setLoading(true)
 		try {
-			const data = await getPermissionsRpc().searchUsers(trimmed, 20)
+			const data = await getPermissionsRpc().searchUsersByName(trimmed, 20)
 			setResults(data)
 			setError(null)
 		} catch (err) {

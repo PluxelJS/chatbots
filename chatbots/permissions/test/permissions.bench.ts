@@ -249,6 +249,35 @@ class BenchGrantsStore implements GrantsStoreApi {
 		})
 	}
 
+	async deleteRole(roleId: number): Promise<void> {
+		const existing = this.roles.get(roleId)
+		if (!existing) return
+
+		// Re-parent children.
+		for (const role of this.roles.values()) {
+			if (role.parentRoleId === roleId) {
+				role.parentRoleId = existing.parentRoleId
+				role.updatedAt = new Date()
+			}
+		}
+
+		// Remove user assignments.
+		for (const set of this.userRoles.values()) {
+			set.delete(roleId)
+		}
+
+		// Remove role grants.
+		const subjectKey = `role:${roleId}`
+		const rows = this.grantsBySubject.get(subjectKey) ?? []
+		for (const row of rows) {
+			const uniqueKey = `${row.subjectType}:${row.subjectId}:${row.nsKey}:${row.kind}:${row.local}`
+			this.grantsByUniqueKey.delete(uniqueKey)
+		}
+		this.grantsBySubject.delete(subjectKey)
+
+		this.roles.delete(roleId)
+	}
+
 	async listUserRoleIds(userId: number): Promise<number[]> {
 		return [...(this.userRoles.get(userId) ?? [])]
 	}

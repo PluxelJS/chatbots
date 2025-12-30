@@ -157,6 +157,15 @@ export class PermissionService {
 		this.userRoleCache.clear()
 	}
 
+	async deleteRole(roleId: number): Promise<void> {
+		if (this.defaultRoleId === roleId) {
+			throw new Error(`[Permissions] deleteRole(): refusing to delete default role #${roleId}`)
+		}
+		await this.store.deleteRole(roleId)
+		await this.roles.refreshAll()
+		this.userRoleCache.clear()
+	}
+
 	async assignRoleToUser(userId: number, roleId: number): Promise<void> {
 		await this.store.assignRoleToUser(userId, roleId)
 		this.userRoleCache.delete(userId)

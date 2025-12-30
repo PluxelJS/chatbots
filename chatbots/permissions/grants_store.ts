@@ -70,9 +70,26 @@ export class GrantsStore implements GrantsStoreApi {
 		)
 	}
 
+	async deleteRole(roleId: number): Promise<void> {
+		const em = await this.em()
+
+		const role = (await em.findOne(this.entities.role as any, { roleId })) as RoleRow | null
+		if (!role) return
+
+		// Repair tree references first, then cleanup secondary tables, then delete the role.
+		await em.nativeUpdate(
+			this.entities.role as any,
+			{ parentRoleId: roleId },
+			{ parentRoleId: role.parentRoleId ?? null, updatedAt: new Date() },
+		)
+		await em.nativeDelete(this.entities.userRole as any, { roleId })
+		await em.nativeDelete(this.entities.grant as any, { subjectType: 'role', subjectId: roleId })
+		await em.nativeDelete(this.entities.role as any, { roleId })
+	}
+
 	async listUserRoleIds(userId: number): Promise<number[]> {
 		const em = await this.em()
-		const rows = (await em.find(this.entities.userRole as any, { userId }, { fields: ['roleId'] as any })) as Array<{ roleId: number }>
+		const rows = (await em.find(this.entities.userRole as any, { userId } as any, { fields: ['roleId'] as any })) as Array<{ roleId: number }>
 		return rows.map((r) => r.roleId)
 	}
 

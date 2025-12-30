@@ -52,6 +52,7 @@ export function EffectToggle({ effect, onClick, disabled, size = 'sm' }: EffectT
 				color={isAllow ? 'teal' : 'red'}
 				onClick={onClick}
 				disabled={disabled}
+				aria-label={isAllow ? 'Set effect to deny' : 'Set effect to allow'}
 				style={{ cursor: disabled ? 'default' : 'pointer' }}
 			>
 				{isAllow ? <IconCheck size={14} /> : <IconX size={14} />}
@@ -71,7 +72,7 @@ type KindBadgeProps = {
 export function KindBadge({ kind }: KindBadgeProps) {
 	return (
 		<Tooltip label={kind === 'star' ? 'Wildcard' : 'Exact'}>
-			<ActionIcon variant="subtle" size="sm" color="gray">
+			<ActionIcon variant="subtle" size="sm" color="gray" aria-label={kind === 'star' ? 'Wildcard permission' : 'Exact permission'}>
 				{kind === 'star' ? <IconAsterisk size={12} /> : <IconCircleDot size={12} />}
 			</ActionIcon>
 		</Tooltip>
@@ -224,6 +225,7 @@ export function GrantsTable({
 							indeterminate={someSelected && !allSelected}
 							onChange={toggleAll}
 							disabled={disabled}
+							aria-label={allSelected ? 'Deselect all grants' : 'Select all grants'}
 						/>
 					</Table.Th>
 					<Table.Th>Node</Table.Th>
@@ -239,6 +241,7 @@ export function GrantsTable({
 								checked={selectedIds.has(grant.id)}
 								onChange={() => toggleOne(grant.id)}
 								disabled={disabled}
+								aria-label={`Select grant ${formatGrantNode(grant)}`}
 							/>
 						</Table.Td>
 						<Table.Td>
@@ -246,7 +249,7 @@ export function GrantsTable({
 								<KindBadge kind={grant.kind} />
 								<Code>{formatGrantNode(grant)}</Code>
 								<Tooltip label={formatTimestamp(grant.updatedAt)}>
-									<ActionIcon variant="subtle" size="xs" color="gray">
+									<ActionIcon variant="subtle" size="xs" color="gray" aria-label="Show last updated time">
 										<IconClock size={10} />
 									</ActionIcon>
 								</Tooltip>
@@ -267,6 +270,7 @@ export function GrantsTable({
 									size="sm"
 									onClick={() => onRevoke(grant)}
 									disabled={disabled}
+									aria-label={`Revoke grant ${formatGrantNode(grant)}`}
 								>
 									<IconTrash size={14} />
 								</ActionIcon>
@@ -303,10 +307,10 @@ export function BulkActions({
 	if (selectedCount === 0) return null
 
 	return (
-		<Paper withBorder radius="md" p="xs" bg="var(--mantine-color-blue-light)">
+		<Paper withBorder radius="md" p="xs" style={{ background: 'var(--mantine-color-gray-light)' }}>
 			<Group justify="space-between" align="center">
 				<Group gap="xs">
-					<Badge variant="filled" color="blue">
+					<Badge variant="light" color="gray">
 						{selectedCount} selected
 					</Badge>
 					<Button size="xs" variant="light" color="teal" onClick={onBulkAllow} disabled={disabled}>
@@ -432,7 +436,7 @@ type RefreshButtonProps = {
 export function RefreshButton({ onClick, loading }: RefreshButtonProps) {
 	return (
 		<Tooltip label="Refresh">
-			<ActionIcon variant="light" size="sm" onClick={onClick} loading={loading}>
+			<ActionIcon variant="light" size="sm" onClick={onClick} loading={loading} aria-label="Refresh">
 				<IconRefresh size={14} />
 			</ActionIcon>
 		</Tooltip>
