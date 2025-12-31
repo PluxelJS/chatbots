@@ -5,7 +5,7 @@
 - 用 `Part[]` 描述跨平台消息内容（接收端保留完整表达力：平台原生能力永远可用，优先通过 `msg.bot` 访问）
 - 发送端优先“友善可用”：`reply()` 尽可能成功发送，并在必要时自动拆成多条消息（行为必须通过 JSDoc 明确告知调用方）
 - 显式发送接口只提供原子能力（`sendText/sendImage/sendFile/upload*`）；复杂编排交由下游决定
-- adapter 只实现原子能力（send/upload/render），bot-layer 负责规范化、校验与拆分策略
+- adapter 只实现原子能力（`send/uploadMedia/render`），bot-layer 负责规范化、校验与拆分策略
 
 ## 目录结构
 
@@ -15,8 +15,8 @@
   - `jsx-runtime.ts`：TSX/JSX 运行时（把 JSX 转成 `Part | Part[]`）
 - `chatbots/bot-layer/src/outbound/`
   - `plan.ts`：将 `Part[]` 规划成“发送操作序列”（`reply()` 使用它做稳定拆分）
-- `chatbots/bot-layer/src/platforms/base.ts`
-  - adapter 接口 + 文本降级规则 + `createReply/createSendHelpers` 发送能力
+- `chatbots/bot-layer/src/adapter/`
+  - adapter 接口 + 注册表 + `createReply/createSendHelpers` 发送能力
 
 ## Parts 设计语言
 
@@ -68,31 +68,21 @@ bot-layer 的 Outbound 入口（`reply/sendText` 等）支持：
 
 - 当平台声明 `maxCaptionLength` 且 caption 超长：
   - `sendImage()`：直接报错（不会自动截断/拆分）
-  - `reply()`：默认自动拆分为“图片 + 文本”（可用 `splitFallback='forbid'` 禁止拆分）
+  - `reply()`：默认自动拆分为“图片 + 文本”（可用 `options.mode='strict'` 禁止自动拆分）
 - 当平台声明 `maxTextLength` 且文本超长：`reply()/sendText()` 直接报错（由下游决定如何分页/拆分）
 
 ## Adapter 约定（平台实现需要提供的能力）
 
-核心接口定义在 `chatbots/bot-layer/src/platforms/base.ts`：
+核心接口定义在 `chatbots/bot-layer/src/adapter/index.ts`：
 
 - `render(parts) -> { text, format }`：把“文本类 Part”渲染为平台格式文本（plain/markdown/html）
-- `sendText(session, { parts, rendered }, options)`：发送文本（核心能力，必须实现）
-- `sendImage(session, image, caption?, options)`：发送图片（若 `supportsImage=true` 建议实现）
-- `sendFile(session, file, options)`：发送文件（若 `supportsFile=true` 建议实现）
-- `uploadImage/uploadFile`：当平台需要“先上传再发送”时实现（KOOK 属于此类）；Telegram 可直接用 data 发送时可返回原值
-
-## Message 上的通用上传接口
-
-为了让业务代码能显式调用上传能力，`Message` 上暴露了：
-
-- `msg.uploadImage?.(imagePart)`
-- `msg.uploadFile?.(filePart)`
-
-实现来自 `createUploadHelpers(adapter, session)`，在 KOOK/Telegram 归一化消息时注入。
+- `policy.outbound.supportedOps`：声明平台支持的 outbound 原子操作（`text/image/audio/video/file`），Outbound 层据此决定“严格报错 vs best-effort 退化”
+- `uploadMedia(session, media)`：当平台需要“先上传再发送”时实现（KOOK 属于此类）；仅在 `media.data` 存在时由 outbound 层调用
+- `send(session, op, options)`：发送一个 Outbound 原子操作（text/image/video/audio/file）
 
 ## Message 上的显式发送接口（推荐用于复杂编排）
 
-- `msg.sendText?.(content)`：只允许文本类 Part（其余直接报错）
+- `msg.sendText(content)`：只允许文本类 Part（其余直接报错）
 - `msg.sendImage?.(image, caption?)`：caption 只允许文本类 Part；是否允许混排由平台能力决定
 - `msg.sendFile?.(file)`
 

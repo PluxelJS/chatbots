@@ -1,30 +1,47 @@
-import type { Attachment, BotChannel, BotUser, Message, MentionPart, Part, PlatformCapabilities, SandboxSession, SandboxBot } from './types'
-import { normalizeMessageContent, hasRichParts } from './parts'
-import { createReply, createSendHelpers, normalizePartsForAdapter, registerAdapter } from './adapter'
-import type { OutboundText, PlatformAdapter, RenderResult } from './adapter'
+import type { OutboundOp, PlatformAdapter, RenderResult } from '../../adapter'
+import { createReply, createSendHelpers, normalizePartsForAdapter, registerAdapter } from '../../adapter'
+import { hasRichParts, normalizeMessageContent } from '../../parts'
+import type {
+	AdapterPolicy,
+	Attachment,
+	BotChannel,
+	BotUser,
+	Message,
+	MentionPart,
+	Part,
+	SandboxBot,
+	SandboxSession,
+} from '../../types'
 
 const DEFAULT_USER_ID = 'sandbox-user'
 const DEFAULT_CHANNEL_ID = 'sandbox-channel'
 
-export const sandboxCapabilities: PlatformCapabilities = {
-	format: 'plain',
-	supportsQuote: true,
-	supportsImage: true,
-	supportsAudio: true,
-	supportsVideo: true,
-	supportsFile: true,
-	supportsMixedMedia: true,
-	supportsInlineMention: {
-		user: true,
-		role: true,
-		channel: true,
-		everyone: true,
+export const sandboxPolicy: AdapterPolicy = {
+	text: {
+		format: 'plain',
+		inlineMention: {
+			user: 'native',
+			role: 'native',
+			channel: 'native',
+			everyone: 'native',
+		},
 	},
+	outbound: {
+		supportsQuote: true,
+		supportsMixedMedia: true,
+		supportedOps: ['text', 'image', 'audio', 'video', 'file'],
+	},
+}
+
+declare global {
+	interface BotLayerPlatformPolicyRegistry {
+		sandbox: typeof sandboxPolicy
+	}
 }
 
 const defaultRender = (parts: Part[]): RenderResult => ({
 	text: parts.map(renderPart).join(''),
-	format: sandboxCapabilities.format,
+	format: sandboxPolicy.text.format,
 })
 
 const renderInline = (parts: Array<Extract<Part, { type: 'text' | 'styled' | 'mention' | 'link' }>>): string =>
@@ -57,31 +74,41 @@ const renderPart = (part: Part): string => {
 }
 
 export const createSandboxAdapter = (
-	base?: Pick<PlatformAdapter<any>, 'capabilities' | 'render'>,
+	base?: Pick<PlatformAdapter<any>, 'policy' | 'render'>,
 ): PlatformAdapter<'sandbox'> => {
-	const capabilities = base?.capabilities ?? sandboxCapabilities
+	const policy = base?.policy ?? sandboxPolicy
 	const render = base?.render ?? defaultRender
 
 	return {
 		name: 'sandbox',
-		capabilities,
+		policy,
 		render,
 
-		sendText: async (session, text: OutboundText) => {
-			session.append({ role: 'bot', parts: text.parts })
-		},
+		uploadMedia: async (_session, media) => media,
 
-		sendImage: async (session, image, caption) => {
-			const parts = caption?.parts?.length ? [image, ...caption.parts] : [image]
-			session.append({ role: 'bot', parts })
+		send: async (session, op: OutboundOp) => {
+			switch (op.type) {
+				case 'text':
+					session.append({ role: 'bot', parts: op.text.parts })
+					return
+				case 'image': {
+					const parts = op.caption?.parts?.length ? [op.image, ...op.caption.parts] : [op.image]
+					session.append({ role: 'bot', parts })
+					return
+				}
+				case 'audio':
+					session.append({ role: 'bot', parts: [op.audio] })
+					return
+				case 'video': {
+					const parts = op.caption?.parts?.length ? [op.video, ...op.caption.parts] : [op.video]
+					session.append({ role: 'bot', parts })
+					return
+				}
+				case 'file':
+					session.append({ role: 'bot', parts: [op.file] })
+					return
+			}
 		},
-
-		sendFile: async (session, file) => {
-			session.append({ role: 'bot', parts: [file] })
-		},
-
-		uploadImage: async (_session, image) => image,
-		uploadFile: async (_session, file) => file,
 	}
 }
 
@@ -140,6 +167,7 @@ export const createSandboxMessage = (input: SandboxMessageInput): Message<'sandb
 	const helpers = createSendHelpers(adapter, input.session)
 	const text = renderText(parts)
 	const textRaw = typeof input.rawText === 'string' ? input.rawText : text
+	const supported = adapter.policy.outbound.supportedOps
 
 	return {
 		platform: 'sandbox',
@@ -157,11 +185,12 @@ export const createSandboxMessage = (input: SandboxMessageInput): Message<'sandb
 		bot: input.session.bot ?? DEFAULT_SANDBOX_BOT,
 		reply,
 		sendText: helpers.sendText,
-		sendImage: helpers.sendImage,
-		sendFile: helpers.sendFile,
-		uploadImage: helpers.uploadImage,
-		uploadFile: helpers.uploadFile,
+		...(supported.includes('image') ? { sendImage: helpers.sendImage } : {}),
+		...(supported.includes('audio') ? { sendAudio: helpers.sendAudio } : {}),
+		...(supported.includes('video') ? { sendVideo: helpers.sendVideo } : {}),
+		...(supported.includes('file') ? { sendFile: helpers.sendFile } : {}),
 	}
 }
 
 export const registerSandboxAdapter = (): (() => void) => registerAdapter(createSandboxAdapter())
+

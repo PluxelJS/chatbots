@@ -454,7 +454,8 @@ export const normalizeTelegramMessage = async (session: MessageSession): Promise
 	}
 
 	const reply = createReply(telegramAdapter, session)
-	const { uploadImage, uploadFile, sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(telegramAdapter, session)
+	const { sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(telegramAdapter, session)
+	const supported = telegramAdapter.policy.outbound.supportedOps
 
 	return {
 		platform: 'telegram',
@@ -472,11 +473,9 @@ export const normalizeTelegramMessage = async (session: MessageSession): Promise
 		bot: session.bot,
 		reply,
 		sendText,
-		sendImage,
-		sendAudio,
-		sendVideo,
-		sendFile,
-		uploadImage,
-		uploadFile,
+		...(supported.includes('image') ? { sendImage } : {}),
+		...(supported.includes('audio') ? { sendAudio } : {}),
+		...(supported.includes('video') ? { sendVideo } : {}),
+		...(supported.includes('file') ? { sendFile } : {}),
 	}
 }

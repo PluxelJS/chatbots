@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'bun:test'
 
-import { createReply } from '../platforms/base'
-import type { PlatformAdapter } from '../platforms/base'
-import type { ImagePart, OutboundText, PlatformCapabilities } from '../types'
+import { createReply } from '../adapter'
+import type { OutboundOp, PlatformAdapter } from '../adapter'
+import type { AdapterPolicy, ImagePart, OutboundText } from '../types'
 
 type Call =
 	| { type: 'text'; text: string }
 	| { type: 'image'; url?: string; caption?: string }
 
-const makeAdapter = (capabilities: PlatformCapabilities, calls: Call[]): PlatformAdapter<'telegram'> => ({
+const makeAdapter = (policy: AdapterPolicy, calls: Call[]): PlatformAdapter<'telegram'> => ({
 	name: 'telegram',
-	capabilities,
+	policy,
 	render: (parts) => ({
 		text: parts
 			.map((p) => {
@@ -22,27 +22,37 @@ const makeAdapter = (capabilities: PlatformCapabilities, calls: Call[]): Platfor
 				return ''
 			})
 			.join(''),
-		format: capabilities.format,
+		format: policy.text.format,
 	}),
-	sendText: async (_session, text: OutboundText) => {
-		calls.push({ type: 'text', text: text.rendered.text })
+	uploadMedia: async (_session, media) => media,
+	send: async (_session, op: OutboundOp) => {
+		switch (op.type) {
+			case 'text':
+				calls.push({ type: 'text', text: op.text.rendered.text })
+				return
+			case 'image':
+				calls.push({ type: 'image', url: op.image.url, caption: op.caption?.rendered.text })
+				return
+			case 'file':
+			case 'audio':
+			case 'video':
+				return
+		}
 	},
-	sendImage: async (_session, image, caption) => {
-		calls.push({ type: 'image', url: image.url, caption: caption?.rendered.text })
-	},
-	sendFile: async () => {},
-	uploadImage: async (_session, image) => image,
-	uploadFile: async (_session, file) => file,
 })
 
-const baseCaps = (overrides: Partial<PlatformCapabilities> = {}): PlatformCapabilities => ({
-	format: 'plain',
-	supportsQuote: true,
-	supportsImage: true,
-	supportsFile: true,
-	supportsMixedMedia: true,
-	supportsInlineMention: { user: true, role: true, channel: true, everyone: true },
-	...overrides,
+const basePolicy = (overrides: Partial<AdapterPolicy> = {}): AdapterPolicy => ({
+	text: {
+		format: 'plain',
+		inlineMention: { user: 'native', role: 'native', channel: 'native', everyone: 'native' },
+		...overrides.text,
+	},
+	outbound: {
+		supportsQuote: true,
+		supportsMixedMedia: true,
+		supportedOps: ['text', 'image', 'audio', 'video', 'file'],
+		...overrides.outbound,
+	},
 })
 
 const img = (url = 'https://example.com/a.png'): ImagePart => ({ type: 'image', url })
@@ -50,7 +60,7 @@ const img = (url = 'https://example.com/a.png'): ImagePart => ({ type: 'image', 
 describe('bot-layer outbound reply()', () => {
 	it('splits single image caption on no-mixed platforms (auto order)', async () => {
 		const calls: Call[] = []
-		const adapter = makeAdapter(baseCaps({ supportsMixedMedia: false }), calls)
+		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: false } }), calls)
 		const reply = createReply(adapter, {} as any)
 
 		await reply(['cap', img()], undefined)
@@ -61,18 +71,18 @@ describe('bot-layer outbound reply()', () => {
 		expect(calls).toEqual([{ type: 'image', url: 'https://example.com/a.png', caption: undefined }, { type: 'text', text: 'cap' }])
 	})
 
-	it('can forbid splitting single image caption', async () => {
+	it('strict mode still sends on no-mixed platforms (order preserved)', async () => {
 		const calls: Call[] = []
-		const adapter = makeAdapter(baseCaps({ supportsMixedMedia: false }), calls)
+		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: false } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await expect(reply([img(), 'cap'], { splitFallback: 'forbid' })).rejects.toThrow()
-		expect(calls).toEqual([])
+		await reply([img(), 'cap'], { mode: 'strict' })
+		expect(calls).toEqual([{ type: 'image', url: 'https://example.com/a.png', caption: undefined }, { type: 'text', text: 'cap' }])
 	})
 
 	it('falls back to split when caption exceeds maxCaptionLength', async () => {
 		const calls: Call[] = []
-		const adapter = makeAdapter(baseCaps({ supportsMixedMedia: true, maxCaptionLength: 3 }), calls)
+		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 3 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
 		await reply([img(), '1234'], undefined)
@@ -82,18 +92,18 @@ describe('bot-layer outbound reply()', () => {
 		])
 	})
 
-	it('can forbid splitting on caption-too-long fallback', async () => {
+	it('strict mode throws when caption exceeds maxCaptionLength', async () => {
 		const calls: Call[] = []
-		const adapter = makeAdapter(baseCaps({ supportsMixedMedia: true, maxCaptionLength: 3 }), calls)
+		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 3 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await expect(reply([img(), '1234'], { splitFallback: 'forbid' })).rejects.toThrow()
+		await expect(reply([img(), '1234'], { mode: 'strict' })).rejects.toThrow()
 		expect(calls).toEqual([])
 	})
 
 	it('sends mixed image + caption when within maxCaptionLength', async () => {
 		const calls: Call[] = []
-		const adapter = makeAdapter(baseCaps({ supportsMixedMedia: true, maxCaptionLength: 10 }), calls)
+		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 10 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
 		await reply([img(), '1234'], undefined)
@@ -102,7 +112,7 @@ describe('bot-layer outbound reply()', () => {
 
 	it('does not bind caption when text appears on both sides of an image', async () => {
 		const calls: Call[] = []
-		const adapter = makeAdapter(baseCaps({ supportsMixedMedia: true, maxCaptionLength: 10 }), calls)
+		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 10 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
 		await reply(['pre', img(), 'post'], undefined)

@@ -10,27 +10,37 @@ import type {
 	LinkPart,
 	MentionPart,
 	Part,
-	PlatformCapabilities,
+	AdapterPolicy,
 	StyledPart,
 	VideoPart,
 } from '../../types'
-import type { OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
+import { defineAdapter } from '../../adapter'
+import type { OutboundOp, OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
 import { toNodeBuffer } from '../../binary'
 
-const capabilities: PlatformCapabilities = {
-	format: 'markdown',
-	supportsQuote: true,
-	supportsImage: true,
-	supportsAudio: false,
-	supportsVideo: true,
-	supportsFile: true,
-	supportsMixedMedia: false,
-	supportsInlineMention: {
-		user: true,
-		role: true,
-		channel: true,
-		everyone: true,
+const policy = {
+	text: {
+		format: 'markdown',
+		inlineMention: {
+			user: 'native',
+			role: 'native',
+			channel: 'native',
+			everyone: 'native',
+		},
 	},
+	outbound: {
+		supportsQuote: true,
+		supportsMixedMedia: false,
+		supportedOps: ['text', 'image', 'video', 'file'],
+	},
+} as const satisfies AdapterPolicy
+
+export const kookPolicy = policy
+
+declare global {
+	interface BotLayerPlatformPolicyRegistry {
+		kook: typeof kookPolicy
+	}
 }
 
 const renderInline = (parts: InlinePart[]): string => parts.map(renderPart).join('')
@@ -80,7 +90,7 @@ const renderPart = (part: Part): string => {
 
 const render = (parts: Part[]): RenderResult => ({
 	text: parts.map(renderPart).join(''),
-	format: capabilities.format,
+	format: policy.text.format,
 })
 
 const needsMarkdown = (parts: Part[]): boolean =>
@@ -107,106 +117,130 @@ const uploadIfNeeded = async (
 	return res.data
 }
 
-export const kookAdapter: PlatformAdapter<'kook'> = {
+export const kookAdapter = defineAdapter({
 	name: 'kook',
-	capabilities,
+	policy,
 	render,
 
-	sendText: async (session, text: OutboundText, options) => {
+	uploadMedia: async (session, media) => {
+		if (media.type === 'image') {
+			const url = await uploadIfNeeded(session, media, media.name ?? media.alt ?? 'image.png')
+			return { ...media, url, data: undefined }
+		}
+		if (media.type === 'file') {
+			const url = await uploadIfNeeded(session, media, media.name ?? 'file')
+			return { ...media, url, data: undefined }
+		}
+		if (media.type === 'video') {
+			const url = await uploadIfNeeded(session, media, media.name ?? 'video.mp4')
+			return { ...media, url, data: undefined }
+		}
+		if (media.type === 'audio') {
+			const url = await uploadIfNeeded(session, media, media.name ?? 'audio')
+			return { ...media, url, data: undefined }
+		}
+		return media
+	},
+
+	send: async (session, op: OutboundOp, options) => {
 		const quote = options?.quote ? session.data?.msg_id : undefined
-		const type = needsMarkdown(text.parts) ? MessageType.kmarkdown : undefined
-		if (isPrivateSession(session)) {
-			const res = await session.bot.createDirectMessage({
-				target_id: session.userId,
+
+		const sendText = async (text: OutboundText) => {
+			const type = needsMarkdown(text.parts) ? MessageType.kmarkdown : undefined
+			if (isPrivateSession(session)) {
+				const res = await session.bot.createDirectMessage({
+					target_id: session.userId,
+					content: text.rendered.text,
+					type,
+					quote,
+				})
+				if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
+				return
+			}
+			const res = await session.bot.sendMessage({
+				target_id: session.channelId,
 				content: text.rendered.text,
 				type,
 				quote,
 			})
-			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
-			return
+			if (!res.ok) throw new Error(`KOOK sendMessage failed: ${res.message}`)
 		}
-		const res = await session.bot.sendMessage({
-			target_id: session.channelId,
-			content: text.rendered.text,
-			type,
-			quote,
-		})
-		if (!res.ok) throw new Error(`KOOK sendMessage failed: ${res.message}`)
-	},
 
-	uploadImage: async (session, image) => {
-		const url = await uploadIfNeeded(session, image, image.name ?? image.alt ?? 'image.png')
-		return { ...image, url, data: undefined }
-	},
-
-	uploadFile: async (session, file) => {
-		const url = await uploadIfNeeded(session, file, file.name ?? 'file')
-		return { ...file, url, data: undefined }
-	},
-
-	sendImage: async (session, image, _caption, options) => {
-		const quote = options?.quote ? session.data?.msg_id : undefined
-		if (!image.url) throw new Error('KOOK: image.url 为空，无法发送图片')
-		if (isPrivateSession(session)) {
-			const res = await session.bot.createDirectMessage({
-				target_id: session.userId,
-				content: image.url,
-				type: MessageType.image,
-				quote,
-			})
-			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
-			return
+		switch (op.type) {
+			case 'text':
+				await sendText(op.text)
+				return
+			case 'image': {
+				if (op.caption?.rendered.text) {
+					throw new Error('KOOK: 不支持单条图文混排（image caption）')
+				}
+				if (!op.image.url) throw new Error('KOOK: image.url 为空，无法发送图片')
+				if (isPrivateSession(session)) {
+					const res = await session.bot.createDirectMessage({
+						target_id: session.userId,
+						content: op.image.url,
+						type: MessageType.image,
+						quote,
+					})
+					if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
+					return
+				}
+				const res = await session.bot.sendMessage({
+					target_id: session.channelId,
+					content: op.image.url,
+					type: MessageType.image,
+					quote,
+				})
+				if (!res.ok) throw new Error(`KOOK sendImage failed: ${res.message}`)
+				return
+			}
+			case 'file': {
+				if (!op.file.url) throw new Error('KOOK: file.url 为空，无法发送文件')
+				if (isPrivateSession(session)) {
+					const res = await session.bot.createDirectMessage({
+						target_id: session.userId,
+						content: op.file.url,
+						type: MessageType.file,
+						quote,
+					})
+					if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
+					return
+				}
+				const res = await session.bot.sendMessage({
+					target_id: session.channelId,
+					content: op.file.url,
+					type: MessageType.file,
+					quote,
+				})
+				if (!res.ok) throw new Error(`KOOK sendFile failed: ${res.message}`)
+				return
+			}
+			case 'video': {
+				if (op.caption?.rendered.text) {
+					throw new Error('KOOK: 不支持单条图文混排（video caption）')
+				}
+				if (!op.video.url) throw new Error('KOOK: video.url 为空，无法发送视频')
+				if (isPrivateSession(session)) {
+					const res = await session.bot.createDirectMessage({
+						target_id: session.userId,
+						content: op.video.url,
+						type: MessageType.video,
+						quote,
+					})
+					if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
+					return
+				}
+				const res = await session.bot.sendMessage({
+					target_id: session.channelId,
+					content: op.video.url,
+					type: MessageType.video,
+					quote,
+				})
+				if (!res.ok) throw new Error(`KOOK sendVideo failed: ${res.message}`)
+				return
+			}
+			case 'audio':
+				throw new Error('KOOK: 不支持音频发送')
 		}
-		const res = await session.bot.sendMessage({
-			target_id: session.channelId,
-			content: image.url,
-			type: MessageType.image,
-			quote,
-		})
-		if (!res.ok) throw new Error(`KOOK sendImage failed: ${res.message}`)
 	},
-
-	sendFile: async (session, file, options) => {
-		const quote = options?.quote ? session.data?.msg_id : undefined
-		if (!file.url) throw new Error('KOOK: file.url 为空，无法发送文件')
-		if (isPrivateSession(session)) {
-			const res = await session.bot.createDirectMessage({
-				target_id: session.userId,
-				content: file.url,
-				type: MessageType.file,
-				quote,
-			})
-			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
-			return
-		}
-		const res = await session.bot.sendMessage({
-			target_id: session.channelId,
-			content: file.url,
-			type: MessageType.file,
-			quote,
-		})
-		if (!res.ok) throw new Error(`KOOK sendFile failed: ${res.message}`)
-	},
-
-	sendVideo: async (session, video, _caption, options) => {
-		const quote = options?.quote ? session.data?.msg_id : undefined
-		if (!video.url) throw new Error('KOOK: video.url 为空，无法发送视频')
-		if (isPrivateSession(session)) {
-			const res = await session.bot.createDirectMessage({
-				target_id: session.userId,
-				content: video.url,
-				type: MessageType.video,
-				quote,
-			})
-			if (!res.ok) throw new Error(`KOOK createDirectMessage failed: ${res.message}`)
-			return
-		}
-		const res = await session.bot.sendMessage({
-			target_id: session.channelId,
-			content: video.url,
-			type: MessageType.video,
-			quote,
-		})
-		if (!res.ok) throw new Error(`KOOK sendVideo failed: ${res.message}`)
-	},
-}
+})

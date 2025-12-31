@@ -42,31 +42,34 @@ export interface PlatformRegistry {
 // 核心接口实现
 export interface SandboxAdapter {
   platform: 'sandbox'
-  capabilities: PlatformCapabilities
+  policy: AdapterPolicy
   createMessage(input: SandboxInput): Message<'sandbox'>
   // reply/sendText/sendImage/sendFile 实现
 }
 ```
 
-### 3. 平台能力声明
+### 3. 平台策略声明（Policy）
 
-**文件**: `chatbots/bot-layer/src/capabilities.ts` (或在 adapter 中)
+**文件**: `chatbots/bot-layer/src/sandbox.ts`
 
 ```typescript
-export const sandboxCapabilities: PlatformCapabilities = {
-  format: 'markdown',
-  supportsQuote: true,
-  supportsImage: true,
-  supportsFile: true,
-  supportsMixedMedia: true,
-  supportsInlineMention: {
-    user: true,
-    role: true,
-    channel: true,
-    everyone: true,
+export const sandboxPolicy: AdapterPolicy = {
+  text: {
+    format: 'plain',
+    inlineMention: {
+      user: 'native',
+      role: 'native',
+      channel: 'native',
+      everyone: 'native',
+    },
+    maxTextLength: undefined,
   },
-  maxTextLength: undefined,
-  maxCaptionLength: undefined,
+  outbound: {
+    supportsQuote: true,
+    supportsMixedMedia: true,
+    supportedOps: ['text', 'image', 'audio', 'video', 'file'],
+    maxCaptionLength: undefined,
+  },
 }
 ```
 
@@ -125,8 +128,10 @@ interface SandboxMessage extends Message<'sandbox'> {
   raw: SandboxSession
   bot: SandboxBot
   reply: (content: MessageContent, options?: ReplyOptions) => Promise<void>
-  sendText?: (content: MessageContent, options?: ReplyOptions) => Promise<void>
+  sendText: (content: MessageContent, options?: ReplyOptions) => Promise<void>
   sendImage?: (image: ImagePart, caption?: MessageContent, options?: ReplyOptions) => Promise<void>
+  sendAudio?: (audio: AudioPart, options?: ReplyOptions) => Promise<void>
+  sendVideo?: (video: VideoPart, caption?: MessageContent, options?: ReplyOptions) => Promise<void>
   sendFile?: (file: FilePart, options?: ReplyOptions) => Promise<void>
 }
 ```
@@ -136,7 +141,7 @@ interface SandboxMessage extends Message<'sandbox'> {
 ```typescript
 async reply(content: MessageContent, options?: ReplyOptions): Promise<void> {
   const parts = normalizeMessageContent(content)
-  const rendered = renderParts(parts, sandboxCapabilities)
+  const rendered = renderParts(parts, sandboxPolicy)
 
   // 存储 bot 回复消息
   sandboxStore.append({

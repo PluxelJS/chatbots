@@ -1,4 +1,5 @@
-import type { AudioPart, FilePart, ImagePart, Part, PlatformCapabilities, VideoPart } from '../types'
+import type { AdapterOutboundPolicy, AudioPart, FilePart, ImagePart, Part, VideoPart } from '../types'
+import { isTextLike } from '../render/normalize'
 
 export type OutboundDraftOp =
 	| { type: 'text'; parts: Part[] }
@@ -7,10 +8,7 @@ export type OutboundDraftOp =
 	| { type: 'video'; video: VideoPart; captionParts?: Part[]; captionPosition?: 'before' | 'after' }
 	| { type: 'file'; file: FilePart }
 
-const isTextLike = (part: Part): boolean =>
-	part.type !== 'image' && part.type !== 'audio' && part.type !== 'video' && part.type !== 'file'
-
-export const planOutbound = (parts: Part[], capabilities: PlatformCapabilities): OutboundDraftOp[] => {
+export const planOutbound = (parts: Part[], policy: AdapterOutboundPolicy): OutboundDraftOp[] => {
 	const ops: OutboundDraftOp[] = []
 	let textBuffer: Part[] = []
 
@@ -28,7 +26,7 @@ export const planOutbound = (parts: Part[], capabilities: PlatformCapabilities):
 		}
 
 		if (part.type === 'image') {
-			const supportsMixed = capabilities.supportsMixedMedia === true
+			const supportsMixed = policy.supportsMixedMedia
 			// Only treat adjacent text as caption when it's one-sided (all before or all after).
 			// If text exists on both sides of the image, keep the original order and don't bind a caption.
 			if (supportsMixed && textBuffer.length && index + 1 < parts.length && isTextLike(parts[index + 1]!)) {
@@ -66,7 +64,7 @@ export const planOutbound = (parts: Part[], capabilities: PlatformCapabilities):
 		}
 
 		if (part.type === 'video') {
-			const supportsMixed = capabilities.supportsMixedMedia === true
+			const supportsMixed = policy.supportsMixedMedia
 			// Video with caption follows same logic as image
 			if (supportsMixed && textBuffer.length && index + 1 < parts.length && isTextLike(parts[index + 1]!)) {
 				flushText()

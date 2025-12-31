@@ -1,35 +1,23 @@
-import type { AudioPart, FilePart, ImagePart, MessageContent, Platform, PlatformRegistry, ReplyOptions, VideoPart } from '../types'
+import type {
+	AudioPart,
+	FilePart,
+	ImagePart,
+	MediaPart,
+	MessageContent,
+	Platform,
+	PlatformRegistry,
+	ReplyOptions,
+	OutboundOpType,
+	VideoPart,
+} from '../types'
 import { normalizeMessageContent } from '../parts'
-import type { OutboundText, PlatformAdapter } from '../adapter'
+import type { OutboundOp, OutboundText, PlatformAdapter } from '../adapter'
 import { assertTextOnly, normalizeTextPartsForAdapter, type TextLikePart } from '../render/normalize'
 
-export const createUploadHelpers =
-	<P extends Platform>(adapter: PlatformAdapter<P>, session: PlatformRegistry[P]['raw']) => ({
-		uploadImage: async (image: ImagePart): Promise<ImagePart> => {
-			if (!adapter.capabilities.supportsImage) {
-				throw new Error(`bot-layer: platform ${adapter.name} 不支持图片`)
-			}
-			if (adapter.uploadImage) return adapter.uploadImage(session, image)
-			if (image.data) {
-				throw new Error(`bot-layer: platform ${adapter.name} 缺少 uploadImage，且当前图片需要上传(data)`)
-			}
-			return image
-		},
-		uploadFile: async (file: FilePart): Promise<FilePart> => {
-			if (!adapter.capabilities.supportsFile) {
-				throw new Error(`bot-layer: platform ${adapter.name} 不支持文件`)
-			}
-			if (adapter.uploadFile) return adapter.uploadFile(session, file)
-			if (file.data) {
-				throw new Error(`bot-layer: platform ${adapter.name} 缺少 uploadFile，且当前文件需要上传(data)`)
-			}
-			return file
-		},
-	})
-
 export const createSendHelpers = <P extends Platform>(adapter: PlatformAdapter<P>, session: PlatformRegistry[P]['raw']) => {
-	const quoteSupported = adapter.capabilities.supportsQuote
-	const uploader = createUploadHelpers(adapter, session)
+	const quoteSupported = adapter.policy.outbound.supportsQuote
+
+	const supports = (type: OutboundOpType): boolean => adapter.policy.outbound.supportedOps.includes(type)
 
 	const toOutboundText = (parts: TextLikePart[]): OutboundText => ({
 		parts,
@@ -46,117 +34,87 @@ export const createSendHelpers = <P extends Platform>(adapter: PlatformAdapter<P
 		return normalizeTextPartsForAdapter(parts as TextLikePart[], adapter)
 	}
 
+	const uploadIfNeeded = async <T extends MediaPart>(media: T): Promise<T> => {
+		if (!media.data) return media
+		if (!adapter.uploadMedia) {
+			throw new Error(`bot-layer: adapter ${adapter.name} 缺少 uploadMedia，且当前媒体需要上传(data)`)
+		}
+		return (await adapter.uploadMedia(session, media)) as T
+	}
+
+	const sendOp = async (op: OutboundOp, options?: ReplyOptions): Promise<void> =>
+		adapter.send(session, op, safeOptions(options))
+
 	const sendText = async (content: MessageContent, options?: ReplyOptions) => {
+		if (!supports('text')) throw new Error(`bot-layer: platform ${adapter.name} 不支持文本`)
 		const parts = normalizeOutboundText(content, 'sendText')
 		if (!parts.length) return
 
 		const outbound = toOutboundText(parts)
 		if (!outbound.rendered.text) return
 
-		const max = adapter.capabilities.maxTextLength
+		const max = adapter.policy.text.maxTextLength
 		if (typeof max === 'number' && outbound.rendered.text.length > max) {
 			throw new Error(`bot-layer: 文本过长(${outbound.rendered.text.length} > ${max})，请自行拆分发送`)
 		}
 
-		await adapter.sendText(session, outbound, safeOptions(options))
+		await sendOp({ type: 'text', text: outbound }, options)
 	}
 
 	const sendImage = async (image: ImagePart, caption?: MessageContent, options?: ReplyOptions) => {
-		if (!adapter.capabilities.supportsImage) throw new Error(`bot-layer: platform ${adapter.name} 不支持图片`)
-		if (!adapter.sendImage) throw new Error(`bot-layer: adapter ${adapter.name} 缺少 sendImage`)
+		if (!supports('image')) throw new Error(`bot-layer: platform ${adapter.name} 不支持图片`)
 
-		const uploaded = image.data ? await uploader.uploadImage(image) : image
+		const uploaded = await uploadIfNeeded(image)
 
 		const captionParts = caption === undefined ? [] : normalizeOutboundText(caption, 'sendImage(caption)')
 		const outboundCaption = captionParts.length ? toOutboundText(captionParts) : undefined
 
+		if (outboundCaption?.rendered.text && !adapter.policy.outbound.supportsMixedMedia) {
+			throw new Error(`bot-layer: platform ${adapter.name} 不支持单条图文混排，请自行拆分发送`)
+		}
+
 		if (outboundCaption?.rendered.text) {
-			const max = adapter.capabilities.maxCaptionLength
+			const max = adapter.policy.outbound.maxCaptionLength
 			if (typeof max === 'number' && outboundCaption.rendered.text.length > max) {
 				throw new Error(`bot-layer: caption 过长(${outboundCaption.rendered.text.length} > ${max})，请自行拆分发送`)
 			}
 		}
 
-		await adapter.sendImage(session, uploaded, outboundCaption, safeOptions(options))
+		await sendOp({ type: 'image', image: uploaded, caption: outboundCaption }, options)
 	}
 
 	const sendAudio = async (audio: AudioPart, options?: ReplyOptions) => {
-		// 如果平台不支持音频，降级为文件
-		if (!adapter.capabilities.supportsAudio) {
-			const file: FilePart = {
-				type: 'file',
-				url: audio.url,
-				name: audio.name,
-				mime: audio.mime,
-				data: audio.data,
-				size: audio.size,
-			}
-			await sendFile(file, options)
-			return
-		}
-		if (!adapter.sendAudio) {
-			// 没有专门的 sendAudio，降级为文件
-			const file: FilePart = {
-				type: 'file',
-				url: audio.url,
-				name: audio.name,
-				mime: audio.mime,
-				data: audio.data,
-				size: audio.size,
-			}
-			await sendFile(file, options)
-			return
-		}
-		await adapter.sendAudio(session, audio, safeOptions(options))
+		if (!supports('audio')) throw new Error(`bot-layer: platform ${adapter.name} 不支持音频`)
+		const uploaded = await uploadIfNeeded(audio)
+		await sendOp({ type: 'audio', audio: uploaded }, options)
 	}
 
 	const sendVideo = async (video: VideoPart, caption?: MessageContent, options?: ReplyOptions) => {
-		// 如果平台不支持视频，降级为文件
-		if (!adapter.capabilities.supportsVideo) {
-			const file: FilePart = {
-				type: 'file',
-				url: video.url,
-				name: video.name,
-				mime: video.mime,
-				data: video.data,
-				size: video.size,
-			}
-			await sendFile(file, options)
-			return
-		}
-		if (!adapter.sendVideo) {
-			// 没有专门的 sendVideo，降级为文件
-			const file: FilePart = {
-				type: 'file',
-				url: video.url,
-				name: video.name,
-				mime: video.mime,
-				data: video.data,
-				size: video.size,
-			}
-			await sendFile(file, options)
-			return
-		}
+		if (!supports('video')) throw new Error(`bot-layer: platform ${adapter.name} 不支持视频`)
 
+		const uploaded = await uploadIfNeeded(video)
 		const captionParts = caption === undefined ? [] : normalizeOutboundText(caption, 'sendVideo(caption)')
 		const outboundCaption = captionParts.length ? toOutboundText(captionParts) : undefined
 
+		if (outboundCaption?.rendered.text && !adapter.policy.outbound.supportsMixedMedia) {
+			throw new Error(`bot-layer: platform ${adapter.name} 不支持单条图文混排，请自行拆分发送`)
+		}
+
 		if (outboundCaption?.rendered.text) {
-			const max = adapter.capabilities.maxCaptionLength
+			const max = adapter.policy.outbound.maxCaptionLength
 			if (typeof max === 'number' && outboundCaption.rendered.text.length > max) {
 				throw new Error(`bot-layer: video caption 过长(${outboundCaption.rendered.text.length} > ${max})，请自行拆分发送`)
 			}
 		}
 
-		await adapter.sendVideo(session, video, outboundCaption, safeOptions(options))
+		await sendOp({ type: 'video', video: uploaded, caption: outboundCaption }, options)
 	}
 
 	const sendFile = async (file: FilePart, options?: ReplyOptions) => {
-		if (!adapter.capabilities.supportsFile) throw new Error(`bot-layer: platform ${adapter.name} 不支持文件`)
-		if (!adapter.sendFile) throw new Error(`bot-layer: adapter ${adapter.name} 缺少 sendFile`)
-		const uploaded = file.data ? await uploader.uploadFile(file) : file
-		await adapter.sendFile(session, uploaded, safeOptions(options))
+		if (!supports('file')) throw new Error(`bot-layer: platform ${adapter.name} 不支持文件`)
+		const uploaded = await uploadIfNeeded(file)
+		await sendOp({ type: 'file', file: uploaded }, options)
 	}
 
-	return { sendText, sendImage, sendAudio, sendVideo, sendFile, ...uploader }
+	return { sendText, sendImage, sendAudio, sendVideo, sendFile }
 }

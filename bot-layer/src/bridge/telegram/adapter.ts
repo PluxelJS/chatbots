@@ -9,11 +9,12 @@ import type {
 	LinkPart,
 	MentionPart,
 	Part,
-	PlatformCapabilities,
+	AdapterPolicy,
 	StyledPart,
 	VideoPart,
 } from '../../types'
-import type { OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
+import { defineAdapter } from '../../adapter'
+import type { OutboundOp, OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
 import { toNodeBuffer } from '../../binary'
 
 const escapeHtml = (input: string): string =>
@@ -24,21 +25,30 @@ const escapeHtml = (input: string): string =>
 
 const escapeAttr = (input: string): string => escapeHtml(input).replace(/"/g, '&quot;')
 
-const capabilities: PlatformCapabilities = {
-	format: 'html',
-	supportsQuote: true,
-	supportsImage: true,
-	supportsAudio: true,
-	supportsVideo: true,
-	supportsFile: true,
-	supportsMixedMedia: true,
-	supportsInlineMention: {
-		user: true,
-		role: false,
-		channel: false,
-		everyone: false,
+const policy = {
+	text: {
+		format: 'html',
+		inlineMention: {
+			user: 'native',
+			role: 'text',
+			channel: 'text',
+			everyone: 'text',
+		},
 	},
-	maxCaptionLength: 1024,
+	outbound: {
+		supportsQuote: true,
+		supportsMixedMedia: true,
+		supportedOps: ['text', 'image', 'audio', 'video', 'file'],
+		maxCaptionLength: 1024,
+	},
+} as const satisfies AdapterPolicy
+
+export const telegramPolicy = policy
+
+declare global {
+	interface BotLayerPlatformPolicyRegistry {
+		telegram: typeof telegramPolicy
+	}
 }
 
 const renderInline = (parts: InlinePart[]): string => parts.map(renderPart).join('')
@@ -98,7 +108,7 @@ const renderPart = (part: Part): string => {
 
 const render = (parts: Part[]): RenderResult => ({
 	text: parts.map(renderPart).join(''),
-	format: capabilities.format,
+	format: policy.text.format,
 })
 
 type MediaInput = ImagePart | AudioPart | VideoPart | FilePart
@@ -122,103 +132,111 @@ const isAnimationLike = (part: ImagePart): boolean => {
 const toParseMode = (format: RenderResult['format']): 'HTML' | undefined =>
 	format === 'html' ? 'HTML' : undefined
 
-export const telegramAdapter: PlatformAdapter<'telegram'> = {
+export const telegramAdapter = defineAdapter({
 	name: 'telegram',
-	capabilities,
+	policy,
 	render,
 
-	sendText: async (session, text: OutboundText, options) => {
-		if (!text.rendered.text) return
+	uploadMedia: async (_session, media) => media,
+
+	send: async (session, op: OutboundOp, options) => {
 		const replyTo = options?.quote ? session.message.message_id : undefined
-		const parseMode = toParseMode(text.rendered.format)
-		const res = await session.bot.sendMessage({
-			chat_id: session.chatId,
-			text: text.rendered.text,
-			reply_to_message_id: replyTo,
-			parse_mode: parseMode,
-		})
-		if (!res.ok) throw new Error(`Telegram sendMessage failed: ${res.message}`)
-	},
 
-	uploadImage: async (_session, image) => image,
-	uploadFile: async (_session, file) => file,
+		switch (op.type) {
+			case 'text': {
+				if (!op.text.rendered.text) return
+				const parseMode = toParseMode(op.text.rendered.format)
+				const res = await session.bot.sendMessage({
+					chat_id: session.chatId,
+					text: op.text.rendered.text,
+					reply_to_message_id: replyTo,
+					parse_mode: parseMode,
+				})
+				if (!res.ok) throw new Error(`Telegram sendMessage failed: ${res.message}`)
+				return
+			}
 
-	sendImage: async (session, image, caption, options) => {
-		const replyTo = options?.quote ? session.message.message_id : undefined
-		const parseMode = caption ? toParseMode(caption.rendered.format) : undefined
-		const payload = toInputFile(image, image.name ?? image.alt ?? 'image.png')
-		if (!payload) throw new Error('Telegram: image.url 为空，且未提供 data，无法发送图片')
+			case 'image': {
+				const caption = op.caption
+				const parseMode = caption ? toParseMode(caption.rendered.format) : undefined
+				const payload = toInputFile(op.image, op.image.name ?? op.image.alt ?? 'image.png')
+				if (!payload) throw new Error('Telegram: image.url 为空，且未提供 data，无法发送图片')
 
-		if (isAnimationLike(image)) {
-			const res = await session.bot.sendAnimation({
-				chat_id: session.chatId,
-				animation: payload,
-				caption: caption?.rendered.text || undefined,
-				reply_to_message_id: replyTo,
-				parse_mode: parseMode,
-			})
-			if (!res.ok) {
-				const msg = String(res.message ?? '')
-				if (msg.includes('no animation in the request')) {
-					const doc = await session.bot.sendDocument({
+				if (isAnimationLike(op.image)) {
+					const res = await session.bot.sendAnimation({
 						chat_id: session.chatId,
-						document: payload,
+						animation: payload,
 						caption: caption?.rendered.text || undefined,
 						reply_to_message_id: replyTo,
+						parse_mode: parseMode,
 					})
-					if (!doc.ok) throw new Error(`Telegram sendAnimation failed: ${res.message}; sendDocument failed: ${doc.message}`)
-				} else {
-					throw new Error(`Telegram sendAnimation failed: ${res.message}`)
+					if (!res.ok) {
+						const msg = String(res.message ?? '')
+						if (msg.includes('no animation in the request')) {
+							const doc = await session.bot.sendDocument({
+								chat_id: session.chatId,
+								document: payload,
+								caption: caption?.rendered.text || undefined,
+								reply_to_message_id: replyTo,
+							})
+							if (!doc.ok) throw new Error(`Telegram sendAnimation failed: ${res.message}; sendDocument failed: ${doc.message}`)
+						} else {
+							throw new Error(`Telegram sendAnimation failed: ${res.message}`)
+						}
+					}
+					return
 				}
+
+				const res = await session.bot.sendPhoto({
+					chat_id: session.chatId,
+					photo: payload,
+					caption: caption?.rendered.text || undefined,
+					reply_to_message_id: replyTo,
+					parse_mode: parseMode,
+				})
+				if (!res.ok) throw new Error(`Telegram sendPhoto failed: ${res.message}`)
+				return
 			}
-		} else {
-			const res = await session.bot.sendPhoto({
-				chat_id: session.chatId,
-				photo: payload,
-				caption: caption?.rendered.text || undefined,
-				reply_to_message_id: replyTo,
-				parse_mode: parseMode,
-			})
-			if (!res.ok) throw new Error(`Telegram sendPhoto failed: ${res.message}`)
+
+			case 'audio': {
+				const payload = toInputFile(op.audio, op.audio.name ?? 'audio')
+				if (!payload) throw new Error('Telegram: audio.url 为空，且未提供 data，无法发送音频')
+				const res = await session.bot.sendAudio({
+					chat_id: session.chatId,
+					audio: payload,
+					reply_to_message_id: replyTo,
+				})
+				if (!res.ok) throw new Error(`Telegram sendAudio failed: ${res.message}`)
+				return
+			}
+
+			case 'video': {
+				const caption = op.caption
+				const parseMode = caption ? toParseMode(caption.rendered.format) : undefined
+				const payload = toInputFile(op.video, op.video.name ?? 'video.mp4')
+				if (!payload) throw new Error('Telegram: video.url 为空，且未提供 data，无法发送视频')
+				const res = await session.bot.sendVideo({
+					chat_id: session.chatId,
+					video: payload,
+					caption: caption?.rendered.text || undefined,
+					reply_to_message_id: replyTo,
+					parse_mode: parseMode,
+				})
+				if (!res.ok) throw new Error(`Telegram sendVideo failed: ${res.message}`)
+				return
+			}
+
+			case 'file': {
+				const payload = toInputFile(op.file, op.file.name ?? 'file')
+				if (!payload) throw new Error('Telegram: file.url 为空，且未提供 data，无法发送文件')
+				const res = await session.bot.sendDocument({
+					chat_id: session.chatId,
+					document: payload,
+					reply_to_message_id: replyTo,
+				})
+				if (!res.ok) throw new Error(`Telegram sendDocument failed: ${res.message}`)
+				return
+			}
 		}
 	},
-
-	sendAudio: async (session, audio, options) => {
-		const replyTo = options?.quote ? session.message.message_id : undefined
-		const payload = toInputFile(audio, audio.name ?? 'audio')
-		if (!payload) throw new Error('Telegram: audio.url 为空，且未提供 data，无法发送音频')
-		const res = await session.bot.sendAudio({
-			chat_id: session.chatId,
-			audio: payload,
-			reply_to_message_id: replyTo,
-		})
-		if (!res.ok) throw new Error(`Telegram sendAudio failed: ${res.message}`)
-	},
-
-	sendVideo: async (session, video, caption, options) => {
-		const replyTo = options?.quote ? session.message.message_id : undefined
-		const parseMode = caption ? toParseMode(caption.rendered.format) : undefined
-		const payload = toInputFile(video, video.name ?? 'video.mp4')
-		if (!payload) throw new Error('Telegram: video.url 为空，且未提供 data，无法发送视频')
-		const res = await session.bot.sendVideo({
-			chat_id: session.chatId,
-			video: payload,
-			caption: caption?.rendered.text || undefined,
-			reply_to_message_id: replyTo,
-			parse_mode: parseMode,
-		})
-		if (!res.ok) throw new Error(`Telegram sendVideo failed: ${res.message}`)
-	},
-
-	sendFile: async (session, file, options) => {
-		const replyTo = options?.quote ? session.message.message_id : undefined
-		const payload = toInputFile(file, file.name ?? 'file')
-		if (!payload) throw new Error('Telegram: file.url 为空，且未提供 data，无法发送文件')
-		const res = await session.bot.sendDocument({
-			chat_id: session.chatId,
-			document: payload,
-			reply_to_message_id: replyTo,
-		})
-		if (!res.ok) throw new Error(`Telegram sendDocument failed: ${res.message}`)
-	},
-}
+})

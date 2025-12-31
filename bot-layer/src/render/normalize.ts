@@ -35,25 +35,25 @@ const normalizeInlineForAdapter = <P extends Platform>(
 	parts: InlinePart[],
 	adapter: PlatformAdapter<P>,
 ): InlinePart[] => {
-	const { capabilities } = adapter
+	const policy = adapter.policy.text
 
 	return parts
 		.map<InlinePart | null>((part) => {
 			switch (part.type) {
 				case 'styled': {
 					const children = normalizeInlineForAdapter(part.children, adapter)
-					if (capabilities.format === 'plain') {
+					if (policy.format === 'plain') {
 						return children.length ? { type: 'text', text: inlineToText(children) } : null
 					}
 					return { ...part, children }
 				}
 				case 'mention': {
-					const support = capabilities.supportsInlineMention[part.kind] ?? false
-					if (!support) return { type: 'text', text: mentionToText(part) }
+					const render = policy.inlineMention[part.kind] ?? 'text'
+					if (render !== 'native') return { type: 'text', text: mentionToText(part) }
 					return part
 				}
 				case 'link': {
-					if (capabilities.format === 'plain') {
+					if (policy.format === 'plain') {
 						return { type: 'text', text: part.label ? `${part.label} (${part.url})` : part.url }
 					}
 					return part
@@ -69,31 +69,31 @@ export const normalizeTextPartsForAdapter = <P extends Platform>(
 	parts: TextLikePart[],
 	adapter: PlatformAdapter<P>,
 ): TextLikePart[] => {
-	const { capabilities } = adapter
+	const policy = adapter.policy.text
 
 	return parts
 		.map<TextLikePart | null>((part) => {
 			switch (part.type) {
 				case 'styled': {
 					const children = normalizeInlineForAdapter(part.children, adapter)
-					if (capabilities.format === 'plain') {
+					if (policy.format === 'plain') {
 						return children.length ? { type: 'text', text: inlineToText(children) } : null
 					}
 					return { ...part, children }
 				}
 				case 'mention': {
-					const support = capabilities.supportsInlineMention[part.kind] ?? false
-					if (!support) return { type: 'text', text: mentionToText(part) }
+					const render = policy.inlineMention[part.kind] ?? 'text'
+					if (render !== 'native') return { type: 'text', text: mentionToText(part) }
 					return part
 				}
 				case 'link': {
-					if (capabilities.format === 'plain') {
+					if (policy.format === 'plain') {
 						return { type: 'text', text: part.label ? `${part.label} (${part.url})` : part.url }
 					}
 					return part
 				}
 				case 'codeblock': {
-					if (capabilities.format === 'plain') {
+					if (policy.format === 'plain') {
 						return { type: 'text', text: part.code }
 					}
 					return part

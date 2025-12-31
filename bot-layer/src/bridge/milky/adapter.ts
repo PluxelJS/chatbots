@@ -9,30 +9,40 @@ import type {
 	LinkPart,
 	MentionPart,
 	Part,
-	PlatformCapabilities,
+	AdapterPolicy,
 	StyledPart,
 	VideoPart,
 } from '../../types'
-import type { OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
+import { defineAdapter } from '../../adapter'
+import type { OutboundOp, OutboundText, PlatformAdapter, RenderResult } from '../../adapter'
 import { toNodeBuffer } from '../../binary'
 
 type MilkyMessageSession = import('pluxel-plugin-milky').MilkyMessageSession
 type Result<T> = import('pluxel-plugin-milky').Result<T>
 
-const capabilities: PlatformCapabilities = {
-	format: 'plain',
-	supportsQuote: true,
-	supportsImage: true,
-	supportsAudio: true,
-	supportsVideo: true,
-	supportsFile: true,
-	supportsMixedMedia: true,
-	supportsInlineMention: {
-		user: true,
-		role: false,
-		channel: false,
-		everyone: true,
+const policy = {
+	text: {
+		format: 'plain',
+		inlineMention: {
+			user: 'native',
+			role: 'text',
+			channel: 'text',
+			everyone: 'native',
+		},
 	},
+	outbound: {
+		supportsQuote: true,
+		supportsMixedMedia: true,
+		supportedOps: ['text', 'image', 'audio', 'video', 'file'],
+	},
+} as const satisfies AdapterPolicy
+
+export const milkyPolicy = policy
+
+declare global {
+	interface BotLayerPlatformPolicyRegistry {
+		milky: typeof milkyPolicy
+	}
 }
 
 const renderInline = (parts: InlinePart[]): string => parts.map(renderPart).join('')
@@ -81,7 +91,7 @@ const renderPart = (part: Part): string => {
 
 const render = (parts: Part[]): RenderResult => ({
 	text: parts.map(renderPart).join(''),
-	format: capabilities.format,
+	format: policy.text.format,
 })
 
 type OutgoingSegment =
@@ -155,67 +165,78 @@ const sendMessage = async (session: MilkyMessageSession, message: OutgoingSegmen
 	expectOk(res, 'send_private_message')
 }
 
-export const milkyAdapter: PlatformAdapter<'milky'> = {
+export const milkyAdapter = defineAdapter({
 	name: 'milky',
-	capabilities,
+	policy,
 	render,
 
-	sendText: async (session, text, options) => {
-		const segments = withQuote(session, toOutgoingTextSegments(text), options?.quote)
-		await sendMessage(session, segments)
-	},
+	uploadMedia: async (_session, media) => media,
 
-	sendImage: async (session, image, caption, options) => {
-		const uri = uriFromPart(image, '图片')
-		const img: OutgoingSegment = { type: 'image', data: { uri, sub_type: 'normal', summary: caption?.rendered.text ?? null } }
-		const captionSegs = caption ? toOutgoingTextSegments(caption) : []
-		const segments = withQuote(session, [img, ...captionSegs], options?.quote)
-		await sendMessage(session, segments)
-	},
+	send: async (session, op: OutboundOp, options) => {
+		switch (op.type) {
+			case 'text': {
+				const segments = withQuote(session, toOutgoingTextSegments(op.text), options?.quote)
+				await sendMessage(session, segments)
+				return
+			}
 
-	sendFile: async (session, file) => {
-		const scene = session.message?.message_scene
-		const peer = Number(session.message?.peer_id)
-		if (!Number.isFinite(peer)) throw new Error('Milky: 缺少 peer_id')
+			case 'image': {
+				const uri = uriFromPart(op.image, '图片')
+				const img: OutgoingSegment = {
+					type: 'image',
+					data: { uri, sub_type: 'normal', summary: op.caption?.rendered.text ?? null },
+				}
+				const captionSegs = op.caption ? toOutgoingTextSegments(op.caption) : []
+				const segments = withQuote(session, [img, ...captionSegs], options?.quote)
+				await sendMessage(session, segments)
+				return
+			}
 
-		const file_uri = uriFromPart(file, '文件')
-		const file_name = file.name ?? 'file'
+			case 'audio': {
+				const uri = uriFromPart(op.audio, '音频')
+				const seg: OutgoingSegment = { type: 'record', data: { uri } }
+				const segments = withQuote(session, [seg], options?.quote)
+				await sendMessage(session, segments)
+				return
+			}
 
-		if (scene === 'group') {
-			const res = await session.bot.upload_group_file({
-				group_id: peer,
-				parent_folder_id: '/',
-				file_uri,
-				file_name,
-			})
-			expectOk(res, 'upload_group_file')
-			return
+			case 'video': {
+				const uri = uriFromPart(op.video, '视频')
+				const thumb_uri = op.video.thumbnail?.url ?? null
+				const seg: OutgoingSegment = { type: 'video', data: { uri, thumb_uri } }
+				const captionSegs = op.caption ? toOutgoingTextSegments(op.caption) : []
+				const segments = withQuote(session, [seg, ...captionSegs], options?.quote)
+				await sendMessage(session, segments)
+				return
+			}
+
+			case 'file': {
+				const scene = session.message?.message_scene
+				const peer = Number(session.message?.peer_id)
+				if (!Number.isFinite(peer)) throw new Error('Milky: 缺少 peer_id')
+
+				const file_uri = uriFromPart(op.file, '文件')
+				const file_name = op.file.name ?? 'file'
+
+				if (scene === 'group') {
+					const res = await session.bot.upload_group_file({
+						group_id: peer,
+						parent_folder_id: '/',
+						file_uri,
+						file_name,
+					})
+					expectOk(res, 'upload_group_file')
+					return
+				}
+
+				const res = await session.bot.upload_private_file({
+					user_id: peer,
+					file_uri,
+					file_name,
+				})
+				expectOk(res, 'upload_private_file')
+				return
+			}
 		}
-
-		const res = await session.bot.upload_private_file({
-			user_id: peer,
-			file_uri,
-			file_name,
-		})
-		expectOk(res, 'upload_private_file')
 	},
-
-	uploadImage: async (_session, image) => image,
-	uploadFile: async (_session, file) => file,
-
-	sendAudio: async (session, audio, options) => {
-		const uri = uriFromPart(audio, '音频')
-		const seg: OutgoingSegment = { type: 'record', data: { uri } }
-		const segments = withQuote(session, [seg], options?.quote)
-		await sendMessage(session, segments)
-	},
-
-	sendVideo: async (session, video, caption, options) => {
-		const uri = uriFromPart(video, '视频')
-		const thumb_uri = video.thumbnail?.url ?? null
-		const seg: OutgoingSegment = { type: 'video', data: { uri, thumb_uri } }
-		const captionSegs = caption ? toOutgoingTextSegments(caption) : []
-		const segments = withQuote(session, [seg, ...captionSegs], options?.quote)
-		await sendMessage(session, segments)
-	},
-}
+})

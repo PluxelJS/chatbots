@@ -270,7 +270,8 @@ export const normalizeMilkyMessage = async (session: MilkyMessageSession): Promi
 
 	const messageId = Number((message as any).message_seq) || null
 	const reply = createReply(milkyAdapter, session)
-	const { uploadImage, uploadFile, sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(milkyAdapter, session)
+	const { sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(milkyAdapter, session)
+	const supported = milkyAdapter.policy.outbound.supportedOps
 
 	return {
 		platform: 'milky',
@@ -288,11 +289,9 @@ export const normalizeMilkyMessage = async (session: MilkyMessageSession): Promi
 		bot: session.bot,
 		reply,
 		sendText,
-		sendImage,
-		sendAudio,
-		sendVideo,
-		sendFile,
-		uploadImage,
-		uploadFile,
+		...(supported.includes('image') ? { sendImage } : {}),
+		...(supported.includes('audio') ? { sendAudio } : {}),
+		...(supported.includes('video') ? { sendVideo } : {}),
+		...(supported.includes('file') ? { sendFile } : {}),
 	}
 }
