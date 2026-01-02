@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import { Collection, createIndex } from '@pluxel/hmr/signaldb'
-import type { PluginContext } from '@pluxel/hmr'
+import type { Context } from '@pluxel/hmr'
 import type { Bot } from '../bot'
 
 export type BotState = ReturnType<Bot['getStatusSnapshot']>
@@ -119,7 +119,7 @@ export class TelegramBotRegistry {
 	private collection!: Collection<TelegramBotRecord>
 	private readyPromise: Promise<void> | null = null
 
-	constructor(private readonly ctx: PluginContext, private readonly collectionName = 'telegram:bots') {}
+	constructor(private readonly ctx: Context, private readonly collectionName = 'telegram:bots') {}
 
 	async init() {
 		this.collection = new Collection<TelegramBotRecord>({

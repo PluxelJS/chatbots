@@ -374,13 +374,13 @@ export class KookGatewayClient {
 			this.ws = ws
 			this.emitState('handshaking', { url })
 
-			// 统一监听先挂，避免竞态丢帧
-			ws.on('message', this.onMessage)
-			ws.on('close', (code, reason) => this.onClose(code, reason))
-			ws.on('error', (e) => this.opt.onError?.(e))
-			ws.on('pong', () => {
-				// 控制帧 PONG
-				this.counters.pongRecv++
+				// 统一监听先挂，避免竞态丢帧
+				ws.on('message', this.onMessage)
+				ws.on('close', (code: number, reason: Buffer) => this.onClose(code, reason))
+				ws.on('error', (e: unknown) => this.opt.onError?.(e))
+				ws.on('pong', () => {
+					// 控制帧 PONG
+					this.counters.pongRecv++
 				this.marks.lastPongAt = Date.now()
 				this.debug('pong.ws')
 				if (this.hbMode === 'strict' && this.state === 'weak')

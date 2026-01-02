@@ -1,7 +1,8 @@
 import type { Context } from '@pluxel/hmr'
 import { v } from '@pluxel/hmr/config'
+import type { Events } from '@pluxel/core/services'
 import type { Platform } from '../types'
-import type { BridgeDefinition, BridgeManager, DispatchFn } from './types'
+import type { AnyBridgeDefinition, BridgeDefinition, BridgeManager, DispatchFn } from './types'
 import { kookBridge } from './kook'
 import { milkyBridge } from './milky'
 import { telegramBridge } from './telegram'
@@ -13,27 +14,29 @@ import type { BridgeStatusTracker } from '../status'
 // Bridge Registry
 // ─────────────────────────────────────────────────────────────────────────────
 
-const DEFINITIONS = new Map<Platform, BridgeDefinition>()
+const DEFINITIONS = new Map<Platform, AnyBridgeDefinition>()
 
-const addBuiltin = (def: BridgeDefinition) => {
+const addBuiltin = (def: AnyBridgeDefinition) => {
 	DEFINITIONS.set(def.platform, def)
 	registerAdapter(def.adapter as any)
 }
 
-addBuiltin(kookBridge as BridgeDefinition)
-addBuiltin(milkyBridge as BridgeDefinition)
-addBuiltin(telegramBridge as BridgeDefinition)
+addBuiltin(kookBridge)
+addBuiltin(milkyBridge)
+addBuiltin(telegramBridge)
 
 /** 获取当前所有桥接定义 */
-export const getBridgeDefinitions = (): BridgeDefinition[] => Array.from(DEFINITIONS.values())
+export const getBridgeDefinitions = (): AnyBridgeDefinition[] => Array.from(DEFINITIONS.values())
 
 /** 获取某个平台的桥接定义 */
 export const getBridgeDefinition = <P extends Platform>(platform: P) =>
 	DEFINITIONS.get(platform) as unknown as BridgeDefinition<P>
 
 /** 运行时注册桥接定义（第三方平台扩展用） */
-export const registerBridgeDefinition = <P extends Platform>(def: BridgeDefinition<P>): (() => void) => {
-	DEFINITIONS.set(def.platform, def as unknown as BridgeDefinition)
+export const registerBridgeDefinition = <P extends Platform, E extends keyof Events, Instance>(
+	def: BridgeDefinition<P, E, Instance>,
+): (() => void) => {
+	DEFINITIONS.set(def.platform, def as unknown as AnyBridgeDefinition)
 	const disposeAdapter = registerAdapter(def.adapter as any)
 	return () => {
 		disposeAdapter()

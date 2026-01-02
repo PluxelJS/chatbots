@@ -5,6 +5,6 @@
 		"rootDir": ".",
 		"baseUrl": "."
 	},
-	"include": ["core", "permissions"],
+	"include": ["src"],
 	"exclude": ["**/*.test.ts", "**/*.bench.ts", "**/__tests__/**"]
 }

@@ -1,0 +1,20 @@
+{
+	"extends": "../../../tsconfig.base.json",
+	"compilerOptions": {
+		"noEmit": true,
+		"baseUrl": ".",
+		"composite": false,
+		"declaration": false,
+		"declarationMap": false
+	},
+	"include": [
+		"**/*.d.ts",
+		"**/*.ts",
+		"**/*.tsx",
+		"../core/**/*.d.ts",
+		"../core/api.ts",
+		"../core/permissions-types.ts",
+		"../core/sandbox/types.ts",
+		"../core/user-types.ts"
+	]
+}

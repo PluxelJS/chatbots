@@ -5,7 +5,7 @@ import { kookAdapter } from './adapter'
 type KookModule = typeof import('pluxel-plugin-kook')
 type KookInstance = InstanceType<KookModule['KOOK']>
 
-export const kookBridge: BridgeDefinition<'kook', KookInstance> = {
+export const kookBridge: BridgeDefinition<'kook', 'kook:ready', KookInstance> = {
 	platform: 'kook',
 	adapter: kookAdapter,
 	event: 'kook:ready',

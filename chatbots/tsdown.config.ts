@@ -2,7 +2,7 @@ import { defineConfig } from 'tsdown'
 
 export default defineConfig({
 	entry: {
-		index: './chatbots-entry.ts',
+		index: './src/index.ts',
 	},
 	dts: {
 		sourcemap: true,

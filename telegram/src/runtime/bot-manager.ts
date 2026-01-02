@@ -36,14 +36,14 @@ export class TelegramBotManager {
 	getOverview() {
 		const statuses = this.repo.list()
 		const runningStates = new Set(['polling', 'webhook'])
-		const active = statuses.filter((status) => runningStates.has(status.state)).length
-		const configured = statuses.length
-		return {
-			name: this.ctx.pluginInfo.name,
-			configuredBots: configured,
-			activeBots: active,
-			totalBots: statuses.length,
-			modeBreakdown: {
+			const active = statuses.filter((status) => runningStates.has(status.state)).length
+			const configured = statuses.length
+			return {
+				name: this.ctx.pluginInfo.displayName,
+				configuredBots: configured,
+				activeBots: active,
+				totalBots: statuses.length,
+				modeBreakdown: {
 				polling: statuses.filter((s) => s.mode === 'polling').length,
 				webhook: statuses.filter((s) => s.mode === 'webhook').length,
 				api: statuses.filter((s) => s.mode === 'api').length,

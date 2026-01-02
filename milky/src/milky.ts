@@ -66,14 +66,19 @@ export class Milky extends BasePlugin {
 	}
 }
 
-declare module '@pluxel/hmr/services' {
-	interface RpcExtensions {
+declare module '@pluxel/hmr/web' {
+	namespace UI {
+interface rpc {
 		Milky: MilkyBotRpc
 	}
-	interface SseEvents {
+	interface sse {
 		Milky: MilkySnapshot
 	}
+	}
+}
+
+declare module '@pluxel/core/services' {
 	interface Events {
-		'milky:ready': Milky
+		'milky:ready': [Milky]
 	}
 }

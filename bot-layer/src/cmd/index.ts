@@ -375,3 +375,5 @@ export function defineFor<C>() {
 		return defineCommand<P, F, C>(spec)
 	}
 }
+
+export type { Flags, TypeFlag, TypeFlagOptions } from 'type-flag'

@@ -76,14 +76,19 @@ export class KOOK extends BasePlugin {
 	}
 }
 
-declare module '@pluxel/hmr/services' {
-	interface RpcExtensions {
+declare module '@pluxel/hmr/web' {
+	namespace UI {
+interface rpc {
 		KOOK: KOOKBotRpc
 	}
-	interface SseEvents {
+	interface sse {
 		KOOK: KookSnapshot
 	}
+	}
+}
+
+declare module '@pluxel/core/services' {
 	interface Events {
-		'kook:ready': KOOK
+		'kook:ready': [KOOK]
 	}
 }

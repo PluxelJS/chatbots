@@ -29,15 +29,6 @@ export type OutboundOp =
 	| { type: 'video'; video: VideoPart; caption?: OutboundText }
 	| { type: 'file'; file: FilePart }
 
-type SupportedOpType<Policy extends AdapterPolicy> = Policy['outbound']['supportedOps'][number]
-
-export type OutboundOpFor<Policy extends AdapterPolicy> =
-	| { type: 'text'; text: OutboundText }
-	| ('image' extends SupportedOpType<Policy> ? { type: 'image'; image: ImagePart; caption?: OutboundText } : never)
-	| ('audio' extends SupportedOpType<Policy> ? { type: 'audio'; audio: AudioPart } : never)
-	| ('video' extends SupportedOpType<Policy> ? { type: 'video'; video: VideoPart; caption?: OutboundText } : never)
-	| ('file' extends SupportedOpType<Policy> ? { type: 'file'; file: FilePart } : never)
-
 export interface PlatformAdapter<P extends Platform = Platform, Policy extends AdapterPolicy = AdapterPolicy> {
 	name: P
 	policy: Policy
@@ -57,7 +48,7 @@ export interface PlatformAdapter<P extends Platform = Platform, Policy extends A
 	/**
 	 * 发送一个“原子操作”（Outbound 层会完成 normalize/降级/拆分/上传）。
 	 */
-	send: (session: PlatformRegistry[P]['raw'], op: OutboundOpFor<Policy>, options?: ReplyOptions) => Promise<void>
+	send: (session: PlatformRegistry[P]['raw'], op: OutboundOp, options?: ReplyOptions) => Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -83,7 +74,7 @@ export const registerAdapter = <P extends Platform>(adapter: PlatformAdapter<P>)
 export const defineAdapter = <P extends Platform, Policy extends AdapterPolicy>(
 	adapter: PlatformAdapter<P, Policy>,
 ): PlatformAdapter<P, Policy> => {
-	assertValidAdapter(adapter as PlatformAdapter<any>)
+	assertValidAdapter(adapter as unknown as PlatformAdapter<any>)
 	return adapter
 }
 

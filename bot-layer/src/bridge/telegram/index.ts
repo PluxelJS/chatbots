@@ -5,7 +5,7 @@ import { telegramAdapter } from './adapter'
 type TelegramModule = typeof import('pluxel-plugin-telegram')
 type TelegramInstance = InstanceType<TelegramModule['TelegramPlugin']>
 
-export const telegramBridge: BridgeDefinition<'telegram', TelegramInstance> = {
+export const telegramBridge: BridgeDefinition<'telegram', 'telegram:ready', TelegramInstance> = {
 	platform: 'telegram',
 	adapter: telegramAdapter,
 	event: 'telegram:ready',

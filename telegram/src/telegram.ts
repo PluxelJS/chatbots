@@ -48,14 +48,20 @@ export class TelegramPlugin extends BasePlugin {
 	}
 }
 
-declare module '@pluxel/hmr/services' {
-	interface RpcExtensions {
+declare module '@pluxel/hmr/web' {
+	namespace UI {
+	interface rpc {
 		Telegram: TelegramBotRpc
 	}
-	interface SseEvents {
+	interface sse {
 		Telegram: TelegramSnapshot
 	}
+	}
+
+}
+
+declare module '@pluxel/core/services' {
 	interface Events {
-		'telegram:ready': TelegramPlugin
+		'telegram:ready': [TelegramPlugin]
 	}
 }

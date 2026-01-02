@@ -172,8 +172,7 @@ export const normalizeKookMessage = (session: MessageSession): Message<'kook'> =
 	}
 
 	const reply = createReply(kookAdapter, session)
-	const { sendText, sendImage, sendAudio, sendVideo, sendFile } = createSendHelpers(kookAdapter, session)
-	const supported = kookAdapter.policy.outbound.supportedOps
+	const { sendText, sendImage, sendVideo, sendFile } = createSendHelpers(kookAdapter, session)
 
 	return {
 		platform: 'kook',
@@ -191,9 +190,8 @@ export const normalizeKookMessage = (session: MessageSession): Message<'kook'> =
 		bot: session.bot,
 		reply,
 		sendText,
-		...(supported.includes('image') ? { sendImage } : {}),
-		...(supported.includes('audio') ? { sendAudio } : {}),
-		...(supported.includes('video') ? { sendVideo } : {}),
-		...(supported.includes('file') ? { sendFile } : {}),
+		sendImage,
+		sendVideo,
+		sendFile,
 	}
 }

@@ -167,7 +167,6 @@ export const createSandboxMessage = (input: SandboxMessageInput): Message<'sandb
 	const helpers = createSendHelpers(adapter, input.session)
 	const text = renderText(parts)
 	const textRaw = typeof input.rawText === 'string' ? input.rawText : text
-	const supported = adapter.policy.outbound.supportedOps
 
 	return {
 		platform: 'sandbox',
@@ -185,12 +184,11 @@ export const createSandboxMessage = (input: SandboxMessageInput): Message<'sandb
 		bot: input.session.bot ?? DEFAULT_SANDBOX_BOT,
 		reply,
 		sendText: helpers.sendText,
-		...(supported.includes('image') ? { sendImage: helpers.sendImage } : {}),
-		...(supported.includes('audio') ? { sendAudio: helpers.sendAudio } : {}),
-		...(supported.includes('video') ? { sendVideo: helpers.sendVideo } : {}),
-		...(supported.includes('file') ? { sendFile: helpers.sendFile } : {}),
+		sendImage: helpers.sendImage,
+		sendAudio: helpers.sendAudio,
+		sendVideo: helpers.sendVideo,
+		sendFile: helpers.sendFile,
 	}
 }
 
 export const registerSandboxAdapter = (): (() => void) => registerAdapter(createSandboxAdapter())
-

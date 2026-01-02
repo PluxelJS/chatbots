@@ -105,9 +105,14 @@ function isTelegramFileInput(x: TelegramInputFile): x is TelegramFileInput {
 function toBlob(data: TelegramBinaryLike, contentType?: string): Blob {
 	if (data instanceof Blob) return contentType ? data.slice(0, data.size, contentType) : data
 
+	const toUint8Copy = (input: ArrayBufferView): Uint8Array<ArrayBuffer> => {
+		const out: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(input.byteLength))
+		out.set(new Uint8Array(input.buffer, input.byteOffset, input.byteLength))
+		return out
+	}
+
 	if (isNodeBuffer(data)) {
-		const u8 = new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-		return new Blob([u8], { type: contentType ?? 'application/octet-stream' })
+		return new Blob([toUint8Copy(data)], { type: contentType ?? 'application/octet-stream' })
 	}
 
 	if (data instanceof ArrayBuffer) {
@@ -115,7 +120,7 @@ function toBlob(data: TelegramBinaryLike, contentType?: string): Blob {
 	}
 
 	// ArrayBufferView
-	return new Blob([data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength)], {
+	return new Blob([toUint8Copy(data)], {
 		type: contentType ?? 'application/octet-stream',
 	})
 }

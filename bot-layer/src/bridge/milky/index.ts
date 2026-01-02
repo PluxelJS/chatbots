@@ -5,7 +5,7 @@ import { normalizeMilkyMessage } from './normalize'
 type MilkyModule = typeof import('pluxel-plugin-milky')
 type MilkyInstance = InstanceType<MilkyModule['Milky']>
 
-export const milkyBridge: BridgeDefinition<'milky', MilkyInstance> = {
+export const milkyBridge: BridgeDefinition<'milky', 'milky:ready', MilkyInstance> = {
 	platform: 'milky',
 	adapter: milkyAdapter,
 	event: 'milky:ready',
@@ -49,4 +49,3 @@ export const milkyBridge: BridgeDefinition<'milky', MilkyInstance> = {
 		}
 	},
 }
-

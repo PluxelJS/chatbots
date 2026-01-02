@@ -1,5 +1,5 @@
 import type { Context } from '@pluxel/hmr'
-import type { BridgeDefinition, CleanupFn, DispatchFn } from './types'
+import type { AnyBridgeDefinition, BridgeDefinition, CleanupFn, DispatchFn } from './types'
 import type { BridgeStatusTracker } from '../status'
 
 const toCleanup = (fn: CleanupFn): (() => void) | null => (typeof fn === 'function' ? fn : null)
@@ -13,7 +13,7 @@ const safeRun = (ctx: Context, label: string, fn?: (() => void) | null) => {
 	}
 }
 
-const startBridge = <P extends BridgeDefinition>(
+const startBridge = <P extends AnyBridgeDefinition>(
 	ctx: Context,
 	def: P,
 	dispatch: DispatchFn,
@@ -21,22 +21,25 @@ const startBridge = <P extends BridgeDefinition>(
 ): (() => void) => {
 	let disposed = false
 
-	const attach = (instance: { ctx: Context }) => {
+	type InstanceOf<D> = D extends BridgeDefinition<any, any, infer Instance> ? Instance : unknown
+
+	const attach = (instance: InstanceOf<P>) => {
 		if (disposed || !instance) return
 
 		ctx.logger.debug({ platform: def.platform }, 'bot-layer: bridge attach')
-		const detachInstance = toCleanup(def.attach(ctx, instance as any, dispatch as any))
+		const detachInstance = toCleanup(def.attach(ctx, instance, dispatch))
 		status?.setAttached(def.platform)
 
 		// 通过平台实例的 scope 自动管理生命周期
-		instance.ctx.scope.collectEffect(() => {
+		const anyInstance = instance as any
+		anyInstance?.ctx?.scope?.collectEffect?.(() => {
 			safeRun(ctx, `bot-layer: ${def.platform} bridge detach 失败`, detachInstance)
 			status?.setDetached(def.platform)
 		})
 	}
 
 	// 监听平台 ready 事件
-	const unlisten = ctx.events.on(def.event as any, attach)
+	const unlisten = ctx.events.on(def.event, attach as any)
 
 	return () => {
 		if (disposed) return
@@ -47,7 +50,7 @@ const startBridge = <P extends BridgeDefinition>(
 
 export const startBridges = (
 	ctx: Context,
-	definitions: BridgeDefinition[],
+	definitions: AnyBridgeDefinition[],
 	dispatch: DispatchFn,
 	status?: BridgeStatusTracker,
 ): (() => void) => {

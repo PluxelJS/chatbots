@@ -320,6 +320,7 @@ const resolveUserProfileUncached = async (
 	const baseIsBot = patch.isBot
 
 	if (msg.platform === 'kook') {
+		const bot: any = msg.bot
 		const id = ref.id != null ? String(ref.id) : null
 		if (!id) return null
 
@@ -334,8 +335,8 @@ const resolveUserProfileUncached = async (
 		}
 
 		if (profile.avatar && profile.username && profile.displayName && profile.isBot !== null) {
-			return profile
-		}
+				return profile
+			}
 
 		try {
 			const res = await bot.getUserView({
@@ -544,25 +545,25 @@ export const resolveUserAvatarImage = async (
 		return map
 	}
 
-	if (cacheKey) {
-		const map = getAvatarCache(msg)
-		const cached = map.get(cacheKey)
-		if (cached) return cached
-		const promise = (async () => {
+		if (cacheKey) {
+			const map = getAvatarCache(msg)
+			const cached = map.get(cacheKey)
+			if (cached) return cached
+			const promise = (async () => {
 			if (msg.platform === 'telegram') {
 				const res = await resolveTelegramAvatarImage(msg, ref, { signal, prefer, trace })
 				if (res) return res
 			}
-			const url = await resolveUserAvatarUrl(msg, user)
-			if (!url) return null
-			const data = await fetchBuffer(url, signal, trace, 'generic:url')
-			if (!data) return null
-			return { data, url, cacheKey: `url:${url}`, source: 'unknown' }
-		})()
-			.catch((err) => {
-				map.delete(cacheKey)
-				throw err
-			})
+				const url = await resolveUserAvatarUrl(msg, user)
+				if (!url) return null
+				const data = await fetchBuffer(url, signal, trace, 'generic:url')
+				if (!data) return null
+				return { data, url, cacheKey: `url:${url}`, source: 'unknown' } satisfies ResolvedAvatarImage
+			})()
+				.catch((err) => {
+					map.delete(cacheKey)
+					throw err
+				})
 		map.set(cacheKey, promise)
 		const resolved = await promise
 		if (!resolved) map.delete(cacheKey)
@@ -578,7 +579,7 @@ export const resolveUserAvatarImage = async (
 	if (!url) return null
 	const data = await fetchBuffer(url, signal, trace, 'generic:url')
 	if (!data) return null
-	return { data, url, cacheKey: `url:${url}`, source: 'unknown' }
+	return { data, url, cacheKey: `url:${url}`, source: 'unknown' } satisfies ResolvedAvatarImage
 }
 
 export const resolveAuthorProfile = async (msg: AnyMessage): Promise<ResolvedUserProfile | null> => {

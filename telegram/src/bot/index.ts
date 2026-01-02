@@ -327,14 +327,15 @@ export class Bot extends AbstractBot {
 			webhook: { url: webhook.url, secretToken: webhook.secretToken },
 		})
 
-		const result = await this.setWebhook(webhook.url, {
-			certificate: webhook.certificate,
-			ip_address: webhook.ipAddress,
-			max_connections: webhook.maxConnections,
-			allowed_updates: webhook.allowedUpdates as any,
-			drop_pending_updates: webhook.dropPendingUpdates,
-			secret_token: webhook.secretToken,
-		})
+			const result = await this.setWebhook({
+				url: webhook.url,
+				certificate: webhook.certificate,
+				ip_address: webhook.ipAddress,
+				max_connections: webhook.maxConnections,
+				allowed_updates: webhook.allowedUpdates as any,
+				drop_pending_updates: webhook.dropPendingUpdates,
+				secret_token: webhook.secretToken,
+			})
 
 		if (!result.ok) {
 			this.updateStatus({

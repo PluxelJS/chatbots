@@ -15,6 +15,5 @@ export function createTelegramApi(http: HttpClient, options?: TelegramApiOptions
 export { createTelegramRequest }
 export * from './core'
 export * from './prototype'
-export * from './raw'
 export * from './tool'
 export * from './types'

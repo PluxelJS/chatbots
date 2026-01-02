@@ -273,15 +273,21 @@ function missingTracked(): Promise<Result<void>> {
 	return Promise.resolve({ ok: false, code: -404, message: 'No tracked message to operate on' })
 }
 
-function scheduleDelete(task: () => Promise<unknown>, ttlMs: number) {
-	const timer = setTimeout(() => {
-		void task().catch(() => {})
-	}, ttlMs)
-	;(timer as any).unref?.()
-}
+	function scheduleDelete(task: () => Promise<unknown>, ttlMs: number) {
+		const timer = setTimeout(() => {
+			void task().catch(() => {})
+		}, ttlMs)
+		;(timer as any).unref?.()
+	}
 
-function toFormData(file: Buffer | Blob | ArrayBuffer | ArrayBufferView | string | FormData, name: string): FormData {
-	if (file instanceof FormData) return file
+	const toUint8Copy = (input: ArrayBufferView): Uint8Array<ArrayBuffer> => {
+		const out: Uint8Array<ArrayBuffer> = new Uint8Array(new ArrayBuffer(input.byteLength))
+		out.set(new Uint8Array(input.buffer, input.byteOffset, input.byteLength))
+		return out
+	}
+
+	function toFormData(file: Buffer | Blob | ArrayBuffer | ArrayBufferView | string | FormData, name: string): FormData {
+		if (file instanceof FormData) return file
 
 	if (typeof file === 'string') {
 		const u8 = Buffer.from(file, 'base64')
@@ -291,12 +297,12 @@ function toFormData(file: Buffer | Blob | ArrayBuffer | ArrayBufferView | string
 		return fd
 	}
 
-	if (typeof Buffer !== 'undefined' && file instanceof Buffer) {
-		const blob = new Blob([new Uint8Array(file.buffer, file.byteOffset, file.byteLength)], { type: 'application/octet-stream' })
-		const fd = new FormData()
-		fd.append('file', blob, name)
-		return fd
-	}
+		if (typeof Buffer !== 'undefined' && file instanceof Buffer) {
+			const blob = new Blob([toUint8Copy(file)], { type: 'application/octet-stream' })
+			const fd = new FormData()
+			fd.append('file', blob, name)
+			return fd
+		}
 
 	if (file instanceof Blob) {
 		const fd = new FormData()
@@ -309,15 +315,14 @@ function toFormData(file: Buffer | Blob | ArrayBuffer | ArrayBufferView | string
 		const fd = new FormData()
 		fd.append('file', blob, name)
 		return fd
-	}
+		}
 
-	if (ArrayBuffer.isView(file)) {
-		const u8 = new Uint8Array(file.buffer, file.byteOffset, file.byteLength)
-		const blob = new Blob([u8], { type: 'application/octet-stream' })
-		const fd = new FormData()
-		fd.append('file', blob, name)
-		return fd
-	}
+		if (ArrayBuffer.isView(file)) {
+			const blob = new Blob([toUint8Copy(file)], { type: 'application/octet-stream' })
+			const fd = new FormData()
+			fd.append('file', blob, name)
+			return fd
+		}
 
 	return file
 }

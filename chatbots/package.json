@@ -6,7 +6,7 @@
   "type": "module",
   "exports": {
     ".": {
-      "@pluxel/hmr": "./chatbots-entry.ts",
+      "@pluxel/hmr": "./src/index.ts",
       "default": "./dist/index.mjs"
     },
     "./package.json": "./package.json"
@@ -20,8 +20,8 @@
   ],
   "scripts": {
     "build": "pluxel build",
-    "test:perm": "bun test --conditions=@pluxel/hmr permissions",
-    "bench:perm": "bun ./permissions/test/permissions.bench.ts"
+    "test:perm": "bun test --conditions=@pluxel/hmr src/permissions",
+    "bench:perm": "bun ./src/permissions/test/permissions.bench.ts"
   },
   "dependencies": {
     "@pluxel/bot-layer": "workspace:*"
