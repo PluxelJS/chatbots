@@ -180,6 +180,10 @@ export const partsTransformVitePlugin = () =>
 		enforce: 'post',
 		transform(code: string, id: string) {
 			if (!this.parse) return null
+			// IMPORTANT: Vite will call `transform()` for non-JS assets too (e.g. `*.css?direct`).
+			// Never try to parse those with the JS parser.
+			if (!matchIdFilter(id)) return null
+			if (!code.includes('parts')) return null
 			const ast = this.parse(code) as any
 			const raise = (msg: string): never => {
 				this.error?.(msg)
