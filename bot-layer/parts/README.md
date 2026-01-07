@@ -3,8 +3,8 @@
 This package provides a **tag-only** DSL for bot message content:
 
 - You write `parts\`...\``.
-- Bundler rewrites it at build time to a call into `@pluxel/bot-layer/parts/runtime`.
-- Runtime output is `Part[]` (no tag at runtime).
+- Bundler rewrites it at build time to a `Part[]` array literal (no runtime helper call).
+- Runtime output is `Part[]` (tag is a dev fallback when no bundler is involved).
 
 ## Install / Build integration (rolldown / tsdown)
 
@@ -19,13 +19,24 @@ export default defineConfig({
 })
 ```
 
+## Install / Build integration (Vite)
+
+```ts
+import { defineConfig } from 'vite'
+import { partsTransformVitePlugin } from '@pluxel/bot-layer/parts/vite/parts-transform'
+
+export default defineConfig({
+	plugins: [partsTransformVitePlugin()],
+})
+```
+
 ## Basic usage
 
 ```ts
-import { parts } from '@pluxel/bot-layer'
+import { parts, p } from '@pluxel/bot-layer'
 
 const userId = 123
-const msg = parts`Hello ${userId}!`
+const msg = parts`Hello ${p.text(userId)}!`
 // msg: Part[]
 ```
 
@@ -33,46 +44,28 @@ const msg = parts`Hello ${userId}!`
 
 All builders are designed to be safe inside `${...}`:
 
-- They return `Part` (or `Part | null` when the input is missing/invalid).
-- `null/undefined` are ignored by the runtime.
+- They return `Part`.
+- You are responsible for ensuring values are valid (non-empty url, valid ids, etc).
+  Invalid parts will be rejected at the send boundary (see validation section).
 
 ```ts
 import { parts, mentionUser, bold, link, image, p } from '@pluxel/bot-layer'
 
 const msg = parts`Hi ${mentionUser(1)} ${bold('welcome')} ${link('https://example.com', 'docs')}`
-const maybeAvatarUrl: string | undefined = undefined
-const msg2 = parts`Avatar: ${image(maybeAvatarUrl)}`
+const msg2 = parts`Avatar: ${image('https://example.com/a.png')}`
 
 // If you don't want to import builders one-by-one, use the `p.*` namespace:
 const msg3 = parts`Docs: ${p.link('https://example.com', 'docs')}`
 ```
 
-## Expression rules inside `${...}` (compile-time enforced)
-
-Allowed forms:
-
-- `Identifier` / `MemberExpression` (including optional chaining)
-- `null`, string literal, number literal
-- Calls to **allowed DSL builders**:
-  - direct: `mentionUser(...)`, `bold(...)`, `link(...)`, `image(...)`, …
-  - namespace: `p.mentionUser(...)`, `p.bold(...)`, `p.link(...)`, `p.image(...)`, …
-
-Disallowed (build will fail):
-
-- `a + b`, `ok && x`, `ok ? a : b`, `({})`, `([])`, arrow/functions, nested templates, TS `as`, …
-
-The intent is: **keep templates declarative** and make the transform stable and auditable.
-
 ## i18n
 
-If your i18n requires function calls (e.g. `t('key')`), call it **outside** the template and interpolate the result:
+If your i18n requires function calls (e.g. `t('key')`), call it **outside** the template and wrap the result with `p.text()`:
 
 ```ts
 const title = t('welcome.title') // string
-return parts`${title} ${mentionUser(userId)}`
+return parts`${p.text(title)} ${mentionUser(userId)}`
 ```
-
-Inline `${t('key')}` is intentionally rejected to avoid allowing arbitrary calls inside templates.
 
 ## Runtime validation (send boundary)
 

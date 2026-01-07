@@ -1,6 +1,7 @@
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
 import { describe, expect, test } from 'bun:test'
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import path from 'node:path'
+import { tmpdir } from 'node:os'
 import { Rolldown } from 'tsdown'
 import { partsTransformPlugin } from './parts-transform.ts'
 
@@ -8,127 +9,104 @@ const bundleToCode = async (entry: string) => {
 	const bundle = await Rolldown.rolldown({
 		input: entry,
 		plugins: [partsTransformPlugin()],
-		external: ['@pluxel/bot-layer/parts/runtime'],
 		treeshake: false,
 	})
 	const generated = await bundle.generate({ format: 'es' })
-	return generated.output.find((o: any) => o.type === 'chunk')?.code ?? ''
+	return generated.output.find((o) => o.type === 'chunk')?.code ?? ''
 }
 
-const fixturesDir = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtures')
-const fixture = (name: string) => path.join(fixturesDir, name)
-const runtimeImportCount = (code: string) => (code.match(/@pluxel\/bot-layer\/parts\/runtime/g) ?? []).length
+const createFixture = async (files: Record<string, string>) => {
+	const root = await mkdtemp(path.join(tmpdir(), 'parts-transform-'))
+	for (const [rel, content] of Object.entries(files)) {
+		const abs = path.join(root, rel)
+		await mkdir(path.dirname(abs), { recursive: true })
+		await writeFile(abs, content, 'utf8')
+	}
+	return {
+		path: (...sub: string[]) => path.join(root, ...sub),
+		rm: async () => rm(root, { recursive: true, force: true }),
+	}
+}
 
-describe('parts-transform fixtures', () => {
+const bundleSource = async (source: string) => {
+	const fx = await createFixture({ 'entry.ts': source })
+	try {
+		return await bundleToCode(fx.path('entry.ts'))
+	} finally {
+		await fx.rm()
+	}
+}
+
+const partsShim = `
+const parts = (quasis: TemplateStringsArray, ...exprs: any[]) => exprs
+`
+
+describe('partsTransformPlugin (rolldown)', () => {
 	test('basic', async () => {
-		const code = await bundleToCode(fixture('basic.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toContain('["Hello ", "!!!"]')
-		expect(code).toMatch(/\[\s*user\.id\s*\]/)
+		const code = await bundleSource(
+			partsShim +
+				`
+const user = { id: 42 }
+const mentionUser = (id: number) => ({ type: 'mention', kind: 'user', id } as const)
+export const msg = parts\`Hello \${mentionUser(user.id)}!!!\`
+`,
+		)
+		expect(code).not.toMatch(/\b__parts\(/)
+		expect(code).toMatch(/text:\s*"Hello "/)
+		expect(code).toMatch(/text:\s*"!!!"/)
 	})
 
 	test('no-hit', async () => {
-		const code = await bundleToCode(fixture('no-hit.ts'))
-		expect(runtimeImportCount(code)).toBe(0)
+		const code = await bundleSource(`export const x = 1`)
+		expect(code).not.toMatch(/\b__parts\(/)
 	})
 
-	test('multiple tags (single runtime import)', async () => {
-		const code = await bundleToCode(fixture('multiple.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toContain('["a", ""]')
-		expect(code).toContain('["b", ""]')
-		expect(code).toMatch(/\[\s*a\s*\]/)
-		expect(code).toMatch(/\[\s*b\s*\]/)
+	test('multiple tags', async () => {
+		const code = await bundleSource(
+			partsShim +
+				`
+export const a = { type: 'text', text: 'A' } as const
+export const b = { type: 'text', text: 'B' } as const
+export const msgA = parts\`a\${a}\`
+export const msgB = parts\`b\${b}\`
+`,
+		)
+		expect(code).not.toMatch(/\b__parts\(/)
+		expect(code).toMatch(/text:\s*"a"/)
+		expect(code).toMatch(/text:\s*"b"/)
 	})
 
-	test('reuses existing namespace import', async () => {
-		const code = await bundleToCode(fixture('existing-ns-import.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toMatch(/import \* as R from ["']@pluxel\/bot-layer\/parts\/runtime["']/)
-		expect(code).toMatch(/\bR\.__parts\(/)
-	})
-
-	test('reuses existing named import', async () => {
-		const code = await bundleToCode(fixture('existing-named-import.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toMatch(/import \{ __parts \} from ["']@pluxel\/bot-layer\/parts\/runtime["']/)
-		expect(code).toMatch(/\b__parts\(\["hi ", ""\],\s*\[user\]\)/)
-		expect(code).not.toMatch(/\.__parts\(/)
-	})
-
-	test('inserts import after shebang', async () => {
-		const code = await bundleToCode(fixture('shebang.ts'))
-		expect(code).toMatch(/^#!\/usr\/bin\/env node\nimport .*@pluxel\/bot-layer\/parts\/runtime/m)
+	test('preserves shebang', async () => {
+		const code = await bundleSource(
+			`#!/usr/bin/env node\n` +
+				partsShim +
+				`\nexport const msg = parts\`hi\`\n`,
+		)
+		expect(code).toMatch(/^#!\/usr\/bin\/env node/m)
+		expect(code).not.toMatch(/\b__parts\(/)
 	})
 
 	test('preserves expression slice', async () => {
-		const code = await bundleToCode(fixture('expression-slice.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toContain('["id=", ""]')
-		expect(code).toMatch(/\[\s*user\?\.\s*profile\.id\s*\]/)
-	})
-
-	test('allows optional chain member expression', async () => {
-		const code = await bundleToCode(fixture('allowed-optional-chain.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toContain('["id=", ""]')
-		expect(code).toMatch(/\[\s*user\?\.\s*profile\?\.\s*id\s*\]/)
-	})
-
-	test('allows optional mention builder call', async () => {
-		const code = await bundleToCode(fixture('allowed-optional-mention.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toMatch(/mentionUser\(/)
-	})
-
-	test('allows namespace builder call', async () => {
-		const code = await bundleToCode(fixture('allowed-ns-call.ts'))
-		expect(runtimeImportCount(code)).toBe(1)
-		expect(code).toMatch(/p\.mentionUser\(/)
-		expect(code).toMatch(/p\.link\(/)
+		const code = await bundleSource(
+			partsShim +
+				`
+const user: any = { profile: { id: 'u-1' } }
+export const msg = parts\`id=\${user?. profile.id}\`
+`,
+		)
+		expect(code).not.toMatch(/\b__parts\(/)
+		expect(code).toMatch(/\[\s*\{[\s\S]*text:\s*"id="[\s\S]*\}\s*,\s*user\?\.\s*profile\.id\s*\]/)
 	})
 
 	test('rejects type arguments at compile time', async () => {
-		await expect(bundleToCode(fixture('type-args.ts'))).rejects.toThrow(/parts must not have type arguments/)
+		await expect(
+			bundleSource(partsShim + `\nexport const msg = parts<string>\`hi\`\n`),
+		).rejects.toThrow(/parts must not have type arguments/)
 	})
 
 	test('rejects call-expression at compile time', async () => {
-		await expect(bundleToCode(fixture('call-expression.ts'))).rejects.toThrow(/parts must be used as a tagged template/)
-	})
-
-	test('rejects binary expressions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-binary.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects logical expressions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-logical.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects TS "as" expressions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-ts-as.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects sequence expressions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-sequence.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects object expressions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-object.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects array expressions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-array.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects nested template literals in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-template.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects arrow functions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-arrow.ts'))).rejects.toThrow(/illegal expression/)
-	})
-
-	test('rejects conditional expressions in ${}', async () => {
-		await expect(bundleToCode(fixture('illegal-conditional.ts'))).rejects.toThrow(/illegal expression/)
+		await expect(bundleSource(partsShim + `\nparts('x')\n`)).rejects.toThrow(
+			/parts must be used as a tagged template/,
+		)
 	})
 })

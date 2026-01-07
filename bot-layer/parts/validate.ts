@@ -5,11 +5,25 @@ const isNonEmptyString = (value: unknown): value is string => typeof value === '
 const isValidId = (id: unknown): id is string | number =>
 	(typeof id === 'string' && id.length > 0) || (typeof id === 'number' && Number.isFinite(id))
 
+const formatValuePreview = (value: unknown): string => {
+	if (value === null) return 'null'
+	if (value === undefined) return 'undefined'
+	if (typeof value === 'string') return JSON.stringify(value.length > 80 ? value.slice(0, 77) + '...' : value)
+	if (typeof value === 'number' || typeof value === 'boolean') return String(value)
+	if (typeof value === 'object') {
+		try {
+			return JSON.stringify(value)
+		} catch {
+			return Object.prototype.toString.call(value)
+		}
+	}
+	return String(value)
+}
+
 export const assertValidPart = (part: Part): void => {
 	switch (part.type) {
 		case 'text':
 			if (typeof part.text !== 'string') throw new Error('bot-layer: text.text must be a string')
-			if (part.text.length === 0) throw new Error('bot-layer: text.text must not be empty')
 			return
 
 		case 'mention':
@@ -59,5 +73,20 @@ export const assertValidPart = (part: Part): void => {
 
 export const assertValidParts = (parts: readonly Part[], label = 'parts'): void => {
 	if (!Array.isArray(parts)) throw new Error(`bot-layer: ${label} must be an array of Part`)
-	for (const part of parts) assertValidPart(part)
+	for (let i = 0; i < parts.length; i++) {
+		const part = (parts as any)[i]
+		if (!part || typeof part !== 'object') {
+			throw new Error(
+				`bot-layer: ${label}[${i}] must be a Part object, got ${typeof part} ${formatValuePreview(part)}. ` +
+					`If you used parts\`...\`, make sure each \${...} expression evaluates to a Part (e.g. p.text(value), p.mentionUser(id), p.link(url)).`,
+			)
+		}
+		if (typeof (part as any).type !== 'string') {
+			throw new Error(
+				`bot-layer: ${label}[${i}] must have a string "type", got ${formatValuePreview((part as any).type)}. ` +
+					`If you used parts\`...\`, make sure each \${...} expression evaluates to a Part.`,
+			)
+		}
+		assertValidPart(part as Part)
+	}
 }

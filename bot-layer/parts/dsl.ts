@@ -10,24 +10,18 @@ import type {
 	MentionRolePart,
 	MentionUserPart,
 	Part,
+	TextPart,
 } from './model'
 
 type NonTextInlinePart = Exclude<InlinePart, { type: 'text' }>
 
-export type InlineValue = NonTextInlinePart | string | number | null | undefined
-
-const isNonEmptyString = (value: unknown): value is string => typeof value === 'string' && value.length > 0
-
-const isValidId = (id: unknown): id is string | number =>
-	(typeof id === 'string' && id.length > 0) || (typeof id === 'number' && Number.isFinite(id))
+export type InlineValue = NonTextInlinePart | string | number
 
 const toInlineParts = (values: readonly InlineValue[]): InlinePart[] => {
 	const out: InlinePart[] = []
 	for (const value of values) {
-		if (value === null || value === undefined) continue
 		if (typeof value === 'string' || typeof value === 'number') {
 			const text = String(value)
-			if (!text) continue
 			const prev = out[out.length - 1]
 			if (prev?.type === 'text') prev.text += text
 			else out.push({ type: 'text', text })
@@ -40,19 +34,20 @@ const toInlineParts = (values: readonly InlineValue[]): InlinePart[] => {
 
 type MentionMeta = Partial<Omit<MentionPart, 'type' | 'kind' | 'id'>>
 
-export const mentionUser = (id?: string | number | null, meta?: MentionMeta): MentionUserPart | null =>
-	isValidId(id) ? ({ type: 'mention', kind: 'user', id, ...(meta ?? {}) } as MentionUserPart) : null
+export const text = (value: string | number): TextPart => ({ type: 'text', text: String(value) })
 
-export const mentionRole = (id?: string | number | null, meta?: MentionMeta): MentionRolePart | null =>
-	isValidId(id) ? ({ type: 'mention', kind: 'role', id, ...(meta ?? {}) } as MentionRolePart) : null
+export const mentionUser = (id: string | number, meta?: MentionMeta): MentionUserPart =>
+	({ type: 'mention', kind: 'user', id, ...(meta ?? {}) } satisfies MentionUserPart)
 
-export const mentionChannel = (id?: string | number | null, meta?: MentionMeta): MentionChannelPart | null =>
-	isValidId(id) ? ({ type: 'mention', kind: 'channel', id, ...(meta ?? {}) } as MentionChannelPart) : null
+export const mentionRole = (id: string | number, meta?: MentionMeta): MentionRolePart =>
+	({ type: 'mention', kind: 'role', id, ...(meta ?? {}) } satisfies MentionRolePart)
+
+export const mentionChannel = (id: string | number, meta?: MentionMeta): MentionChannelPart =>
+	({ type: 'mention', kind: 'channel', id, ...(meta ?? {}) } satisfies MentionChannelPart)
 
 export const mentionEveryone = (meta?: MentionMeta): MentionEveryonePart => ({ type: 'mention', kind: 'everyone', ...(meta ?? {}) })
 
-export const image = (url?: string | null, alt?: string): ImagePart | null =>
-	isNonEmptyString(url) ? { type: 'image', url, alt } : null
+export const image = (url: string, alt?: string): ImagePart => ({ type: 'image', url, alt })
 
 export const imageData = (
 	data: Uint8Array | ArrayBufferLike,
@@ -69,8 +64,7 @@ export const imageData = (
 	size: opts?.size,
 })
 
-export const file = (url?: string | null, name?: string, mime?: string): FilePart | null =>
-	isNonEmptyString(url) ? { type: 'file', url, name, mime } : null
+export const file = (url: string, name?: string, mime?: string): FilePart => ({ type: 'file', url, name, mime })
 
 export const fileData = (
 	data: Uint8Array | ArrayBufferLike,
@@ -84,21 +78,21 @@ export const fileData = (
 	size: opts?.size,
 })
 
-export const link = (url?: string | null, label?: string): LinkPart | null =>
-	isNonEmptyString(url) ? ({ type: 'link', url, label } satisfies LinkPart) : null
+export const link = (url: string, label?: string): LinkPart => ({ type: 'link', url, label } satisfies LinkPart)
 
-export const codeblock = (code?: string | null, language?: string): CodeBlockPart | null =>
-	isNonEmptyString(code) ? { type: 'codeblock', code, language } : null
+export const codeblock = (code: string, language?: string): CodeBlockPart => ({ type: 'codeblock', code, language })
 
 type Styled = Extract<Part, { type: 'styled' }>
 
-const styled = (style: Styled['style'], children: readonly InlineValue[]): Styled | null => {
+const styled = (style: Styled['style'], children: readonly InlineValue[]): Styled => {
 	const normalized = toInlineParts(children)
-	return normalized.length ? { type: 'styled', style, children: normalized } : null
+	return { type: 'styled', style, children: normalized }
 }
 
-export const bold = (...children: InlineValue[]): Styled | null => styled('bold', children)
-export const italic = (...children: InlineValue[]): Styled | null => styled('italic', children)
-export const underline = (...children: InlineValue[]): Styled | null => styled('underline', children)
-export const code = (...children: InlineValue[]): Styled | null => styled('code', children)
-export const strike = (...children: InlineValue[]): Styled | null => styled('strike', children)
+type NonEmptyInlineValues = readonly [InlineValue, ...InlineValue[]]
+
+export const bold = (...children: NonEmptyInlineValues): Styled => styled('bold', children)
+export const italic = (...children: NonEmptyInlineValues): Styled => styled('italic', children)
+export const underline = (...children: NonEmptyInlineValues): Styled => styled('underline', children)
+export const code = (...children: NonEmptyInlineValues): Styled => styled('code', children)
+export const strike = (...children: NonEmptyInlineValues): Styled => styled('strike', children)

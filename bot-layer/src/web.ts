@@ -9,6 +9,6 @@ export type {
 	StyledPart,
 	TextPart,
 } from '../parts/model'
-export type { PartsValue } from '../parts/runtime'
 export { parts } from '../parts/tag'
+export * from '../parts/dsl'
 export { p } from '../parts'
