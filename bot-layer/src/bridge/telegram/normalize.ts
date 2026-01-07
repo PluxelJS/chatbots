@@ -1,6 +1,6 @@
 import type { MessageSession } from 'pluxel-plugin-telegram'
 import type { Attachment, BotChannel, BotUser, MentionPart, Message, MessageReference, Part } from '../../types'
-import { hasRichParts } from '../../parts'
+import { hasRichParts } from '../../../parts'
 import { createReply, createSendHelpers } from '../../adapter'
 import { telegramAdapter } from './adapter'
 
@@ -132,10 +132,14 @@ const buildTextParts = (text: string, entities: Entity[]): Part[] => {
 			case 'text_mention':
 				{
 					const user = entity.user
+					if (user?.id == null) {
+						parts.push({ type: 'text', text: segment })
+						break
+					}
 					parts.push({
 						type: 'mention',
 						kind: 'user',
-						id: user?.id,
+						id: user.id,
 						username: user?.username ?? undefined,
 						displayName: buildDisplayName(user) ?? undefined,
 						isBot: typeof user?.is_bot === 'boolean' ? user.is_bot : undefined,

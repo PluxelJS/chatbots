@@ -140,7 +140,8 @@ export class TelegramRuntime {
 				try {
 					await this.manager.connectBot(b.id)
 				} catch (e) {
-					this.ctx.logger.warn(e, `telegram autoConnect failed for ${b.id}`)
+					const error = e instanceof Error ? e : new Error(String(e))
+					this.ctx.logger.warn('telegram autoConnect failed for {id}', { id: b.id, error })
 				}
 			}),
 		)
@@ -153,7 +154,10 @@ export class TelegramRuntime {
 		// Do not block plugin start: lifecycle start timeout is short (1500ms).
 		setTimeout(() => {
 			if (this.abort?.aborted) return
-			void this.autoConnectBots().catch((e) => this.ctx.logger.warn(e, '[Telegram] autoConnect failed'))
+			void this.autoConnectBots().catch((e) => {
+				const error = e instanceof Error ? e : new Error(String(e))
+				this.ctx.logger.warn('[Telegram] autoConnect failed', { error })
+			})
 		}, 0)
 	}
 

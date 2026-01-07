@@ -17,7 +17,7 @@ const module = definePluginUIModule({
 				addToNav: true,
 				navPriority: 45,
 			},
-			Component: ChatbotsSandboxPage,
+			render: () => <ChatbotsSandboxPage />,
 		},
 		{
 			definition: {
@@ -27,7 +27,7 @@ const module = definePluginUIModule({
 				addToNav: true,
 				navPriority: 44,
 			},
-			Component: ChatbotsShowcasePage,
+			render: () => <ChatbotsShowcasePage />,
 		},
 		{
 			definition: {
@@ -37,12 +37,9 @@ const module = definePluginUIModule({
 				addToNav: true,
 				navPriority: 43,
 			},
-			Component: ChatbotsPermissionsPage,
+			render: () => <ChatbotsPermissionsPage />,
 		},
 	],
-	setup() {
-		console.log('[chatbots] sandbox UI loaded')
-	},
 })
 
 export default module

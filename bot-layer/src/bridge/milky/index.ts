@@ -13,29 +13,24 @@ export const milkyBridge: BridgeDefinition<'milky', 'milky:ready', MilkyInstance
 		const unlisten = milky.runtime.events.message.on((session: any) => {
 			void (async () => {
 				try {
-					ctx.logger.debug(
-						{
-							platform: 'milky',
-							messageSeq: session.message?.message_seq,
-							peerId: session.message?.peer_id,
-							from: session.message?.sender_id,
-						},
-						'bot-layer: milky incoming',
-					)
+					ctx.logger.debug('bot-layer: milky incoming', {
+						platform: 'milky',
+						messageSeq: session.message?.message_seq,
+						peerId: session.message?.peer_id,
+						from: session.message?.sender_id,
+					})
 					const normalized = await normalizeMilkyMessage(session)
 					await dispatch(normalized)
-					ctx.logger.debug(
-						{
-							platform: 'milky',
-							messageId: normalized.messageId,
-							rich: normalized.rich,
-							parts: normalized.parts.length,
-							attachments: normalized.attachments.length,
-						},
-						'bot-layer: milky dispatched',
-					)
+					ctx.logger.debug('bot-layer: milky dispatched', {
+						platform: 'milky',
+						messageId: normalized.messageId,
+						rich: normalized.rich,
+						parts: normalized.parts.length,
+						attachments: normalized.attachments.length,
+					})
 				} catch (e) {
-					ctx.logger.warn(e, 'bot-layer: Milky dispatch 失败')
+					const error = e instanceof Error ? e : new Error(String(e))
+					ctx.logger.warn('bot-layer: Milky dispatch 失败', { error })
 				}
 			})()
 		})
@@ -44,7 +39,8 @@ export const milkyBridge: BridgeDefinition<'milky', 'milky:ready', MilkyInstance
 			try {
 				unlisten()
 			} catch (e) {
-				ctx.logger.warn(e, 'bot-layer: Milky bridge 清理失败')
+				const error = e instanceof Error ? e : new Error(String(e))
+				ctx.logger.warn('bot-layer: Milky bridge 清理失败', { error })
 			}
 		}
 	},

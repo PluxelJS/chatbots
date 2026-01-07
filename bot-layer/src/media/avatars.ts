@@ -634,10 +634,7 @@ export const resolveMentionedUsers = async (
 	for (const part of mentions) {
 		if (out.length >= limit) break
 		if (part.type !== 'mention' || part.kind !== 'user') continue
-		if (part.id === undefined || part.id === null) {
-			if (!part.username) continue
-		}
-		const profile = await resolveUserProfile(msg, part as MentionPart)
+		const profile = await resolveUserProfile(msg, part)
 		if (!profile) continue
 		if (unique) {
 			const key = `${profile.platform}:${String(profile.id)}`

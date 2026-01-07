@@ -30,7 +30,10 @@ export function dispatchUpdate(
 		if (result.value) {
 			void bot
 				.sendMessage({ chat_id: session.chatId, text: result.value })
-				.catch((e: unknown) => ctx.logger.error(e, 'telegram: message 监听器返回的信息发送失败。'))
+				.catch((e: unknown) => {
+					const error = e instanceof Error ? e : new Error(String(e))
+					ctx.logger.error('telegram: message 监听器返回的信息发送失败。', { error })
+				})
 		}
 		return
 	}

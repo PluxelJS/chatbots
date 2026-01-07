@@ -12,9 +12,13 @@
     "!**/*.map"
   ],
   "scripts": {
-    "build": "pluxel build"
+    "build": "pluxel build",
+    "typecheck:parts": "tsc -p parts/tsconfig.json",
+    "test:parts": "bun test parts",
+    "test": "pnpm test:parts"
   },
   "dependencies": {
+    "magic-string": "^0.30.0",
     "type-flag": "^4.0.2"
   },
   "exports": {
@@ -22,9 +26,17 @@
       "@pluxel/hmr": "./src/index.ts",
       "default": "./dist/index.mjs"
     },
-    "./jsx-runtime": {
-      "@pluxel/hmr": "./src/jsx-runtime.ts",
-      "default": "./dist/jsx-runtime.mjs"
+    "./parts": {
+      "@pluxel/hmr": "./parts/index.ts",
+      "default": "./dist/parts/index.mjs"
+    },
+    "./parts/rolldown/parts-transform": {
+      "@pluxel/hmr": "./parts/rolldown/parts-transform.ts",
+      "default": "./dist/parts/rolldown/parts-transform.mjs"
+    },
+    "./parts/runtime": {
+      "@pluxel/hmr": "./parts/runtime.ts",
+      "default": "./dist/parts/runtime.mjs"
     },
     "./web": {
       "@pluxel/hmr": "./src/web.ts",
@@ -35,7 +47,9 @@
   "publishConfig": {
     "exports": {
       ".": "./dist/index.mjs",
-      "./jsx-runtime": "./dist/jsx-runtime.mjs",
+      "./parts": "./dist/parts/index.mjs",
+      "./parts/rolldown/parts-transform": "./dist/parts/rolldown/parts-transform.mjs",
+      "./parts/runtime": "./dist/parts/runtime.mjs",
       "./web": "./dist/web.mjs",
       "./package.json": "./package.json"
     }

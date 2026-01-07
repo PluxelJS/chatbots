@@ -1,4 +1,4 @@
-import type {} from '@pluxel/hmr/web'
+import type {} from '@pluxel/hmr/services'
 
 import type {
 	PermissionCatalogNamespace,
@@ -44,15 +44,14 @@ export type {
 	UnifiedUserDto,
 }
 
-declare module '@pluxel/hmr/web' {
+declare module '@pluxel/hmr/services' {
 	namespace UI {
-	interface rpc {
-		chatbots: ChatbotsRpc
-	}
+		interface rpc {
+			chatbots: ChatbotsRpc
+		}
 
-	interface sse {
-		chatbots: SandboxEvent
+		interface sse {
+			chatbots: SandboxEvent
+		}
 	}
-	}
-
 }

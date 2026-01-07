@@ -35,7 +35,6 @@ import { rpcErrorMessage } from '@pluxel/hmr/web'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import type { Part, Platform } from '@pluxel/bot-layer'
-import { normalizeMessageContent } from '@pluxel/bot-layer/web'
 import {
 	PartsMessage,
 	PartsShowcasePanel,
@@ -79,7 +78,7 @@ type SandboxSession = {
 	draft: string
 }
 
-// Use ctx.services.hmr (see PluginWithUI for the pattern).
+// Use `services.hmr` via a runtime hook (see PluginWithUI for the pattern).
 
 const PLATFORM_OPTIONS = [
 	{ value: 'sandbox', label: 'Sandbox' },
@@ -383,7 +382,7 @@ function useSandboxData() {
 	useEffect(() => {
 			const offOpen = sse.onOpen(() => setConnected(true))
 			const offError = sse.onError(() => setConnected(false))
-			const off = sse.chatbots.on(
+			const off = sse.ns('chatbots').on(
 				(msg) => {
 					const p = msg.payload as SandboxEvent | undefined
 					if (p?.type === 'sync') setMessages(p.messages)
@@ -853,6 +852,7 @@ export function ChatbotsSandboxPage() {
 
 	const isStacked = useMediaQuery('(max-width: 1200px)', undefined, { getInitialValueInEffect: true })
 	const session = useSandboxSessions()
+	const rpc = useChatbotsRpc()
 	const data = useSandboxData()
 	const roles = useRoles()
 	const [showParts, setShowParts] = useState(false)
@@ -902,7 +902,7 @@ export function ChatbotsSandboxPage() {
 			data.setError(null)
 			if (!session.active) return
 			try {
-				const result = await rpc().send({
+				const result = await rpc.send({
 					content,
 					platform: session.active.platform,
 					userId: coerceId(session.active.userId),
@@ -925,7 +925,7 @@ export function ChatbotsSandboxPage() {
 				data.setError(rpcErrorMessage(err, 'Send failed'))
 			}
 		},
-		[data, session],
+		[data, rpc, session],
 	)
 
 	const handleSendText = useCallback(() => {
@@ -954,14 +954,14 @@ export function ChatbotsSandboxPage() {
 		(item: QuickReplyItemProps) => {
 			const input = sampleInputs[item.code ?? 'text']
 			if (!input) return
-			void sendToSandbox(serializeParts(normalizeMessageContent(input)))
+			void sendToSandbox(serializeParts(input))
 		},
 		[sendToSandbox],
 	)
 
 	const handleUseSample = useCallback(
-		(input: unknown) => {
-			void sendToSandbox(serializeParts(normalizeMessageContent(input as any)))
+		(input: Part[]) => {
+			void sendToSandbox(serializeParts(input))
 		},
 		[sendToSandbox],
 	)

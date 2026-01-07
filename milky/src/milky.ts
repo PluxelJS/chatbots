@@ -1,4 +1,5 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
+import type {} from '@pluxel/hmr/services'
 import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { MilkyConfig, type MilkyConfigType } from './config'
@@ -66,14 +67,14 @@ export class Milky extends BasePlugin {
 	}
 }
 
-declare module '@pluxel/hmr/web' {
+declare module '@pluxel/hmr/services' {
 	namespace UI {
-interface rpc {
-		Milky: MilkyBotRpc
-	}
-	interface sse {
-		Milky: MilkySnapshot
-	}
+		interface rpc {
+			Milky: MilkyBotRpc
+		}
+		interface sse {
+			Milky: MilkySnapshot
+		}
 	}
 }
 

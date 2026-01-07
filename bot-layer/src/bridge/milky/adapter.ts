@@ -52,11 +52,11 @@ const renderStyled = (part: StyledPart): string => renderInline(part.children)
 const renderMention = (part: MentionPart): string => {
 	switch (part.kind) {
 		case 'user':
-			return `@${part.id ?? part.username ?? part.displayName ?? ''}`
+			return `@${part.displayName ?? part.username ?? String(part.id)}`
 		case 'everyone':
 			return '@全体成员'
 		default:
-			return `@${part.id ?? part.kind}`
+			return `@${part.displayName ?? part.username ?? String(part.id)}`
 	}
 }
 

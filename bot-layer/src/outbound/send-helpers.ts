@@ -10,9 +10,9 @@ import type {
 	OutboundOpType,
 	VideoPart,
 } from '../types'
-import { normalizeMessageContent } from '../parts'
 import type { OutboundOp, OutboundText, PlatformAdapter } from '../adapter'
 import { assertTextOnly, normalizeTextPartsForAdapter, type TextLikePart } from '../render/normalize'
+import { assertValidParts } from '../../parts/validate'
 
 export const createSendHelpers = <P extends Platform>(adapter: PlatformAdapter<P>, session: PlatformRegistry[P]['raw']) => {
 	const quoteSupported = adapter.policy.outbound.supportsQuote
@@ -28,10 +28,10 @@ export const createSendHelpers = <P extends Platform>(adapter: PlatformAdapter<P
 		options?.quote && !quoteSupported ? { ...options, quote: false } : options
 
 	const normalizeOutboundText = (content: MessageContent, label: string): TextLikePart[] => {
-		const parts = normalizeMessageContent(content)
-		if (!parts.length) return []
-		assertTextOnly(parts, label)
-		return normalizeTextPartsForAdapter(parts as TextLikePart[], adapter)
+		if (!content.length) return []
+		assertValidParts(content, label)
+		assertTextOnly(content, label)
+		return normalizeTextPartsForAdapter(content as TextLikePart[], adapter)
 	}
 
 	const uploadIfNeeded = async <T extends MediaPart>(media: T): Promise<T> => {

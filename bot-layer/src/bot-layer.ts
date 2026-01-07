@@ -56,7 +56,7 @@ export class BotLayer extends BasePlugin {
 export default BotLayer
 
 export * from './types'
-export * from './parts'
+export * from '../parts'
 export * from './adapter'
 export * from './media'
 export { registerBridgeDefinition, createBridgeManager } from './bridge'

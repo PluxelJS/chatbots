@@ -1,5 +1,4 @@
 import type { MessageContent, Platform, PlatformRegistry, ReplyOptions } from '../types'
-import { normalizeMessageContent } from '../parts'
 import type { PlatformAdapter } from '../adapter'
 import { createSendHelpers } from './send-helpers'
 import { compileReply } from './compile'
@@ -7,11 +6,10 @@ import { compileReply } from './compile'
 export const createReply =
 	<P extends Platform>(adapter: PlatformAdapter<P>, session: PlatformRegistry[P]['raw']) =>
 	async (content: MessageContent, options?: ReplyOptions) => {
-		const input = normalizeMessageContent(content)
-		if (!input.length) return
+		if (!content.length) return
 
 		const helpers = createSendHelpers(adapter, session)
-		const actions = compileReply(adapter, input, { mode: options?.mode })
+		const actions = compileReply(adapter, content, { mode: options?.mode })
 
 		for (const op of actions) {
 			switch (op.type) {

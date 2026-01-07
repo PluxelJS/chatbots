@@ -3,7 +3,7 @@
 // ============================================================================
 
 import type { Buffer } from 'node:buffer'
-import type { AudioPart, FilePart, ImagePart, MediaKind, MediaPart, MentionPart, Part, PartInput, VideoPart } from './parts'
+import type { AudioPart, FilePart, ImagePart, MediaKind, MediaPart, MentionPart, Part, VideoPart } from '../parts'
 
 export type SandboxRole = 'user' | 'bot' | 'system'
 
@@ -50,11 +50,10 @@ export type {
 	MediaPart,
 	MentionPart,
 	Part,
-	PartInput,
 	StyledPart,
 	TextPart,
 	VideoPart,
-} from './parts'
+} from '../parts'
 
 /** 
  * 平台元信息注册表
@@ -129,7 +128,7 @@ export interface AdapterPolicy {
 // ============================================================================
 
 /** 消息内容（对外统一类型别名） */
-export type MessageContent = PartInput
+export type MessageContent = Part[]
 
 // ============================================================================
 // Attachments - 富媒体附件封装
@@ -253,11 +252,11 @@ export type Message<P extends Platform = Platform> = {
 	 * 回复消息（便利层）。
 	 *
 	 * 行为说明：
-	 * - 支持 `string | Part | Part[] | 迭代/嵌套结构`，会先归一为 `Part[]`
+	 * - 仅支持 `Part[]`（推荐用 `parts\`...\`` DSL 或手写 `{ type: 'text', text }` 构建）
 	 * - 允许混合内容（多段文本、多张图片、文件夹杂文本等）
 	 * - 可能会拆成多条消息发送（按输入顺序，拆分规则见 bot-layer DESIGN.md）
 	 * - 文本类 Part 会按平台能力做降级渲染（例如 plain 平台退化为纯文本）
-	 * - 对平台不支持的媒体（image/file）会尽量退化为可读文本而不是直接报错
+	 * - 对平台不支持的媒体（image/audio/video/file）会尽量退化为可读文本（或 file）而不是直接报错
 	 * - 当平台对 caption 有长度限制且 caption 超长时，`reply()` 会自动拆分为“图片 + 文本”（`options.mode='strict'` 时会直接报错）
 	 */
 	reply: (content: MessageContent, options?: ReplyOptions) => Promise<void>

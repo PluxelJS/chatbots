@@ -2,9 +2,13 @@
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": {
 		"outDir": "dist",
-		"rootDir": "src",
-		"baseUrl": "."
+		"rootDir": ".",
+		"baseUrl": ".",
+		"paths": {
+			"parts/*": ["./parts/*"],
+			"~/*": ["./src/*"]
+		}
 	},
-	"include": ["src"],
+	"include": ["src", "parts"],
 	"exclude": ["**/*.test.ts", "**/*.bench.ts", "**/__tests__/**"]
 }

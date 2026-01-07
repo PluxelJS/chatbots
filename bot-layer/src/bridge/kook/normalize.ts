@@ -1,6 +1,6 @@
 import type { MessageSession } from 'pluxel-plugin-kook'
 import type { Attachment, BotChannel, BotUser, MentionPart, Message, MessageReference, Part } from '../../types'
-import { hasRichParts } from '../../parts'
+import { hasRichParts } from '../../../parts'
 import { createReply, createSendHelpers } from '../../adapter'
 import { kookAdapter } from './adapter'
 

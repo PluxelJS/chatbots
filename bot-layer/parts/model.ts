@@ -9,15 +9,38 @@ export interface TextPart {
 }
 
 /** @提及 */
-export interface MentionPart {
-	type: 'mention'
-	kind: 'user' | 'role' | 'channel' | 'everyone'
-	id?: string | number
+interface MentionMeta {
 	username?: string
 	displayName?: string
 	avatar?: string
 	isBot?: boolean
 }
+
+export interface MentionUserPart extends MentionMeta {
+	type: 'mention'
+	kind: 'user'
+	id: string | number
+}
+
+export interface MentionRolePart extends MentionMeta {
+	type: 'mention'
+	kind: 'role'
+	id: string | number
+}
+
+export interface MentionChannelPart extends MentionMeta {
+	type: 'mention'
+	kind: 'channel'
+	id: string | number
+}
+
+export interface MentionEveryonePart extends MentionMeta {
+	type: 'mention'
+	kind: 'everyone'
+	id?: never
+}
+
+export type MentionPart = MentionUserPart | MentionRolePart | MentionChannelPart | MentionEveryonePart
 
 /** 图片 */
 export interface ImagePart {
@@ -106,16 +129,3 @@ export type MediaKind = MediaPart['type']
 
 /** 所有 Part 类型 */
 export type Part = InlinePart | MediaPart | CodeBlockPart
-
-/**
- * Outbound 输入内容（`reply/sendText` 等的参数类型）。
- *
- * - 支持任意嵌套数组/可迭代结构，便于 JSX Fragment / 条件拼接展开
- * - 最终会归一为 `Part[]`（相邻 `text` 会自动合并）
- */
-export type PartInput =
-	| string
-	| Part
-	| Iterable<PartInput | null | undefined>
-	| null
-	| undefined

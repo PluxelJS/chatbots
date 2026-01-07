@@ -3,6 +3,7 @@ import type { PlatformAdapter } from '../adapter'
 import { planOutbound, type OutboundDraftOp } from './plan'
 import { assertTextOnly, normalizeTextPartsForAdapter, type TextLikePart } from '../render/normalize'
 import { audioToText, fileToText, imageToText, videoToText } from '../render/normalize'
+import { assertValidParts } from '../../parts/validate'
 
 export interface CompileReplyOptions {
 	mode?: ReplyMode
@@ -96,6 +97,7 @@ export const compileReply = <P extends Platform>(
 	options?: CompileReplyOptions,
 ): OutboundAction[] => {
 	const mode: ReplyMode = options?.mode ?? 'best-effort'
+	assertValidParts(parts, 'reply(content)')
 	const normalized = degradeUnsupportedMedia(parts, adapter, mode)
 	const draft = planOutbound(normalized, adapter.policy.outbound)
 	const exploded: OutboundDraftOp[] = []

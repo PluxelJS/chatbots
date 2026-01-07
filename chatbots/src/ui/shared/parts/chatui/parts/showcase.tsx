@@ -2,23 +2,22 @@ import { Badge, Button, Group, Paper, Stack, Text } from '@mantine/core'
 import { IconSparkles } from '@tabler/icons-react'
 import { useMemo } from 'react'
 
-import type { PartInput } from '@pluxel/bot-layer/web'
-import { normalizeMessageContent } from '@pluxel/bot-layer/web'
+import type { Part } from '@pluxel/bot-layer'
 import { PartsMessage } from './renderer'
 import type { SampleItem, SampleSection } from './samples'
 
 type PartsShowcasePanelProps = {
 	sections: SampleSection[]
-	onUseSample: (input: PartInput, label: string) => void
+	onUseSample: (input: Part[], label: string) => void
 }
 
 type SampleCardProps = {
 	item: SampleItem
-	onUseSample: (input: PartInput, label: string) => void
+	onUseSample: (input: Part[], label: string) => void
 }
 
 function PartsSampleCard({ item, onUseSample }: SampleCardProps) {
-	const parts = useMemo(() => normalizeMessageContent(item.input), [item.input])
+	const parts = useMemo(() => item.input, [item.input])
 
 	return (
 		<Paper key={item.key} withBorder radius="md" p="sm">

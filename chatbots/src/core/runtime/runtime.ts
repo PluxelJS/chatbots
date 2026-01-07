@@ -206,16 +206,33 @@ export class ChatbotsRuntime {
 				await this.safeReply(msg, e.message)
 				return
 			}
-			this.ctx.logger.warn(e, `chatbots: 执行指令失败: ${body}`)
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.warn('chatbots: 执行指令失败', { error, body })
 		}
 	}
 
 	private async safeReply(msg: AnyMessage, content: unknown) {
 		try {
-			await msg.reply(content as MessageContent, { quote: true })
+			const normalized = this.toMessageContent(content)
+			if (!normalized?.length) return
+			await msg.reply(normalized, { quote: true })
 		} catch (e) {
-			this.ctx.logger.warn(e, 'chatbots: 自动回复失败')
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.warn('chatbots: 自动回复失败', { error })
 		}
+	}
+
+	private toMessageContent(content: unknown): MessageContent | undefined {
+		if (content === undefined || content === null) return undefined
+		if (Array.isArray(content)) return content as MessageContent
+		if (typeof content === 'string') {
+			const text = content
+			return text ? ([{ type: 'text', text }] satisfies MessageContent) : undefined
+		}
+		if (typeof content === 'object' && content !== null && 'type' in content && typeof (content as any).type === 'string') {
+			return [content as Part]
+		}
+		return [{ type: 'text', text: String(content) }] satisfies MessageContent
 	}
 
 	private buildJsonBlock(payload: unknown): Part {

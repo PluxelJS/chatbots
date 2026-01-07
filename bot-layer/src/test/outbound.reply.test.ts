@@ -2,7 +2,7 @@ import { describe, expect, it } from 'bun:test'
 
 import { createReply } from '../adapter'
 import type { OutboundOp, PlatformAdapter } from '../adapter'
-import type { AdapterPolicy, ImagePart, OutboundText } from '../types'
+import type { AdapterPolicy, ImagePart, OutboundText, Part } from '../types'
 
 type Call =
 	| { type: 'text'; text: string }
@@ -55,6 +55,7 @@ const basePolicy = (overrides: Partial<AdapterPolicy> = {}): AdapterPolicy => ({
 	},
 })
 
+const text = (value: string): Part => ({ type: 'text', text: value })
 const img = (url = 'https://example.com/a.png'): ImagePart => ({ type: 'image', url })
 
 describe('bot-layer outbound reply()', () => {
@@ -63,11 +64,11 @@ describe('bot-layer outbound reply()', () => {
 		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: false } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await reply(['cap', img()], undefined)
+		await reply([text('cap'), img()], undefined)
 		expect(calls).toEqual([{ type: 'text', text: 'cap' }, { type: 'image', url: 'https://example.com/a.png', caption: undefined }])
 
 		calls.length = 0
-		await reply([img(), 'cap'], undefined)
+		await reply([img(), text('cap')], undefined)
 		expect(calls).toEqual([{ type: 'image', url: 'https://example.com/a.png', caption: undefined }, { type: 'text', text: 'cap' }])
 	})
 
@@ -76,7 +77,7 @@ describe('bot-layer outbound reply()', () => {
 		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: false } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await reply([img(), 'cap'], { mode: 'strict' })
+		await reply([img(), text('cap')], { mode: 'strict' })
 		expect(calls).toEqual([{ type: 'image', url: 'https://example.com/a.png', caption: undefined }, { type: 'text', text: 'cap' }])
 	})
 
@@ -85,7 +86,7 @@ describe('bot-layer outbound reply()', () => {
 		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 3 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await reply([img(), '1234'], undefined)
+		await reply([img(), text('1234')], undefined)
 		expect(calls).toEqual([
 			{ type: 'image', url: 'https://example.com/a.png', caption: undefined },
 			{ type: 'text', text: '1234' },
@@ -97,7 +98,7 @@ describe('bot-layer outbound reply()', () => {
 		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 3 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await expect(reply([img(), '1234'], { mode: 'strict' })).rejects.toThrow()
+		await expect(reply([img(), text('1234')], { mode: 'strict' })).rejects.toThrow()
 		expect(calls).toEqual([])
 	})
 
@@ -106,7 +107,7 @@ describe('bot-layer outbound reply()', () => {
 		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 10 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await reply([img(), '1234'], undefined)
+		await reply([img(), text('1234')], undefined)
 		expect(calls).toEqual([{ type: 'image', url: 'https://example.com/a.png', caption: '1234' }])
 	})
 
@@ -115,7 +116,7 @@ describe('bot-layer outbound reply()', () => {
 		const adapter = makeAdapter(basePolicy({ outbound: { supportsMixedMedia: true, maxCaptionLength: 10 } }), calls)
 		const reply = createReply(adapter, {} as any)
 
-		await reply(['pre', img(), 'post'], undefined)
+		await reply([text('pre'), img(), text('post')], undefined)
 		expect(calls).toEqual([
 			{ type: 'text', text: 'pre' },
 			{ type: 'image', url: 'https://example.com/a.png', caption: undefined },

@@ -1,4 +1,5 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
+import type {} from '@pluxel/hmr/services'
 import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { TelegramConfig, type TelegramConfigType } from './config'
@@ -48,16 +49,15 @@ export class TelegramPlugin extends BasePlugin {
 	}
 }
 
-declare module '@pluxel/hmr/web' {
+declare module '@pluxel/hmr/services' {
 	namespace UI {
-	interface rpc {
-		Telegram: TelegramBotRpc
+		interface rpc {
+			Telegram: TelegramBotRpc
+		}
+		interface sse {
+			Telegram: TelegramSnapshot
+		}
 	}
-	interface sse {
-		Telegram: TelegramSnapshot
-	}
-	}
-
 }
 
 declare module '@pluxel/core/services' {

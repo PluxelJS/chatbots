@@ -49,7 +49,8 @@ export const handleChatCommand = async (
 	} catch (e) {
 		const err = e instanceof CommandError ? e : new CommandError((e as any)?.message ?? 'Command failed')
 		if (autoReply) {
-			await msg.reply(String(err.message))
+			const text = String(err.message)
+			await msg.reply(text ? [{ type: 'text', text }] : [])
 		}
 		return { handled: true, error: err }
 	}

@@ -67,7 +67,8 @@ export class MilkyBotManager {
 		if (running) {
 			await this.disconnectBot(id)
 			await this.connectBot(id).catch((e) => {
-				this.ctx.logger.warn(e, '[Milky] bot 重连失败')
+				const error = e instanceof Error ? e : new Error(String(e))
+				this.ctx.logger.warn('[Milky] bot 重连失败', { id, error })
 			})
 		}
 		return { ok: true, bot: updated }
@@ -105,7 +106,8 @@ export class MilkyBotManager {
 				await this.repo.update(id, { state: 'error', lastError: message, stateMessage: '启动失败' })
 			}
 			this.botInstances.delete(id)
-			this.ctx.logger.error(e, '[Milky] bot 启动失败')
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.error('[Milky] bot 启动失败', { id, error })
 			throw e
 		}
 	}
@@ -120,7 +122,10 @@ export class MilkyBotManager {
 			return { id, status: 'stopped' }
 		}
 		this.cancelPendingStatusUpdate(id)
-		await bot.$control.stop().catch((e) => this.ctx.logger.warn(e, '[Milky] bot 停止失败'))
+		await bot.$control.stop().catch((e) => {
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.warn('[Milky] bot 停止失败', { id, error })
+		})
 		this.botInstances.delete(id)
 		if (doc && this.enableStatusPersistence) {
 			await this.repo.update(id, { state: 'stopped', stateMessage: '已断开', connectedAt: undefined })
@@ -178,7 +183,10 @@ export class MilkyBotManager {
 
 		void this.repo
 			.update(id, patch)
-			.catch((error) => this.ctx.logger.warn(error, '[Milky] bot 状态更新失败'))
+			.catch((e) => {
+				const error = e instanceof Error ? e : new Error(String(e))
+				this.ctx.logger.warn('[Milky] bot 状态更新失败', { id, error })
+			})
 	}
 
 	private cancelPendingStatusUpdate(id: string) {

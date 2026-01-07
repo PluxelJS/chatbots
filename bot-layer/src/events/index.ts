@@ -2,7 +2,7 @@ import type { Context } from '@pluxel/hmr'
 import { EvtChannel } from '@pluxel/core/services'
 import type { BotLayerEventMap } from './events.types'
 import type { AnyMessage, PlainMessage, RichMessage } from '../types'
-import { hasRichParts } from '../parts'
+import { hasRichParts } from '../../parts'
 
 export type BotEventChannel = {
 	[K in keyof BotLayerEventMap]: EvtChannel<BotLayerEventMap[K]>
@@ -27,16 +27,13 @@ export const dispatchMessage = async (
 
 	try {
 		if (debug) {
-			ctx.logger.debug(
-				{
-					platform: msg.platform,
-					user: msg.user.username ?? msg.user.id,
-					parts: msg.parts.length,
-					rich,
-					text: msg.text,
-				},
-				'bot-layer: incoming message',
-			)
+			ctx.logger.debug('bot-layer: incoming message', {
+				platform: msg.platform,
+				user: msg.user.username ?? msg.user.id,
+				parts: msg.parts.length,
+				rich,
+				text: msg.text,
+			})
 		}
 		mark?.(msg.platform)
 		events.message.emit(normalized)
@@ -46,7 +43,8 @@ export const dispatchMessage = async (
 			events.text.emit(normalized as PlainMessage)
 		}
 	} catch (e) {
-		ctx.logger.error(e, 'bot-layer: 分发消息失败')
+		const error = e instanceof Error ? e : new Error(String(e))
+		ctx.logger.error('bot-layer: 分发消息失败', { error })
 	}
 }
 

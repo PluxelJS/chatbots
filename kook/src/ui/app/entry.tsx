@@ -9,23 +9,18 @@ const module = definePluginUIModule({
 			id: 'kook-tab-manage',
 			priority: 12,
 			meta: { label: '管理' },
-			when: (ctx) => ctx.pluginName === 'KOOK',
-			Component: StatusPanel,
+			render: () => <StatusPanel />,
 		},
 		{
 			point: ExtensionPoints.PluginInfo,
 			id: 'kook-info',
 			priority: 10,
 			requireRunning: false,
-			when: (ctx) => ctx.pluginName === 'KOOK',
-			Component: SummaryPanel,
+			render: () => <SummaryPanel />,
 		},
 	],
-	setup() {
-		console.log('[KOOK] status UI loaded')
-	},
+	setup() {},
 })
 
 export const { extensions, setup } = module
 export default module
-

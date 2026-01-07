@@ -18,29 +18,24 @@ export const telegramBridge: BridgeDefinition<'telegram', 'telegram:ready', Tele
 		const unlisten = register((session: any, next: any) => {
 			void (async () => {
 				try {
-					ctx.logger.debug(
-						{
-							platform: 'telegram',
-							messageId: session.message?.message_id,
-							chatId: session.chatId,
-							from: session.message?.from?.id,
-						},
-						'bot-layer: telegram incoming',
-					)
+					ctx.logger.debug('bot-layer: telegram incoming', {
+						platform: 'telegram',
+						messageId: session.message?.message_id,
+						chatId: session.chatId,
+						from: session.message?.from?.id,
+					})
 					const normalized = await normalizeTelegramMessage(session)
 					await dispatch(normalized)
-					ctx.logger.debug(
-						{
-							platform: 'telegram',
-							messageId: normalized.messageId,
-							rich: normalized.rich,
-							parts: normalized.parts.length,
-							attachments: normalized.attachments.length,
-						},
-						'bot-layer: telegram dispatched',
-					)
+					ctx.logger.debug('bot-layer: telegram dispatched', {
+						platform: 'telegram',
+						messageId: normalized.messageId,
+						rich: normalized.rich,
+						parts: normalized.parts.length,
+						attachments: normalized.attachments.length,
+					})
 				} catch (e) {
-					ctx.logger.warn(e, 'bot-layer: Telegram dispatch 失败')
+					const error = e instanceof Error ? e : new Error(String(e))
+					ctx.logger.warn('bot-layer: Telegram dispatch 失败', { error })
 				}
 			})()
 			return next(session)
@@ -50,7 +45,8 @@ export const telegramBridge: BridgeDefinition<'telegram', 'telegram:ready', Tele
 			try {
 				unlisten()
 			} catch (e) {
-				ctx.logger.warn(e, 'bot-layer: Telegram bridge 清理失败')
+				const error = e instanceof Error ? e : new Error(String(e))
+				ctx.logger.warn('bot-layer: Telegram bridge 清理失败', { error })
 			}
 		}
 	},

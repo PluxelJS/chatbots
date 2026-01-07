@@ -1,6 +1,6 @@
 import type { OutboundOp, PlatformAdapter, RenderResult } from '../../adapter'
 import { createReply, createSendHelpers, normalizePartsForAdapter, registerAdapter } from '../../adapter'
-import { hasRichParts, normalizeMessageContent } from '../../parts'
+import { hasRichParts } from '../../../parts'
 import type {
 	AdapterPolicy,
 	Attachment,
@@ -123,7 +123,7 @@ export interface SandboxMessageInput {
 
 export const createSandboxMessage = (input: SandboxMessageInput): Message<'sandbox'> => {
 	const adapter = input.adapter ?? createSandboxAdapter()
-	const parts = normalizeMessageContent(input.parts)
+	const parts = input.parts
 	const renderText = input.session.renderText ?? ((data) => adapter.render(normalizePartsForAdapter(data, adapter)).text)
 	const mentions = parts.filter((part): part is MentionPart => part.type === 'mention')
 	const attachments: Attachment<'sandbox'>[] = parts

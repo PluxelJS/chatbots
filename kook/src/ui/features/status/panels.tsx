@@ -15,11 +15,12 @@ import { rpcErrorMessage } from '@pluxel/hmr/web'
 import type { BotStatus } from './types'
 import { useKookSnapshot } from './model'
 import type { CreateBotInput, UpdateBotInput } from '../../../runtime/bot-registry'
-import { useKookRuntime } from '../../app/runtime'
-import { formatTime } from './consts'
+import { useKookPluginName, useKookRuntime } from '../../app/runtime'
+import { formatTime, humanState, statusColors } from './consts'
 import { AddBotForm, BotCard, HeaderIndicator } from './components'
 
 export function SummaryPanel() {
+	const pluginName = useKookPluginName()
 	const { snapshot, loading, error, refresh } = useKookSnapshot()
 	const bots = (snapshot?.bots ?? []).slice(0, 3)
 	const overview = snapshot?.overview
@@ -30,7 +31,7 @@ export function SummaryPanel() {
 				<Group justify="space-between">
 					<Group gap="xs">
 						<IconRobot size={16} />
-						<Text fw={700}>{ctx.pluginName} 概览</Text>
+						<Text fw={700}>{pluginName} 概览</Text>
 					</Group>
 					<Button
 						variant="light"
@@ -97,6 +98,7 @@ export function SummaryPanel() {
 }
 
 export function StatusPanel() {
+	const pluginName = useKookPluginName()
 	const { snapshot, loading, error, refresh, setError } = useKookSnapshot()
 	const { rpc } = useKookRuntime()
 	const [loadingId, setLoadingId] = useState<string | null>(null)
@@ -204,14 +206,14 @@ export function StatusPanel() {
 		<Stack gap="md">
 			<Paper withBorder radius="md" p="md">
 				<Stack gap="sm">
-					<Group justify="space-between">
-						<Group gap="xs">
-							<IconRobot size={16} />
-							<Text fw={700}>{ctx.pluginName} Bot 状态</Text>
-						</Group>
-						<Button
-							variant="light"
-							size="compact-xs"
+						<Group justify="space-between">
+							<Group gap="xs">
+								<IconRobot size={16} />
+								<Text fw={700}>{pluginName} Bot 状态</Text>
+							</Group>
+							<Button
+								variant="light"
+								size="compact-xs"
 							onClick={() => refresh()}
 							leftSection={<IconRefresh size={14} />}
 							loading={loading}

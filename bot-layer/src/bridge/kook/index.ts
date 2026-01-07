@@ -11,30 +11,27 @@ export const kookBridge: BridgeDefinition<'kook', 'kook:ready', KookInstance> = 
 	event: 'kook:ready',
 	attach: (ctx, kook, dispatch) => {
 		const unlisten = kook.events.message.on((session, next) => {
-			ctx.logger.debug(
-				{
-					platform: 'kook',
-					messageId: session.data?.msg_id,
-					channelId: session.channelId,
-					userId: session.userId,
-				},
-				'bot-layer: kook incoming',
-			)
+			ctx.logger.debug('bot-layer: kook incoming', {
+				platform: 'kook',
+				messageId: session.data?.msg_id,
+				channelId: session.channelId,
+				userId: session.userId,
+			})
 			const normalized = normalizeKookMessage(session)
 			void dispatch(normalized)
 				.then(() =>
-					ctx.logger.debug(
-						{
-							platform: 'kook',
-							messageId: normalized.messageId,
-							rich: normalized.rich,
-							parts: normalized.parts.length,
-							attachments: normalized.attachments.length,
-						},
-						'bot-layer: kook dispatched',
-					),
+					ctx.logger.debug('bot-layer: kook dispatched', {
+						platform: 'kook',
+						messageId: normalized.messageId,
+						rich: normalized.rich,
+						parts: normalized.parts.length,
+						attachments: normalized.attachments.length,
+					}),
 				)
-				.catch((e) => ctx.logger.warn(e, 'bot-layer: KOOK dispatch 失败'))
+				.catch((e) => {
+					const error = e instanceof Error ? e : new Error(String(e))
+					ctx.logger.warn('bot-layer: KOOK dispatch 失败', { error })
+				})
 			return next(session)
 		})
 
@@ -42,7 +39,8 @@ export const kookBridge: BridgeDefinition<'kook', 'kook:ready', KookInstance> = 
 			try {
 				unlisten()
 			} catch (e) {
-				ctx.logger.warn(e, 'bot-layer: KOOK bridge 清理失败')
+				const error = e instanceof Error ? e : new Error(String(e))
+				ctx.logger.warn('bot-layer: KOOK bridge 清理失败', { error })
 			}
 		}
 	},

@@ -7,7 +7,6 @@ import {
 	getCommandMeta,
 	normalizePartsForAdapter,
 	registerSandboxAdapter,
-	toPartArray,
 } from '@pluxel/bot-layer'
 
 import type { ChatbotsRuntime } from '../runtime'
@@ -41,15 +40,19 @@ const decodeBinary = (value: unknown): Uint8Array | undefined => {
 }
 
 const normalizeSandboxContent = (content: SandboxContent): Part[] => {
-	const parts = toPartArray(content as any)
-	return parts.map((part) => {
+	if (typeof content === 'string') {
+		const text = content
+		return text ? [{ type: 'text', text }] : []
+	}
+
+	return content.map((part) => {
 		if ((part.type === 'image' || part.type === 'file') && part.data) {
 			const decoded = decodeBinary(part.data)
 			if (decoded && decoded !== part.data) {
-				return { ...part, data: decoded }
+				return { ...(part as any), data: decoded } as Part
 			}
 		}
-		return part
+		return part as Part
 	})
 }
 

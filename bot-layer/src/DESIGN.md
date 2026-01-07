@@ -9,10 +9,10 @@
 
 ## 目录结构
 
-- `chatbots/bot-layer/src/parts/`
-  - `normalize.ts`：`PartInput -> Part[]` 的规范化/扁平化（合并相邻 text）
+- `chatbots/bot-layer/parts/`
   - `dsl.ts`：构建 Part 的便捷函数（含 `imageData/fileData`）
-  - `jsx-runtime.ts`：TSX/JSX 运行时（把 JSX 转成 `Part | Part[]`）
+  - `tag.ts`：`parts\`...\``（类型锚点）
+  - `runtime.ts`：`__parts(quasis, exprs) -> Part[]`（transform 后的运行时代码）
 - `chatbots/bot-layer/src/outbound/`
   - `plan.ts`：将 `Part[]` 规划成“发送操作序列”（`reply()` 使用它做稳定拆分）
 - `chatbots/bot-layer/src/adapter/`
@@ -22,22 +22,16 @@
 
 ### 1) 规范化输入
 
-bot-layer 的 Outbound 入口（`reply/sendText` 等）支持：
-
-- `string`
-- `Part`
-- `Part[]`
-- 任意嵌套数组/可迭代结构（便于 JSX Fragment / 条件拼接展开）
-
-最终都会归一为 `Part[]`（相邻 text 会自动合并；`styled.children` 内也会合并相邻 text）。
+bot-layer 的 Outbound 入口（`reply/sendText` 等）只接受 `Part[]`（相邻 text 会自动合并应由编译期完成）。
 
 ### 2) DSL
 
 `parts/dsl.ts` 提供：
 
-- `text/mention/link/codeblock/bold/italic/strike/code`
+- `mention* / link / codeblock / bold / italic / underline / strike / code`
 - `image(url, alt?)`、`file(url, name?, mime?)`
 - `imageData(data, opts?)`、`fileData(data, opts?)`：用于“先上传再发送 / 或直接二进制发送”的场景
+- 音视频目前主要以 `AudioPart/VideoPart` 结构体手写构建（或由 adapter 归一化生成）
 
 ## Outbound：`reply()` 友善拆分规则（可预测、按顺序）
 
@@ -48,7 +42,7 @@ bot-layer 的 Outbound 入口（`reply/sendText` 等）支持：
 - 允许混合输入（多段文本、多张图片、文件夹杂文本等）
 - 可能会拆成多条消息发送（按输入顺序）
 - 对文本类 Part 做平台降级（例如 plain 平台将 styled/link/codeblock 退化为纯文本）
-- 对平台不支持的媒体（image/file）采取“友善退化”：尽可能退化为可读文本（例如使用 `alt/url/name`）而不是直接报错
+- 对平台不支持的媒体（image/audio/video/file）采取“友善退化”：尽可能退化为可读文本（例如使用 `alt/url/name`）或文件而不是直接报错
 
 如果你希望严格控制顺序/失败策略/重试/拆分边界，请使用显式接口 `msg.sendText/msg.sendImage/msg.sendFile` 自行编排。
 
@@ -57,11 +51,11 @@ bot-layer 的 Outbound 入口（`reply/sendText` 等）支持：
 内部通过 `outbound/plan.ts` 做规划：
 
 - 连续的“文本类 Part”（`text/mention/link/styled/codeblock`）会被合并为一次 `sendText`
-- 图片与文件会成为独立发送操作
-- 当平台 `supportsMixedMedia=true` 且满足“单图 caption”形态时，会将相邻文本作为 caption 与图片同条发送：
-  - caption 必须位于图片同一侧（全在前或全在后）
-  - 若图片两侧都有相邻文本，则不会绑定 caption（保持原始顺序，拆成 `text -> image -> text`）
-  - 若图片后仍有其它媒体，则不会把 trailing text 当 caption（避免 caption 误绑定）
+- 媒体（`image/audio/video/file`）会成为独立发送操作
+- 当平台 `supportsMixedMedia=true` 且满足“单图/单视频 caption”形态时，会将相邻文本作为 caption 与媒体同条发送：
+  - caption 必须位于媒体同一侧（全在前或全在后）
+  - 若媒体两侧都有相邻文本，则不会绑定 caption（保持原始顺序，拆成 `text -> media -> text`）
+  - 若图片/视频后仍有其它媒体，则不会把 trailing text 当 caption（避免 caption 误绑定）
 - 当平台 `supportsMixedMedia=false` 时，图片与文字必然拆成多条（顺序与输入一致）
 
 ### 3) 长度限制（不做隐式截断）

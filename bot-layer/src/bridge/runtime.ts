@@ -9,7 +9,8 @@ const safeRun = (ctx: Context, label: string, fn?: (() => void) | null) => {
 	try {
 		fn()
 	} catch (e) {
-		ctx.logger.warn(e, label)
+		const error = e instanceof Error ? e : new Error(String(e))
+		ctx.logger.warn(label, { error })
 	}
 }
 
@@ -26,7 +27,7 @@ const startBridge = <P extends AnyBridgeDefinition>(
 	const attach = (instance: InstanceOf<P>) => {
 		if (disposed || !instance) return
 
-		ctx.logger.debug({ platform: def.platform }, 'bot-layer: bridge attach')
+		ctx.logger.debug('bot-layer: bridge attach', { platform: def.platform })
 		const detachInstance = toCleanup(def.attach(ctx, instance, dispatch))
 		status?.setAttached(def.platform)
 

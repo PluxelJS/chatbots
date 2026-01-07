@@ -168,7 +168,7 @@ export class Bot extends AbstractBot {
 			username: me.data.username,
 			displayName: me.data.first_name ?? me.data.username,
 		})
-		this.ctx.logger.info({ bot: this.selfInfo.username }, 'Telegram bot authenticated')
+		this.ctx.logger.info('Telegram bot authenticated', { bot: this.selfInfo.username })
 
 		if (this.mode === 'polling') {
 			await this.startPolling()
@@ -195,7 +195,7 @@ export class Bot extends AbstractBot {
 			await this.deleteWebhook({ drop_pending_updates: false }).catch(() => {})
 		}
 
-		this.ctx.logger.info({ bot: this.selfInfo?.username }, 'Telegram bot stopped')
+		this.ctx.logger.info('Telegram bot stopped', { bot: this.selfInfo?.username })
 	}
 
 	/** 启动 Polling */
@@ -305,10 +305,12 @@ export class Bot extends AbstractBot {
 				// 远端关闭或网络抖动导致的 Abort 视为一次空轮询，直接返回空数组
 				return []
 			}
-			this.ctx.logger.warn(
-				{ code: result.code, message, offset: this.offset, bot: this.selfInfo?.username ?? this.token },
-				'telegram: getUpdates failed',
-			)
+			this.ctx.logger.warn('telegram: getUpdates failed', {
+				code: result.code,
+				message,
+				offset: this.offset,
+				bot: this.selfInfo?.username ?? this.token,
+			})
 			throw new Error(message)
 		}
 
@@ -352,7 +354,7 @@ export class Bot extends AbstractBot {
 			stateMessage: 'Webhook 已就绪',
 			lastError: undefined,
 		})
-		this.ctx.logger.info({ url: webhook.url }, 'Telegram webhook set')
+		this.ctx.logger.info('Telegram webhook set', { url: webhook.url })
 	}
 
 	/** 处理 Webhook 请求（由外部路由调用） */
@@ -395,7 +397,8 @@ export class Bot extends AbstractBot {
 		this.events.error.emit(e, meta)
 		const message = e instanceof Error ? e.message : String(e)
 		this.updateStatus({ lastError: message })
-		this.ctx.logger.error(e, 'telegram: polling error')
+		const error = e instanceof Error ? e : new Error(String(e))
+		this.ctx.logger.error('telegram: polling error', { error })
 	}
 
 	private recordUpdate(updateId: number) {

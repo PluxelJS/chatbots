@@ -9,23 +9,18 @@ const module = definePluginUIModule({
 			id: 'milky-tab-manage',
 			priority: 12,
 			meta: { label: '管理' },
-			when: (ctx) => ctx.pluginName === 'Milky',
-			Component: ManageTab,
+			render: () => <ManageTab />,
 		},
 		{
 			point: ExtensionPoints.PluginInfo,
 			id: 'milky-info',
 			priority: 10,
 			requireRunning: false,
-			when: (ctx) => ctx.pluginName === 'Milky',
-			Component: SummaryPanel,
+			render: () => <SummaryPanel />,
 		},
 	],
-	setup() {
-		console.log('[Milky] status UI loaded')
-	},
+	setup() {},
 })
 
 export const { extensions, setup } = module
 export default module
-

@@ -6,10 +6,9 @@ export type {
 	LinkPart,
 	MentionPart,
 	Part,
-	PartInput,
 	StyledPart,
 	TextPart,
-} from './parts/model'
-
-export { normalizeMessageContent, toPartArray } from './parts/normalize'
-
+} from '../parts/model'
+export type { PartsValue } from '../parts/runtime'
+export { parts } from '../parts/tag'
+export { p } from '../parts'

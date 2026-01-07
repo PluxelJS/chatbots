@@ -142,7 +142,8 @@ export class MilkyBot extends AbstractBot {
 				stateMessage: '事件循环异常',
 				lastError: e instanceof Error ? e.message : String(e),
 			})
-			this.ctx.logger.error(e, '[Milky] event loop crashed')
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.error('[Milky] event loop crashed', { error })
 		})
 	}
 

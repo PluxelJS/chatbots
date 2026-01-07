@@ -93,7 +93,8 @@ export class TelegramBotManager {
 		if (wasRunning) {
 			await this.disconnectBot(id)
 			await this.connectBot(id).catch((e) => {
-				this.ctx.logger.warn(e, 'Telegram bot 重连失败')
+				const error = e instanceof Error ? e : new Error(String(e))
+				this.ctx.logger.warn('Telegram bot 重连失败', { id, error })
 			})
 		}
 		return { ok: true, bot: updated }
@@ -133,7 +134,7 @@ export class TelegramBotManager {
 				displayName: bot.selfInfo?.first_name ?? bot.selfInfo?.username,
 				connectedAt: Date.now(),
 			})
-			this.ctx.logger.info({ bot: bot.selfInfo?.username, mode: doc.mode }, 'Telegram bot started')
+			this.ctx.logger.info('Telegram bot started', { bot: bot.selfInfo?.username, mode: doc.mode })
 			return { id, status: 'connected' }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e)
@@ -141,7 +142,8 @@ export class TelegramBotManager {
 			this.botsById.delete(id)
 			this.botsByToken.delete(token)
 			this.webhookBotsByToken.delete(token)
-			this.ctx.logger.error(e, 'Telegram bot 启动失败')
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.error('Telegram bot 启动失败', { error })
 			throw e
 		}
 	}
@@ -154,7 +156,10 @@ export class TelegramBotManager {
 			if (doc) await this.repo.update(id, { state: 'stopped', stateMessage: '已断开' })
 			return { id, status: 'stopped' }
 		}
-		await bot.stop().catch((e) => this.ctx.logger.warn(e, 'Telegram bot 停止失败'))
+		await bot.stop().catch((e) => {
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.warn('Telegram bot 停止失败', { id, error })
+		})
 		this.botsById.delete(id)
 		if (token) this.botsByToken.delete(token)
 		if (token) this.webhookBotsByToken.delete(token)
@@ -217,7 +222,10 @@ export class TelegramBotManager {
 			pollingBackoff: status.polling?.backoffIndex,
 			webhookUrl: status.webhook?.url,
 			webhookSecretToken: status.webhook?.secretToken,
-		}).catch((error) => this.ctx.logger.warn(error, 'Telegram bot 状态更新失败'))
+		}).catch((e) => {
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.ctx.logger.warn('Telegram bot 状态更新失败', { id, error })
+		})
 	}
 }
 

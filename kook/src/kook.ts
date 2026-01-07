@@ -1,4 +1,5 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
+import type {} from '@pluxel/hmr/services'
 import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { WebSocketPlugin } from 'pluxel-plugin-websocket'
@@ -76,14 +77,14 @@ export class KOOK extends BasePlugin {
 	}
 }
 
-declare module '@pluxel/hmr/web' {
+declare module '@pluxel/hmr/services' {
 	namespace UI {
-interface rpc {
-		KOOK: KOOKBotRpc
-	}
-	interface sse {
-		KOOK: KookSnapshot
-	}
+		interface rpc {
+			KOOK: KOOKBotRpc
+		}
+		interface sse {
+			KOOK: KookSnapshot
+		}
 	}
 }
 

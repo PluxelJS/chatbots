@@ -1,5 +1,5 @@
 import type { Attachment, AudioPart, BotChannel, BotUser, MentionPart, Message, MessageReference, Part, MediaPart, MediaKind, VideoPart } from '../../types'
-import { hasRichParts } from '../../parts'
+import { hasRichParts } from '../../../parts'
 import { createReply, createSendHelpers } from '../../adapter'
 import { milkyAdapter } from './adapter'
 
