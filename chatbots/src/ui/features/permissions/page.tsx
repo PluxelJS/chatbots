@@ -297,7 +297,6 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 	const role = useMemo(() => roles.roles.find((r) => r.roleId === roleId), [roleId, roles.roles])
 	const isDefaultRole = role ? (role.name ?? '').trim().toUpperCase() === 'DEFAULT' : false
 	const [tab, setTab] = useState<'grants' | 'settings'>('grants')
-	const [addOpened, addCtl] = useDisclosure(false)
 	const [filtersOpened, filtersCtl] = useDisclosure(false)
 
 	const [selectedNodes, setSelectedNodes] = useState<string[]>([])
@@ -335,7 +334,6 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 		setFilterNsKey(null)
 		setFilterKind('all')
 		setFilterEffect('all')
-		addCtl.close()
 		filtersCtl.close()
 		setSelectedNodes([])
 	}, [roleId])
@@ -640,34 +638,17 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 
 					<Tabs.Panel value="grants" pt="sm" style={{ flex: 1, minHeight: 0 }}>
 						<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
-							<Group justify="space-between" align="center" wrap="wrap">
-								<Button
-									size="xs"
-									variant={addOpened ? 'filled' : 'light'}
-									color="teal"
-									leftSection={<IconPlus size={14} />}
-									onClick={addCtl.toggle}
-								>
-									{addOpened ? 'Close' : 'Add grants'}
-								</Button>
-								<Text size="xs" c="dimmed">
-									{visibleGrants.length}/{displayGrants.length} grants
-								</Text>
-							</Group>
-
-							<Collapse in={addOpened}>
-								<Paper withBorder p="xs" radius="md">
-									<PermissionPicker
-										nodes={catalog.nodes}
-										infoByNode={catalog.infoByNode}
-										value={selectedNodes}
-										onChange={setSelectedNodes}
-										effect={effect}
-										onEffectChange={setEffect}
-										onAdd={handleAdd}
-									/>
-								</Paper>
-							</Collapse>
+							<Paper withBorder p="xs" radius="md">
+								<PermissionPicker
+									nodes={catalog.nodes}
+									infoByNode={catalog.infoByNode}
+									value={selectedNodes}
+									onChange={setSelectedNodes}
+									effect={effect}
+									onEffectChange={setEffect}
+									onAdd={handleAdd}
+								/>
+							</Paper>
 
 							{/* Pending Changes Bar */}
 							{hasPendingChanges && (
@@ -693,20 +674,23 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 								</Paper>
 							)}
 
-							{/* Search + Filters */}
-							<Group gap="sm" align="center" wrap="wrap">
-								<TextInput
-									placeholder="Search grants..."
+								{/* Search + Filters */}
+								<Group gap="sm" align="center" wrap="wrap">
+									<TextInput
+										placeholder="Search grants..."
 									size="xs"
 									leftSection={<IconSearch size={14} />}
 									value={search}
 									onChange={(e) => setSearch(e.currentTarget.value)}
 									style={{ flex: 1, maxWidth: 240 }}
 								/>
-								<Button size="xs" variant="subtle" color="gray" onClick={filtersCtl.toggle}>
-									{filtersOpened ? 'Hide filters' : 'Filters'}
-								</Button>
-							</Group>
+									<Button size="xs" variant="subtle" color="gray" onClick={filtersCtl.toggle}>
+										{filtersOpened ? 'Hide filters' : 'Filters'}
+									</Button>
+									<Text size="xs" c="dimmed" style={{ marginLeft: 'auto' }}>
+										{visibleGrants.length}/{displayGrants.length}
+									</Text>
+								</Group>
 
 							<Collapse in={filtersOpened}>
 								<Stack gap="xs">
@@ -1232,7 +1216,6 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 	const [roleSearch, setRoleSearch] = useState('')
 	const [showAssignedOnly, setShowAssignedOnly] = useState(false)
 	const [tab, setTab] = useState<'grants' | 'roles' | 'explain'>('grants')
-	const [grantAddOpened, grantAddCtl] = useDisclosure(false)
 	const [grantFiltersOpened, grantFiltersCtl] = useDisclosure(false)
 	const explain = useUserPermissionExplain(user?.id ?? null)
 	const [explainNode, setExplainNode] = useState<string | null>(null)
@@ -1265,7 +1248,6 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 		setFilterKind('all')
 		setFilterEffect('all')
 		setTab('grants')
-		grantAddCtl.close()
 		grantFiltersCtl.close()
 		setBulkRoleId(null)
 		setExplainNode(explainNodes[0]?.value ?? null)
@@ -1689,34 +1671,17 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 
 					<Tabs.Panel value="grants" pt="sm" style={{ flex: 1, minHeight: 0 }}>
 						<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
-							<Group justify="space-between" align="center" wrap="wrap">
-								<Button
-									size="xs"
-									variant={grantAddOpened ? 'filled' : 'light'}
-									color="teal"
-									leftSection={<IconPlus size={14} />}
-									onClick={grantAddCtl.toggle}
-								>
-									{grantAddOpened ? 'Close' : 'Add grants'}
-								</Button>
-								<Text size="xs" c="dimmed">
-									{visibleGrants.length}/{displayGrants.length} grants
-								</Text>
-							</Group>
-
-							<Collapse in={grantAddOpened}>
-								<Paper withBorder p="xs" radius="md">
-									<PermissionPicker
-										nodes={catalog.nodes}
-										infoByNode={catalog.infoByNode}
-										value={selectedNodes}
-										onChange={setSelectedNodes}
-										effect={effect}
-										onEffectChange={setEffect}
-										onAdd={handleAdd}
-									/>
-								</Paper>
-							</Collapse>
+							<Paper withBorder p="xs" radius="md">
+								<PermissionPicker
+									nodes={catalog.nodes}
+									infoByNode={catalog.infoByNode}
+									value={selectedNodes}
+									onChange={setSelectedNodes}
+									effect={effect}
+									onEffectChange={setEffect}
+									onAdd={handleAdd}
+								/>
+							</Paper>
 
 							<Group gap="sm" align="center" wrap="wrap">
 								<TextInput
@@ -1730,6 +1695,9 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 								<Button size="xs" variant="subtle" color="gray" onClick={grantFiltersCtl.toggle}>
 									{grantFiltersOpened ? 'Hide filters' : 'Filters'}
 								</Button>
+								<Text size="xs" c="dimmed" style={{ marginLeft: 'auto' }}>
+									{visibleGrants.length}/{displayGrants.length}
+								</Text>
 							</Group>
 
 							<Collapse in={grantFiltersOpened}>
