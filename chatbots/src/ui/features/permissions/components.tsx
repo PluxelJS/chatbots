@@ -396,27 +396,42 @@ export function PageHeader({
 // ─────────────────────────────────────────────────────────────────────────────
 
 type PanelProps = {
-	title: string
-	icon?: ReactNode
-	badge?: ReactNode
-	actions?: ReactNode
 	children: ReactNode
-}
+} & (
+	| {
+			hideHeader: true
+			title?: string
+			icon?: ReactNode
+			badge?: ReactNode
+			actions?: ReactNode
+	  }
+	| {
+			hideHeader?: false
+			title: string
+			icon?: ReactNode
+			badge?: ReactNode
+			actions?: ReactNode
+	  }
+)
 
-export function Panel({ title, icon, badge, actions, children }: PanelProps) {
+export function Panel({ title, icon, badge, actions, hideHeader, children }: PanelProps) {
 	return (
 		<Paper withBorder radius="lg" p="sm" style={{ display: 'flex', flexDirection: 'column', minHeight: 0, height: '100%' }}>
-			<Group justify="space-between" align="center">
-				<Group gap="xs" align="center">
-					{icon}
-					<Text fw={600}>{title}</Text>
-				</Group>
-				<Group gap="xs">
-					{badge}
-					{actions}
-				</Group>
-			</Group>
-			<Divider my="sm" />
+			{!hideHeader && (
+				<>
+					<Group justify="space-between" align="center">
+						<Group gap="xs" align="center">
+							{icon}
+							<Text fw={600}>{title}</Text>
+						</Group>
+						<Group gap="xs">
+							{badge}
+							{actions}
+						</Group>
+					</Group>
+					<Divider my="sm" />
+				</>
+			)}
 			<Box style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
 				{children}
 			</Box>

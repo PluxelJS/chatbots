@@ -6,6 +6,7 @@ import {
 	Button,
 	Checkbox,
 	Collapse,
+	Code,
 	Group,
 	NumberInput,
 	Paper,
@@ -17,7 +18,6 @@ import {
 	Text,
 	TextInput,
 	Tooltip,
-	UnstyledButton,
 	ThemeIcon,
 } from '@mantine/core'
 import { useDisclosure } from '@mantine/hooks'
@@ -50,6 +50,8 @@ import {
 	usePermissionCatalog,
 	useRoleGrants,
 	useRoles,
+	useBulkUserRoleAssignments,
+	useUserPermissionExplain,
 	useUserPermissions,
 	useUserSearch,
 } from './hooks'
@@ -162,7 +164,7 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 	}, [roleSearch, roles.roles])
 
 	return (
-		<Panel title="Roles">
+		<Panel hideHeader>
 			{/* Collapsible Create Form */}
 			<Box mb="sm">
 				<Button
@@ -223,44 +225,58 @@ function RolesPanel({ roles, selectedRoleId, onSelectRole }: RolesPanelProps) {
 			</Group>
 
 			<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
-				<Table highlightOnHover withTableBorder verticalSpacing="xs" horizontalSpacing="xs">
-					<Table.Thead>
-						<Table.Tr>
-							<Table.Th>Name</Table.Th>
-							<Table.Th>Parent</Table.Th>
-							<Table.Th>Rank</Table.Th>
-						</Table.Tr>
-					</Table.Thead>
-					<Table.Tbody>
-						{visibleRoles.map((role) => (
-							<Table.Tr
+				<Stack gap={6}>
+					{visibleRoles.map((role) => {
+						const selected = role.roleId === selectedRoleId
+						const roleLabel = role.name?.trim() ? role.name.trim() : `#${role.roleId}`
+						return (
+							<Paper
 								key={role.roleId}
+								withBorder
+								p="xs"
+								radius="md"
+								role="button"
+								tabIndex={0}
 								onClick={() => onSelectRole(role.roleId)}
+								onKeyDown={(e) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault()
+										onSelectRole(role.roleId)
+									}
+								}}
+								aria-label={`Role ${roleLabel}`}
 								style={{
 									cursor: 'pointer',
-									backgroundColor:
-										role.roleId === selectedRoleId ? 'var(--mantine-color-gray-light)' : undefined,
+									backgroundColor: selected ? 'var(--mantine-color-teal-light)' : undefined,
+									borderLeft: selected ? '3px solid var(--mantine-color-teal-6)' : '3px solid transparent',
 								}}
 							>
-								<Table.Td>
-									<Text size="sm" fw={500}>
-										{role.name || <Text span c="dimmed">#{role.roleId}</Text>}
-									</Text>
-								</Table.Td>
-								<Table.Td>
-									<Text size="sm" c="dimmed">
-										{role.parentRoleId ?? '—'}
-									</Text>
-								</Table.Td>
-								<Table.Td>
-									<Badge size="xs" variant="light" color="gray">
-										{role.rank}
-									</Badge>
-								</Table.Td>
-							</Table.Tr>
-						))}
-					</Table.Tbody>
-				</Table>
+								<Group justify="space-between" align="center" wrap="nowrap">
+									<Stack gap={0} style={{ minWidth: 0 }}>
+										<Text size="sm" fw={600} lineClamp={1}>
+											{roleLabel}
+										</Text>
+										{role.name?.trim() && (
+											<Text size="xs" c="dimmed" lineClamp={1}>
+												#{role.roleId}
+											</Text>
+										)}
+									</Stack>
+									<Group gap="xs" wrap="nowrap">
+										{role.parentRoleId !== null && (
+											<Badge size="xs" variant="light" color="gray">
+												p#{role.parentRoleId}
+											</Badge>
+										)}
+										<Badge size="xs" variant="light" color="gray">
+											r{role.rank}
+										</Badge>
+									</Group>
+								</Group>
+							</Paper>
+						)
+					})}
+				</Stack>
 			</ScrollArea>
 		</Panel>
 	)
@@ -280,6 +296,9 @@ type RoleGrantsPanelProps = {
 function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProps) {
 	const role = useMemo(() => roles.roles.find((r) => r.roleId === roleId), [roleId, roles.roles])
 	const isDefaultRole = role ? (role.name ?? '').trim().toUpperCase() === 'DEFAULT' : false
+	const [tab, setTab] = useState<'grants' | 'settings'>('grants')
+	const [addOpened, addCtl] = useDisclosure(false)
+	const [filtersOpened, filtersCtl] = useDisclosure(false)
 
 	const [selectedNodes, setSelectedNodes] = useState<string[]>([])
 	const [effect, setEffect] = useState<PermissionEffect>('allow')
@@ -289,6 +308,9 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 	const [rank, setRank] = useState<number | ''>(0)
 	const [search, setSearch] = useState('')
 	const [showPendingOnly, setShowPendingOnly] = useState(false)
+	const [filterNsKey, setFilterNsKey] = useState<string | null>(null)
+	const [filterKind, setFilterKind] = useState<'all' | 'exact' | 'star'>('all')
+	const [filterEffect, setFilterEffect] = useState<'all' | PermissionEffect>('all')
 
 	// Batch mode: pending changes
 	const [pendingChanges, setPendingChanges] = useState<Map<string, PendingChange>>(new Map())
@@ -310,6 +332,12 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 		setSearch('')
 		setPendingChanges(new Map())
 		setShowPendingOnly(false)
+		setFilterNsKey(null)
+		setFilterKind('all')
+		setFilterEffect('all')
+		addCtl.close()
+		filtersCtl.close()
+		setSelectedNodes([])
 	}, [roleId])
 
 	// Merge grants with pending changes for display
@@ -355,7 +383,10 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 
 	const visibleGrants = useMemo(() => {
 		const q = search.trim().toLowerCase()
-		const base = q ? displayGrants.filter((g) => getGrantNode(g).toLowerCase().includes(q)) : displayGrants
+		let base = q ? displayGrants.filter((g) => getGrantNode(g).toLowerCase().includes(q)) : displayGrants
+		if (filterNsKey) base = base.filter((g) => g.nsKey === filterNsKey)
+		if (filterKind !== 'all') base = base.filter((g) => g.kind === filterKind)
+		if (filterEffect !== 'all') base = base.filter((g) => g.effect === filterEffect)
 		const filtered = showPendingOnly ? base.filter((g) => g.pending) : base
 		const pendingRank = (pending?: 'add' | 'remove' | 'modify') => {
 			if (pending === 'add') return 0
@@ -368,7 +399,13 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 			if (rankDelta !== 0) return rankDelta
 			return getGrantNode(a).localeCompare(getGrantNode(b))
 		})
-	}, [displayGrants, search, showPendingOnly])
+	}, [displayGrants, filterEffect, filterKind, filterNsKey, search, showPendingOnly])
+
+	const nsKeyOptions = useMemo(() => {
+		const keys = new Set<string>()
+		for (const g of displayGrants) if (g.nsKey) keys.add(g.nsKey)
+		return [...keys].sort().map((k) => ({ value: k, label: k }))
+	}, [displayGrants])
 
 	const hasPendingChanges = pendingChanges.size > 0
 	const existingByNode = useMemo(() => {
@@ -478,26 +515,54 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 		setSelectedIds(new Set())
 	}, [displayGrants, selectedIds])
 
+	const handleSelectVisible = useCallback(() => {
+		setSelectedIds(new Set(visibleGrants.map((g) => g.id)))
+	}, [visibleGrants])
+
+	const handleRevokeVisible = useCallback(() => {
+		if (!visibleGrants.length) return
+		if (!confirm(`Revoke all visible grants (${visibleGrants.length})?`)) return
+		setPendingChanges((prev) => {
+			const next = new Map(prev)
+			for (const g of visibleGrants) {
+				const node = getGrantNode(g)
+				if (g.pending === 'add') {
+					next.delete(node)
+				} else if (g.pending === 'remove') {
+					// already pending revoke
+				} else {
+					next.set(node, { type: 'revoke', node })
+				}
+			}
+			return next
+		})
+		setSelectedIds(new Set())
+	}, [visibleGrants])
+
 	// Commit all pending changes
 	const handleCommit = useCallback(async () => {
-		const toGrant: Array<{ node: string; effect: PermissionEffect }> = []
-		const toRevoke: string[] = []
+		try {
+			const toGrantAllow: string[] = []
+			const toGrantDeny: string[] = []
+			const toRevoke: string[] = []
 
-		for (const [node, change] of pendingChanges) {
-			if (change.type === 'grant' || change.type === 'toggle') {
-				toGrant.push({ node, effect: change.effect! })
-			} else if (change.type === 'revoke') {
-				toRevoke.push(node)
+			for (const [node, change] of pendingChanges) {
+				if (change.type === 'grant' || change.type === 'toggle') {
+					if (change.effect === 'allow') toGrantAllow.push(node)
+					else toGrantDeny.push(node)
+				} else if (change.type === 'revoke') {
+					toRevoke.push(node)
+				}
 			}
-		}
 
-		// Execute changes
-		if (toRevoke.length) await grants.revokeMany(toRevoke)
-		for (const { node, effect: eff } of toGrant) {
-			await grants.grantMany([node], eff)
-		}
+			if (toRevoke.length) await grants.revokeMany(toRevoke)
+			if (toGrantAllow.length) await grants.grantMany(toGrantAllow, 'allow')
+			if (toGrantDeny.length) await grants.grantMany(toGrantDeny, 'deny')
 
-		setPendingChanges(new Map())
+			setPendingChanges(new Map())
+		} catch (err) {
+			alert(err instanceof Error ? err.message : String(err))
+		}
 	}, [grants, pendingChanges])
 
 	// Discard all pending
@@ -552,7 +617,7 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 
 	if (!role) {
 		return (
-			<Panel title="Role grants" icon={<IconKey size={16} />}>
+			<Panel hideHeader>
 				<Text size="sm" c="dimmed" ta="center" py="xl">
 					Select a role to manage grants.
 				</Text>
@@ -561,126 +626,222 @@ function RoleGrantsPanel({ roleId, roles, catalog, grants }: RoleGrantsPanelProp
 	}
 
 	return (
-		<Panel
-			title="Role grants"
-			icon={<IconKey size={16} />}
-			badge={<Badge variant="light" color="gray">{role.name || `#${role.roleId}`}</Badge>}
-		>
+		<Panel hideHeader>
 			<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
-				{/* 顶部：角色设置 + 添加权限 */}
-				<Group align="flex-end" gap="sm" wrap="wrap">
-					<TextInput
-						label="Name"
-						size="xs"
-						style={{ width: 140 }}
-						placeholder="Role name"
-						value={name}
-						onChange={(e) => setName(e.currentTarget.value)}
-						onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-					/>
-					<Select
-						label="Parent"
-						size="xs"
-						style={{ width: 140 }}
-						value={parentId ?? ''}
-						data={[
-							{ value: '', label: 'None' },
-							...roles.options.filter((opt) => opt.value !== String(role.roleId)),
-						]}
-						onChange={(v) => setParentId(v || null)}
-					/>
-					<NumberInput label="Rank" size="xs" style={{ width: 80 }} value={rank} onChange={(v) => setRank(typeof v === 'number' ? v : '')} min={0} />
-					<Button size="xs" variant="light" onClick={handleSave} disabled={!isRoleDirty}>
-						Save
-					</Button>
-					<Tooltip label={isDefaultRole ? 'DEFAULT role cannot be deleted' : 'Delete role'} disabled={!isDefaultRole}>
-						<span>
-							<Button
-								size="xs"
-								variant="light"
-								color="red"
-								onClick={handleDeleteRole}
-								leftSection={<IconTrash size={14} />}
-								disabled={isDefaultRole}
-							>
-								Delete
-							</Button>
-						</span>
-					</Tooltip>
-				</Group>
+				<Tabs value={tab} onChange={(v) => setTab((v as any) ?? 'grants')} keepMounted={false}>
+					<Tabs.List>
+						<Tabs.Tab value="grants" leftSection={<IconKey size={14} />}>
+							Grants
+						</Tabs.Tab>
+						<Tabs.Tab value="settings" leftSection={<IconUsers size={14} />}>
+							Settings
+						</Tabs.Tab>
+					</Tabs.List>
 
-				<PermissionPicker
-					nodes={catalog.nodes}
-					infoByNode={catalog.infoByNode}
-					value={selectedNodes}
-					onChange={setSelectedNodes}
-					effect={effect}
-					onEffectChange={setEffect}
-					onAdd={handleAdd}
-				/>
-
-				{/* Pending Changes Bar */}
-				{hasPendingChanges && (
-					<Paper withBorder radius="md" p="xs" style={{ borderColor: 'var(--mantine-color-orange-5)', background: 'var(--mantine-color-orange-light)' }}>
-						<Group justify="space-between" align="center">
-							<Group gap="xs">
-								<Badge variant="filled" color="orange">
-									{pendingChanges.size} pending changes
-								</Badge>
+					<Tabs.Panel value="grants" pt="sm" style={{ flex: 1, minHeight: 0 }}>
+						<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
+							<Group justify="space-between" align="center" wrap="wrap">
+								<Button
+									size="xs"
+									variant={addOpened ? 'filled' : 'light'}
+									color="teal"
+									leftSection={<IconPlus size={14} />}
+									onClick={addCtl.toggle}
+								>
+									{addOpened ? 'Close' : 'Add grants'}
+								</Button>
 								<Text size="xs" c="dimmed">
-									Changes will not be saved until you commit
+									{visibleGrants.length}/{displayGrants.length} grants
 								</Text>
 							</Group>
-							<Group gap="xs">
-								<Button size="xs" variant="light" color="gray" onClick={handleDiscard}>
-									Discard
-								</Button>
-								<Button size="xs" variant="filled" color="teal" onClick={handleCommit}>
-									Commit Changes
+
+							<Collapse in={addOpened}>
+								<Paper withBorder p="xs" radius="md">
+									<PermissionPicker
+										nodes={catalog.nodes}
+										infoByNode={catalog.infoByNode}
+										value={selectedNodes}
+										onChange={setSelectedNodes}
+										effect={effect}
+										onEffectChange={setEffect}
+										onAdd={handleAdd}
+									/>
+								</Paper>
+							</Collapse>
+
+							{/* Pending Changes Bar */}
+							{hasPendingChanges && (
+								<Paper withBorder radius="md" p="xs" style={{ borderColor: 'var(--mantine-color-orange-5)', background: 'var(--mantine-color-orange-light)' }}>
+									<Group justify="space-between" align="center">
+										<Group gap="xs">
+											<Badge variant="filled" color="orange">
+												{pendingChanges.size} pending changes
+											</Badge>
+											<Text size="xs" c="dimmed">
+												Changes will not be saved until you commit
+											</Text>
+										</Group>
+										<Group gap="xs">
+											<Button size="xs" variant="light" color="gray" onClick={handleDiscard}>
+												Discard
+											</Button>
+											<Button size="xs" variant="filled" color="teal" onClick={handleCommit}>
+												Commit
+											</Button>
+										</Group>
+									</Group>
+								</Paper>
+							)}
+
+							{/* Search + Filters */}
+							<Group gap="sm" align="center" wrap="wrap">
+								<TextInput
+									placeholder="Search grants..."
+									size="xs"
+									leftSection={<IconSearch size={14} />}
+									value={search}
+									onChange={(e) => setSearch(e.currentTarget.value)}
+									style={{ flex: 1, maxWidth: 240 }}
+								/>
+								<Button size="xs" variant="subtle" color="gray" onClick={filtersCtl.toggle}>
+									{filtersOpened ? 'Hide filters' : 'Filters'}
 								</Button>
 							</Group>
-						</Group>
-					</Paper>
-				)}
 
-				{/* 搜索 + 批量操作 */}
-				<Group gap="sm" align="center">
-					<TextInput
-						placeholder="Search grants..."
-						size="xs"
-						leftSection={<IconSearch size={14} />}
-						value={search}
-						onChange={(e) => setSearch(e.currentTarget.value)}
-						style={{ flex: 1, maxWidth: 240 }}
-					/>
-					<Checkbox
-						size="xs"
-						label="Pending only"
-						checked={showPendingOnly}
-						onChange={(e) => setShowPendingOnly(e.currentTarget.checked)}
-					/>
-					<Text size="xs" c="dimmed">
-						{visibleGrants.length}/{displayGrants.length} grants
-					</Text>
-				</Group>
+							<Collapse in={filtersOpened}>
+								<Stack gap="xs">
+									<Group gap="sm" align="center" wrap="wrap">
+										<Select
+											size="xs"
+											placeholder="Namespace"
+											data={nsKeyOptions}
+											value={filterNsKey}
+											onChange={setFilterNsKey}
+											clearable
+											style={{ width: 200 }}
+										/>
+										<Select
+											size="xs"
+											placeholder="Kind"
+											data={[
+												{ value: 'all', label: 'All kinds' },
+												{ value: 'exact', label: 'Exact' },
+												{ value: 'star', label: 'Star' },
+											]}
+											value={filterKind}
+											onChange={(v) => setFilterKind((v as any) ?? 'all')}
+											style={{ width: 160 }}
+										/>
+										<Select
+											size="xs"
+											placeholder="Effect"
+											data={[
+												{ value: 'all', label: 'All effects' },
+												{ value: 'allow', label: 'Allow' },
+												{ value: 'deny', label: 'Deny' },
+											]}
+											value={filterEffect}
+											onChange={(v) => setFilterEffect(((v as any) ?? 'all') as any)}
+											style={{ width: 160 }}
+										/>
+										<Checkbox
+											size="xs"
+											label="Pending only"
+											checked={showPendingOnly}
+											onChange={(e) => setShowPendingOnly(e.currentTarget.checked)}
+										/>
+									</Group>
 
-				<BulkActions
-					selectedCount={selectedIds.size}
-					onBulkAllow={handleBulkAllow}
-					onBulkDeny={handleBulkDeny}
-					onBulkRevoke={handleBulkRevoke}
-					onClear={() => setSelectedIds(new Set())}
-				/>
+									<Group gap="xs">
+										<Button size="xs" variant="light" color="gray" onClick={handleSelectVisible} disabled={!visibleGrants.length}>
+											Select visible
+										</Button>
+										<Button size="xs" variant="subtle" color="gray" onClick={() => setSelectedIds(new Set())} disabled={selectedIds.size === 0}>
+											Clear selection
+										</Button>
+										<Button size="xs" variant="light" color="red" onClick={handleRevokeVisible} disabled={!visibleGrants.length}>
+											Revoke visible
+										</Button>
+									</Group>
+								</Stack>
+							</Collapse>
 
-				<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
-					<GrantsTableWithPending
-						grants={visibleGrants}
-						selectedIds={selectedIds}
-						onSelectChange={setSelectedIds}
-						onToggleEffect={handleToggleEffect}
-						onRevoke={handleRevoke}
-					/>
-				</ScrollArea>
+							<BulkActions
+								selectedCount={selectedIds.size}
+								onBulkAllow={handleBulkAllow}
+								onBulkDeny={handleBulkDeny}
+								onBulkRevoke={handleBulkRevoke}
+								onClear={() => setSelectedIds(new Set())}
+							/>
+
+							<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
+								<GrantsTableWithPending
+									grants={visibleGrants}
+									selectedIds={selectedIds}
+									onSelectChange={setSelectedIds}
+									onToggleEffect={handleToggleEffect}
+									onRevoke={handleRevoke}
+								/>
+							</ScrollArea>
+						</Stack>
+					</Tabs.Panel>
+
+					<Tabs.Panel value="settings" pt="sm">
+						<Stack gap="sm">
+							<Group align="flex-end" gap="sm" wrap="wrap">
+								<TextInput
+									label="Name"
+									size="xs"
+									style={{ width: 180 }}
+									placeholder="Role name"
+									value={name}
+									onChange={(e) => setName(e.currentTarget.value)}
+									onKeyDown={(e) => e.key === 'Enter' && handleSave()}
+								/>
+								<Select
+									label="Parent"
+									size="xs"
+									style={{ width: 220 }}
+									value={parentId ?? ''}
+									data={[
+										{ value: '', label: 'None' },
+										...roles.options.filter((opt) => opt.value !== String(role.roleId)),
+									]}
+									onChange={(v) => setParentId(v || null)}
+								/>
+								<NumberInput
+									label="Rank"
+									size="xs"
+									style={{ width: 120 }}
+									value={rank}
+									onChange={(v) => setRank(typeof v === 'number' ? v : '')}
+									min={0}
+								/>
+								<Button size="xs" variant="light" onClick={handleSave} disabled={!isRoleDirty}>
+									Save
+								</Button>
+								<Tooltip label={isDefaultRole ? 'DEFAULT role cannot be deleted' : 'Delete role'} disabled={!isDefaultRole}>
+									<span>
+										<Button
+											size="xs"
+											variant="light"
+											color="red"
+											onClick={handleDeleteRole}
+											leftSection={<IconTrash size={14} />}
+											disabled={isDefaultRole}
+										>
+											Delete
+										</Button>
+									</span>
+								</Tooltip>
+							</Group>
+
+							<Text size="xs" c="dimmed">
+								Role settings are independent from grants. Grants can be edited in the “Grants” tab.
+							</Text>
+						</Stack>
+					</Tabs.Panel>
+				</Tabs>
 			</Stack>
 		</Panel>
 	)
@@ -889,7 +1050,7 @@ function UserQueuePanel({
 	)
 
 	return (
-		<Panel title="User selection" icon={<IconUsers size={16} />}>
+		<Panel hideHeader>
 			<Stack gap="sm">
 				{/* Search Input */}
 				<Group gap="xs">
@@ -1065,8 +1226,29 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 	const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
 	const [search, setSearch] = useState('')
 	const [showPendingOnly, setShowPendingOnly] = useState(false)
+	const [filterNsKey, setFilterNsKey] = useState<string | null>(null)
+	const [filterKind, setFilterKind] = useState<'all' | 'exact' | 'star'>('all')
+	const [filterEffect, setFilterEffect] = useState<'all' | PermissionEffect>('all')
 	const [roleSearch, setRoleSearch] = useState('')
 	const [showAssignedOnly, setShowAssignedOnly] = useState(false)
+	const [tab, setTab] = useState<'grants' | 'roles' | 'explain'>('grants')
+	const [grantAddOpened, grantAddCtl] = useDisclosure(false)
+	const [grantFiltersOpened, grantFiltersCtl] = useDisclosure(false)
+	const explain = useUserPermissionExplain(user?.id ?? null)
+	const [explainNode, setExplainNode] = useState<string | null>(null)
+	const targetUserIds = useMemo(() => selectedUsers.map((u) => u.id).sort((a, b) => a - b), [selectedUsers])
+	const bulkRoles = useBulkUserRoleAssignments(targetUserIds)
+	const [bulkRoleId, setBulkRoleId] = useState<string | null>(null)
+
+	const explainNodes = useMemo(() => {
+		const out: Array<{ value: string; label: string }> = []
+		for (const node of catalog.nodes) {
+			const info = catalog.infoByNode.get(node)
+			if (info?.kind !== 'exact') continue
+			out.push({ value: node, label: node })
+		}
+		return out
+	}, [catalog.infoByNode, catalog.nodes])
 
 	// Batch pending changes
 	const [pendingGrants, setPendingGrants] = useState<Map<string, PendingChange>>(new Map())
@@ -1079,6 +1261,14 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 		setPendingGrants(new Map())
 		setPendingRoles(new Map())
 		setShowPendingOnly(false)
+		setFilterNsKey(null)
+		setFilterKind('all')
+		setFilterEffect('all')
+		setTab('grants')
+		grantAddCtl.close()
+		grantFiltersCtl.close()
+		setBulkRoleId(null)
+		setExplainNode(explainNodes[0]?.value ?? null)
 	}, [user?.id])
 
 	// Merge grants with pending
@@ -1122,7 +1312,10 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 
 	const visibleGrants = useMemo(() => {
 		const q = search.trim().toLowerCase()
-		const base = q ? displayGrants.filter((g) => getGrantNode(g).toLowerCase().includes(q)) : displayGrants
+		let base = q ? displayGrants.filter((g) => getGrantNode(g).toLowerCase().includes(q)) : displayGrants
+		if (filterNsKey) base = base.filter((g) => g.nsKey === filterNsKey)
+		if (filterKind !== 'all') base = base.filter((g) => g.kind === filterKind)
+		if (filterEffect !== 'all') base = base.filter((g) => g.effect === filterEffect)
 		const filtered = showPendingOnly ? base.filter((g) => g.pending) : base
 		const pendingRank = (pending?: 'add' | 'remove' | 'modify') => {
 			if (pending === 'add') return 0
@@ -1135,7 +1328,13 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 			if (rankDelta !== 0) return rankDelta
 			return getGrantNode(a).localeCompare(getGrantNode(b))
 		})
-	}, [displayGrants, search, showPendingOnly])
+	}, [displayGrants, filterEffect, filterKind, filterNsKey, search, showPendingOnly])
+
+	const nsKeyOptions = useMemo(() => {
+		const keys = new Set<string>()
+		for (const g of displayGrants) if (g.nsKey) keys.add(g.nsKey)
+		return [...keys].sort().map((k) => ({ value: k, label: k }))
+	}, [displayGrants])
 
 	// Role assignments with pending
 	const rawRoleAssignments = useMemo(() => {
@@ -1290,6 +1489,38 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 		})
 	}, [user, userPerms.roleIds])
 
+	const applyPendingRoleSelection = useCallback((next: Map<string, PendingRoleChange>, roleId: number, desiredAssigned: boolean, currentlyAssigned: boolean) => {
+		if (!user) return
+		const key = `${user.id}:${roleId}`
+		if (desiredAssigned === currentlyAssigned) {
+			next.delete(key)
+			return
+		}
+		next.set(key, { userId: user.id, roleId, action: desiredAssigned ? 'assign' : 'unassign' })
+	}, [user])
+
+	const handleAssignFilteredRoles = useCallback(() => {
+		if (!user) return
+		setPendingRoles((prev) => {
+			const next = new Map(prev)
+			for (const { role, assigned } of roleAssignments) {
+				applyPendingRoleSelection(next, role.roleId, true, assigned)
+			}
+			return next
+		})
+	}, [applyPendingRoleSelection, roleAssignments, user])
+
+	const handleUnassignFilteredRoles = useCallback(() => {
+		if (!user) return
+		setPendingRoles((prev) => {
+			const next = new Map(prev)
+			for (const { role, assigned } of roleAssignments) {
+				applyPendingRoleSelection(next, role.roleId, false, assigned)
+			}
+			return next
+		})
+	}, [applyPendingRoleSelection, roleAssignments, user])
+
 	// Bulk operations
 	const handleBulkAllow = useCallback(() => {
 		const nodes = displayGrants.filter((g) => selectedIds.has(g.id)).map(getGrantNode)
@@ -1332,36 +1563,66 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 		setSelectedIds(new Set())
 	}, [displayGrants, selectedIds])
 
+	const handleSelectVisible = useCallback(() => {
+		setSelectedIds(new Set(visibleGrants.map((g) => g.id)))
+	}, [visibleGrants])
+
+	const handleRevokeVisible = useCallback(() => {
+		if (!visibleGrants.length) return
+		if (!confirm(`Revoke all visible grants (${visibleGrants.length})?`)) return
+		setPendingGrants((prev) => {
+			const next = new Map(prev)
+			for (const g of visibleGrants) {
+				const node = getGrantNode(g)
+				if (g.pending === 'add') {
+					next.delete(node)
+				} else if (g.pending === 'remove') {
+					// already pending revoke
+				} else {
+					next.set(node, { type: 'revoke', node })
+				}
+			}
+			return next
+		})
+		setSelectedIds(new Set())
+	}, [visibleGrants])
+
 	// Commit changes
 	const handleCommit = useCallback(async () => {
-		// Grants
-		const toGrant: Array<{ node: string; effect: PermissionEffect }> = []
-		const toRevoke: string[] = []
+		try {
+			// Grants
+			const toGrantAllow: string[] = []
+			const toGrantDeny: string[] = []
+			const toRevoke: string[] = []
 
-		for (const [node, change] of pendingGrants) {
-			if (change.type === 'grant' || change.type === 'toggle') {
-				toGrant.push({ node, effect: change.effect! })
-			} else if (change.type === 'revoke') {
-				toRevoke.push(node)
+			for (const [node, change] of pendingGrants) {
+				if (change.type === 'grant' || change.type === 'toggle') {
+					if (change.effect === 'allow') toGrantAllow.push(node)
+					else toGrantDeny.push(node)
+				} else if (change.type === 'revoke') {
+					toRevoke.push(node)
+				}
 			}
-		}
 
-		if (toRevoke.length) await userPerms.revokeMany(toRevoke)
-		for (const { node, effect: eff } of toGrant) {
-			await userPerms.grantMany([node], eff)
-		}
+			if (toRevoke.length) await userPerms.revokeMany(toRevoke)
+			if (toGrantAllow.length) await userPerms.grantMany(toGrantAllow, 'allow')
+			if (toGrantDeny.length) await userPerms.grantMany(toGrantDeny, 'deny')
 
-		// Roles
-		for (const change of pendingRoles.values()) {
-			if (change.action === 'assign') {
-				await userPerms.assignRole(change.roleId)
-			} else {
-				await userPerms.unassignRole(change.roleId)
+			// Roles
+			const toAssign: number[] = []
+			const toUnassign: number[] = []
+			for (const change of pendingRoles.values()) {
+				if (change.action === 'assign') toAssign.push(change.roleId)
+				else toUnassign.push(change.roleId)
 			}
-		}
+			if (toAssign.length) await userPerms.assignRoleMany(toAssign)
+			if (toUnassign.length) await userPerms.unassignRoleMany(toUnassign)
 
-		setPendingGrants(new Map())
-		setPendingRoles(new Map())
+			setPendingGrants(new Map())
+			setPendingRoles(new Map())
+		} catch (err) {
+			alert(err instanceof Error ? err.message : String(err))
+		}
 	}, [userPerms, pendingGrants, pendingRoles])
 
 	const handleDiscard = useCallback(() => {
@@ -1371,7 +1632,7 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 
 	if (!user) {
 		return (
-			<Panel title="User permissions" icon={<IconKey size={16} />}>
+			<Panel hideHeader>
 				<Text size="sm" c="dimmed" ta="center" py="xl">
 					{selectedUsers.length > 0
 						? 'Click a user from the queue to edit permissions'
@@ -1382,18 +1643,7 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 	}
 
 	return (
-		<Panel
-			title="User permissions"
-			icon={<IconKey size={16} />}
-			badge={
-				<Group gap="xs">
-					<Avatar size="xs" radius="xl" color="gray">
-						{(user.displayName?.[0] ?? '#').toUpperCase()}
-					</Avatar>
-					<Badge variant="light" color="gray">{user.displayName || `#${user.id}`}</Badge>
-				</Group>
-			}
-		>
+		<Panel hideHeader>
 			<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
 				{/* Pending Changes Bar */}
 				{hasPendingChanges && (
@@ -1419,156 +1669,430 @@ function UserPermsPanel({ user, selectedUsers, roles, catalog, userPerms }: User
 					</Paper>
 				)}
 
-				{/* Role Assignments */}
-				<Paper withBorder p="xs" radius="md">
-					<Group justify="space-between" align="center" mb="xs">
-						<Text fw={600} size="sm">
-							Role assignments
-						</Text>
-						<Text size="xs" c="dimmed">
-							{assignedCount}/{roles.roles.length} assigned
-						</Text>
-					</Group>
-					<Group gap="sm" align="center" mb="xs">
-						<TextInput
-							placeholder="Filter roles…"
-							size="xs"
-							leftSection={<IconSearch size={14} />}
-							value={roleSearch}
-							onChange={(e) => setRoleSearch(e.currentTarget.value)}
-							style={{ flex: 1, maxWidth: 240 }}
-						/>
-						<Checkbox
-							size="xs"
-							label="Assigned only"
-							checked={showAssignedOnly}
-							onChange={(e) => setShowAssignedOnly(e.currentTarget.checked)}
-						/>
-						<Button
-							size="xs"
-							variant="light"
-							color="gray"
-							onClick={handleClearRoles}
-							disabled={assignedCount === 0 && pendingRoles.size === 0}
-						>
-							Clear roles
-						</Button>
-						<Text size="xs" c="dimmed">
-							{roleAssignments.length}/{roles.roles.length}
-						</Text>
-					</Group>
-					<Text size="xs" c="dimmed" mb="xs">
-						Tip: click a role badge (or press Enter/Space) to toggle assignment.
-					</Text>
-					{assignedCount === 0 && defaultRole && (
-						<Text size="xs" c="dimmed" mb="xs">
-							No explicit roles assigned. DEFAULT role ({defaultRole.name || `#${defaultRole.roleId}`} · r{defaultRole.rank}) applies implicitly.
-						</Text>
-					)}
-					<ScrollArea style={{ maxHeight: 120 }} type="auto" offsetScrollbars>
-						<Group gap="xs">
-							{roleAssignments.map(({ role, assigned, displayAssigned, pendingStatus }) => (
-								<Tooltip
-									key={role.roleId}
-									label={
-										[
-											role.name?.trim() ? `${role.name}` : `Role #${role.roleId}`,
-											`#${role.roleId}`,
-											`r${role.rank}`,
-											role.parentRoleId === null ? null : `parent #${role.parentRoleId}`,
-											displayAssigned ? 'assigned' : 'not assigned',
-											pendingStatus === 'add' ? '(pending assign)' : pendingStatus === 'remove' ? '(pending unassign)' : null,
-										].filter(Boolean).join(' · ')
-									}
+				<Tabs
+					value={tab}
+					onChange={(v) => setTab((v as any) ?? 'grants')}
+					keepMounted={false}
+					style={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}
+				>
+					<Tabs.List>
+						<Tabs.Tab value="grants" leftSection={<IconKey size={14} />}>
+							Grants
+						</Tabs.Tab>
+						<Tabs.Tab value="roles" leftSection={<IconUsers size={14} />}>
+							Roles
+						</Tabs.Tab>
+						<Tabs.Tab value="explain" leftSection={<IconShield size={14} />}>
+							Explain
+						</Tabs.Tab>
+					</Tabs.List>
+
+					<Tabs.Panel value="grants" pt="sm" style={{ flex: 1, minHeight: 0 }}>
+						<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
+							<Group justify="space-between" align="center" wrap="wrap">
+								<Button
+									size="xs"
+									variant={grantAddOpened ? 'filled' : 'light'}
+									color="teal"
+									leftSection={<IconPlus size={14} />}
+									onClick={grantAddCtl.toggle}
 								>
-									<UnstyledButton
-										onClick={() => handleToggleRole(role.roleId, assigned)}
-										onKeyDown={(e) => {
-											if (e.key === 'Enter' || e.key === ' ') {
-												e.preventDefault()
-												handleToggleRole(role.roleId, assigned)
-											}
-										}}
-										aria-pressed={displayAssigned}
-										aria-label={`${role.name?.trim() ? role.name : `Role #${role.roleId}`}, rank ${role.rank}, ${displayAssigned ? 'assigned' : 'not assigned'}${pendingStatus === 'add' ? ', pending assign' : pendingStatus === 'remove' ? ', pending unassign' : ''}`}
-										style={{ display: 'inline-flex' }}
-									>
-										<Badge
-											variant={displayAssigned ? 'light' : 'outline'}
-											color={pendingStatus === 'add' ? 'teal' : pendingStatus === 'remove' ? 'red' : 'gray'}
-											style={{ cursor: 'pointer' }}
-											rightSection={
-												<Group gap={4} wrap="nowrap">
-													<Text size="xs" span c="dimmed">
-														r{role.rank}
-													</Text>
-													{displayAssigned && <IconCheck size={12} aria-hidden />}
-													{pendingStatus && (
-														<Text size="xs" span aria-hidden>
-															{pendingStatus === 'add' ? '+' : '−'}
+									{grantAddOpened ? 'Close' : 'Add grants'}
+								</Button>
+								<Text size="xs" c="dimmed">
+									{visibleGrants.length}/{displayGrants.length} grants
+								</Text>
+							</Group>
+
+							<Collapse in={grantAddOpened}>
+								<Paper withBorder p="xs" radius="md">
+									<PermissionPicker
+										nodes={catalog.nodes}
+										infoByNode={catalog.infoByNode}
+										value={selectedNodes}
+										onChange={setSelectedNodes}
+										effect={effect}
+										onEffectChange={setEffect}
+										onAdd={handleAdd}
+									/>
+								</Paper>
+							</Collapse>
+
+							<Group gap="sm" align="center" wrap="wrap">
+								<TextInput
+									placeholder="Search grants..."
+									size="xs"
+									leftSection={<IconSearch size={14} />}
+									value={search}
+									onChange={(e) => setSearch(e.currentTarget.value)}
+									style={{ flex: 1, maxWidth: 240 }}
+								/>
+								<Button size="xs" variant="subtle" color="gray" onClick={grantFiltersCtl.toggle}>
+									{grantFiltersOpened ? 'Hide filters' : 'Filters'}
+								</Button>
+							</Group>
+
+							<Collapse in={grantFiltersOpened}>
+								<Stack gap="xs">
+									<Group gap="sm" align="center" wrap="wrap">
+										<Select
+											size="xs"
+											placeholder="Namespace"
+											data={nsKeyOptions}
+											value={filterNsKey}
+											onChange={setFilterNsKey}
+											clearable
+											style={{ width: 200 }}
+										/>
+										<Select
+											size="xs"
+											placeholder="Kind"
+											data={[
+												{ value: 'all', label: 'All kinds' },
+												{ value: 'exact', label: 'Exact' },
+												{ value: 'star', label: 'Star' },
+											]}
+											value={filterKind}
+											onChange={(v) => setFilterKind((v as any) ?? 'all')}
+											style={{ width: 160 }}
+										/>
+										<Select
+											size="xs"
+											placeholder="Effect"
+											data={[
+												{ value: 'all', label: 'All effects' },
+												{ value: 'allow', label: 'Allow' },
+												{ value: 'deny', label: 'Deny' },
+											]}
+											value={filterEffect}
+											onChange={(v) => setFilterEffect(((v as any) ?? 'all') as any)}
+											style={{ width: 160 }}
+										/>
+										<Checkbox
+											size="xs"
+											label="Pending only"
+											checked={showPendingOnly}
+											onChange={(e) => setShowPendingOnly(e.currentTarget.checked)}
+										/>
+									</Group>
+									<Group gap="xs">
+										<Button size="xs" variant="light" color="gray" onClick={handleSelectVisible} disabled={!visibleGrants.length}>
+											Select visible
+										</Button>
+										<Button size="xs" variant="subtle" color="gray" onClick={() => setSelectedIds(new Set())} disabled={selectedIds.size === 0}>
+											Clear selection
+										</Button>
+										<Button size="xs" variant="light" color="red" onClick={handleRevokeVisible} disabled={!visibleGrants.length}>
+											Revoke visible
+										</Button>
+									</Group>
+								</Stack>
+							</Collapse>
+
+							<BulkActions
+								selectedCount={selectedIds.size}
+								onBulkAllow={handleBulkAllow}
+								onBulkDeny={handleBulkDeny}
+								onBulkRevoke={handleBulkRevoke}
+								onClear={() => setSelectedIds(new Set())}
+							/>
+
+							<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
+								<GrantsTableWithPending
+									grants={visibleGrants}
+									selectedIds={selectedIds}
+									onSelectChange={setSelectedIds}
+									onToggleEffect={handleToggleEffect}
+									onRevoke={handleRevoke}
+								/>
+							</ScrollArea>
+						</Stack>
+					</Tabs.Panel>
+
+					<Tabs.Panel value="roles" pt="sm" style={{ flex: 1, minHeight: 0 }}>
+						<Stack gap="sm" style={{ flex: 1, minHeight: 0 }}>
+							{targetUserIds.length > 1 && (
+								<Paper withBorder p="xs" radius="md">
+									<Stack gap="xs">
+										<Group justify="space-between" align="center" wrap="wrap">
+											<Group gap="xs" align="center" wrap="wrap">
+												<Text fw={600} size="sm">
+													Batch apply role
+												</Text>
+												<Badge variant="light" color="gray">
+													{targetUserIds.length} users
+												</Badge>
+											</Group>
+											<Button size="xs" variant="subtle" color="gray" onClick={() => setBulkRoleId(null)} disabled={bulkRoles.loading}>
+												Reset
+											</Button>
+										</Group>
+										<Group gap="sm" align="flex-end" wrap="wrap">
+											<Select
+												label="Role"
+												size="xs"
+												placeholder="Select a role"
+												data={roles.options}
+												value={bulkRoleId}
+												onChange={setBulkRoleId}
+												searchable
+												clearable
+												style={{ width: 320, maxWidth: '100%' }}
+											/>
+											<Button
+												size="xs"
+												variant="light"
+												color="teal"
+												loading={bulkRoles.loading}
+												disabled={!bulkRoleId}
+												onClick={async () => {
+													const roleId = bulkRoleId ? Number(bulkRoleId) : NaN
+													if (!Number.isFinite(roleId)) return
+													if (!confirm(`Assign role #${roleId} to ${targetUserIds.length} users?`)) return
+													await bulkRoles.assignRole(roleId)
+													if (user) await userPerms.refresh()
+												}}
+											>
+												Assign to all targets
+											</Button>
+											<Button
+												size="xs"
+												variant="light"
+												color="red"
+												loading={bulkRoles.loading}
+												disabled={!bulkRoleId}
+												onClick={async () => {
+													const roleId = bulkRoleId ? Number(bulkRoleId) : NaN
+													if (!Number.isFinite(roleId)) return
+													if (!confirm(`Unassign role #${roleId} from ${targetUserIds.length} users?`)) return
+													await bulkRoles.unassignRole(roleId)
+													if (user) await userPerms.refresh()
+												}}
+											>
+												Unassign from all targets
+											</Button>
+										</Group>
+										{bulkRoles.error && (
+											<Text size="xs" c="red">
+												{bulkRoles.error}
+											</Text>
+										)}
+									</Stack>
+								</Paper>
+							)}
+
+							<Group gap="sm" align="center" wrap="wrap">
+								<TextInput
+									placeholder="Filter roles…"
+									size="xs"
+									leftSection={<IconSearch size={14} />}
+									value={roleSearch}
+									onChange={(e) => setRoleSearch(e.currentTarget.value)}
+									style={{ flex: 1, maxWidth: 240 }}
+								/>
+								<Checkbox
+									size="xs"
+									label="Assigned only"
+									checked={showAssignedOnly}
+									onChange={(e) => setShowAssignedOnly(e.currentTarget.checked)}
+								/>
+								<Button
+									size="xs"
+									variant="light"
+									color="gray"
+									onClick={handleClearRoles}
+									disabled={assignedCount === 0 && pendingRoles.size === 0}
+								>
+									Clear roles
+								</Button>
+								<Text size="xs" c="dimmed">
+									{roleAssignments.length}/{roles.roles.length}
+								</Text>
+							</Group>
+
+							{assignedCount === 0 && defaultRole && (
+								<Text size="xs" c="dimmed">
+									No explicit roles assigned. DEFAULT role ({defaultRole.name || `#${defaultRole.roleId}`} · r{defaultRole.rank}) applies implicitly.
+								</Text>
+							)}
+
+							<Group gap="xs">
+								<Button size="xs" variant="light" color="teal" onClick={handleAssignFilteredRoles} disabled={!roleAssignments.length}>
+									Assign filtered
+								</Button>
+								<Button size="xs" variant="light" color="red" onClick={handleUnassignFilteredRoles} disabled={!roleAssignments.length}>
+									Unassign filtered
+								</Button>
+							</Group>
+
+							<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
+								<Stack gap="xs">
+									{roleAssignments.map(({ role, assigned, displayAssigned, pendingStatus }) => {
+										const bg =
+											pendingStatus === 'add'
+												? 'var(--mantine-color-teal-light)'
+												: pendingStatus === 'remove'
+													? 'var(--mantine-color-red-light)'
+													: displayAssigned
+														? 'var(--mantine-color-gray-light)'
+														: undefined
+										const border =
+											pendingStatus === 'add'
+												? 'var(--mantine-color-teal-6)'
+												: pendingStatus === 'remove'
+													? 'var(--mantine-color-red-6)'
+													: displayAssigned
+														? 'var(--mantine-color-gray-4)'
+														: 'var(--mantine-color-gray-3)'
+
+										return (
+											<Paper
+												key={role.roleId}
+												withBorder
+												radius="md"
+												p="xs"
+												onClick={() => handleToggleRole(role.roleId, assigned)}
+												style={{
+													cursor: 'pointer',
+													background: bg,
+													borderColor: border,
+													borderLeftWidth: displayAssigned ? 3 : 1,
+													opacity: pendingStatus === 'remove' ? 0.8 : 1,
+												}}
+											>
+												<Group justify="space-between" align="center" wrap="nowrap">
+													<Group gap="sm" align="center" wrap="nowrap" style={{ minWidth: 0 }}>
+														<Checkbox
+															checked={displayAssigned}
+															onChange={() => handleToggleRole(role.roleId, assigned)}
+															onClick={(e) => e.stopPropagation()}
+															aria-label={`${role.name?.trim() ? role.name : `Role #${role.roleId}`}: ${displayAssigned ? 'assigned' : 'not assigned'}`}
+														/>
+														<Tooltip
+															label={[
+																role.name?.trim() ? `${role.name}` : `Role #${role.roleId}`,
+																`#${role.roleId}`,
+																`r${role.rank}`,
+																role.parentRoleId === null ? null : `parent #${role.parentRoleId}`,
+															].filter(Boolean).join(' · ')}
+														>
+															<Stack gap={0} style={{ minWidth: 0 }}>
+																<Text size="sm" fw={600} lineClamp={1}>
+																	{role.name || `Role #${role.roleId}`}
+																</Text>
+																<Text size="xs" c="dimmed" lineClamp={1}>
+																	#{role.roleId} · r{role.rank}
+																	{role.parentRoleId === null ? '' : ` · parent #${role.parentRoleId}`}
+																</Text>
+															</Stack>
+														</Tooltip>
+													</Group>
+													{pendingStatus ? (
+														<Text size="xs" c={pendingStatus === 'add' ? 'teal' : 'red'}>
+															{pendingStatus === 'add' ? 'pending assign' : 'pending unassign'}
+														</Text>
+													) : displayAssigned ? (
+														<Text size="xs" c="dimmed">
+															assigned
+														</Text>
+													) : (
+														<Text size="xs" c="dimmed">
+															—
 														</Text>
 													)}
 												</Group>
-											}
-										>
-											{role.name || `#${role.roleId}`}
-										</Badge>
-									</UnstyledButton>
-								</Tooltip>
-							))}
-						</Group>
-					</ScrollArea>
-				</Paper>
+											</Paper>
+										)
+									})}
+								</Stack>
+							</ScrollArea>
+						</Stack>
+					</Tabs.Panel>
 
-				{/* Permission Picker */}
-				<PermissionPicker
-					nodes={catalog.nodes}
-					infoByNode={catalog.infoByNode}
-					value={selectedNodes}
-					onChange={setSelectedNodes}
-					effect={effect}
-					onEffectChange={setEffect}
-					onAdd={handleAdd}
-				/>
+					<Tabs.Panel value="explain" pt="sm">
+						<Paper withBorder p="xs" radius="md">
+								<Stack gap="xs">
+									<Group gap="sm" align="flex-end" wrap="nowrap">
+										<Box style={{ flex: 1, minWidth: 240 }}>
+											<Select
+												aria-label="Explain node"
+												size="xs"
+												placeholder="Explain node…"
+												data={explainNodes}
+												value={explainNode}
+												onChange={(v) => setExplainNode(v)}
+												searchable
+											clearable
+											nothingFoundMessage="No exact nodes in catalog"
+										/>
+									</Box>
+									<Button
+										size="xs"
+										variant="light"
+										loading={explain.loading}
+										disabled={!explainNode}
+										onClick={() => explainNode && void explain.explain(explainNode)}
+									>
+										Explain
+									</Button>
+									<Button size="xs" variant="subtle" color="gray" onClick={explain.clear} disabled={explain.loading}>
+										Clear
+									</Button>
+								</Group>
 
-				{/* Search + Stats */}
-				<Group gap="sm" align="center">
-					<TextInput
-						placeholder="Search grants..."
-						size="xs"
-						leftSection={<IconSearch size={14} />}
-						value={search}
-						onChange={(e) => setSearch(e.currentTarget.value)}
-						style={{ flex: 1, maxWidth: 240 }}
-					/>
-					<Checkbox
-						size="xs"
-						label="Pending only"
-						checked={showPendingOnly}
-						onChange={(e) => setShowPendingOnly(e.currentTarget.checked)}
-					/>
-					<Text size="xs" c="dimmed">
-						{visibleGrants.length}/{displayGrants.length} grants
-					</Text>
-				</Group>
+								{explain.error && (
+									<Text size="xs" c="red">
+										{explain.error}
+									</Text>
+								)}
 
-				<BulkActions
-					selectedCount={selectedIds.size}
-					onBulkAllow={handleBulkAllow}
-					onBulkDeny={handleBulkDeny}
-					onBulkRevoke={handleBulkRevoke}
-					onClear={() => setSelectedIds(new Set())}
-				/>
-
-				<ScrollArea style={{ flex: 1, minHeight: 0 }} type="auto" offsetScrollbars>
-					<GrantsTableWithPending
-						grants={visibleGrants}
-						selectedIds={selectedIds}
-						onSelectChange={setSelectedIds}
-						onToggleEffect={handleToggleEffect}
-						onRevoke={handleRevoke}
-					/>
-				</ScrollArea>
+									{explain.result && (
+										<Paper withBorder radius="md" p="xs" style={{ background: 'var(--mantine-color-gray-light)' }}>
+											<Group gap="xs" wrap="wrap">
+												<Badge size="sm" variant="filled" color={explain.result.decision === 'allow' ? 'teal' : 'red'}>
+													{explain.result.decision.toUpperCase()}
+												</Badge>
+												<Badge size="sm" variant="light" color="gray">
+													layer={explain.result.layer}
+												</Badge>
+												{'roleId' in explain.result && (
+													<Badge size="sm" variant="light" color="gray">
+														roleId={explain.result.roleId}
+													</Badge>
+												)}
+												{'match' in explain.result && (
+													<Badge size="sm" variant="light" color="gray">
+														match={explain.result.match.kind === 'star' ? `star@${explain.result.match.depth}` : explain.result.match.kind}
+													</Badge>
+												)}
+												{'reason' in explain.result && (
+													<Badge size="sm" variant="light" color="gray">
+														reason={explain.result.reason}
+													</Badge>
+												)}
+											</Group>
+										<Stack gap={4} mt="xs">
+											<Group gap="xs" wrap="nowrap">
+												<Text size="xs" c="dimmed" w={42}>
+													Node
+												</Text>
+												<Code style={{ flex: 1 }}>{explain.result.node}</Code>
+											</Group>
+											{'rule' in explain.result && (
+												<Group gap="xs" wrap="nowrap">
+													<Text size="xs" c="dimmed" w={42}>
+														Rule
+													</Text>
+													<Code style={{ flex: 1 }}>{explain.result.rule}</Code>
+												</Group>
+											)}
+										</Stack>
+									</Paper>
+								)}
+							</Stack>
+						</Paper>
+					</Tabs.Panel>
+				</Tabs>
 			</Stack>
 		</Panel>
 	)

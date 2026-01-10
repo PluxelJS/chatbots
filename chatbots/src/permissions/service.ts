@@ -6,7 +6,7 @@ import { PermissionRegistry, type PermissionEffect, type PermissionMeta } from '
 import { Resolver } from './resolver'
 import { RoleTree } from './role_tree'
 import { UserOverridesCache } from './user_overrides_cache'
-import { AuthEngine, type AuthUser } from './auth_engine'
+import { AuthEngine, type AuthUser, type AuthorizationExplanation } from './auth_engine'
 import type { GrantRow, RoleRow } from './db/schemas'
 import type { NodeRef } from './resolver'
 import type { GrantsStoreApi } from './store'
@@ -275,6 +275,19 @@ private async ensureDefaultRole(): Promise<void> {
 			if (node.ver !== nowVer) return Decision.Deny
 		}
 		return await this.engine.authorize(user, node as any)
+	}
+
+	/** Debug/UI: explain which layer/rule wins. Not intended for hot-path checks. */
+	async explainUser(userId: number, node: string | NodeRef): Promise<AuthorizationExplanation> {
+		await this.ensureCatalogApplied()
+		const user = await this.getAuthUser(userId)
+		if (typeof node !== 'string') {
+			const nowVer = this.registry.getNamespaceEpoch(node.nsIndex)
+			if (node.ver !== nowVer) {
+				return { decision: Decision.Deny, layer: 'unresolved', node: '<NodeRef>', reason: 'stale_ref' }
+			}
+		}
+		return await this.engine.authorizeWithTrace(user, node as any)
 	}
 
 	/**

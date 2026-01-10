@@ -13,6 +13,37 @@ export type PermissionCatalogNamespace = {
 	permissions: PermissionCatalogItem[]
 }
 
+export type PermissionExplainDecision = PermissionEffect
+
+export type PermissionExplainMatchDto =
+	| { kind: 'none' }
+	| { kind: 'exact'; effect: PermissionExplainDecision }
+	| { kind: 'star'; depth: number; effect: PermissionExplainDecision }
+
+export type PermissionExplainDto =
+	| {
+			decision: 'deny'
+			layer: 'unresolved'
+			node: string
+			reason: 'invalid_or_undeclared' | 'namespace_inactive' | 'stale_ref'
+	  }
+	| { decision: 'deny'; layer: 'default'; node: string; reason: 'no_match' }
+	| {
+			decision: PermissionExplainDecision
+			layer: 'user' | 'declaration'
+			node: string
+			rule: string
+			match: PermissionExplainMatchDto
+	  }
+	| {
+			decision: PermissionExplainDecision
+			layer: 'role'
+			roleId: number
+			node: string
+			rule: string
+			match: PermissionExplainMatchDto
+	  }
+
 export type PermissionRoleDto = {
 	roleId: number
 	name: string | null

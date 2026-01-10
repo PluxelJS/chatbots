@@ -98,8 +98,23 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 			expect(await perms.permission.canUser(2, 'PermCallerA.cmd.reload')).toBe(true)
 			expect(await perms.permission.canUser(2, 'PermCallerA.cmd.shutdown')).toBe(false)
 
+			const deniedByRole = await perms.permission.explainUser(2, 'PermCallerA.cmd.shutdown')
+			expect(deniedByRole.layer).toBe('role')
+			if (deniedByRole.layer === 'role') {
+				expect(deniedByRole.roleId).toBe(roleAdmin)
+				expect(deniedByRole.decision).toBe(Decision.Deny)
+				expect(deniedByRole.rule).toBe('PermCallerA.cmd.shutdown')
+			}
+
 			await perms.permission.grant('user', 2, 'allow', 'PermCallerA.cmd.shutdown')
 			expect(await perms.permission.canUser(2, 'PermCallerA.cmd.shutdown')).toBe(true)
+
+			const allowedByUser = await perms.permission.explainUser(2, 'PermCallerA.cmd.shutdown')
+			expect(allowedByUser.layer).toBe('user')
+			if (allowedByUser.layer === 'user') {
+				expect(allowedByUser.decision).toBe(Decision.Allow)
+				expect(allowedByUser.rule).toBe('PermCallerA.cmd.shutdown')
+			}
 		})
 	})
 

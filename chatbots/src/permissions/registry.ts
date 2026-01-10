@@ -29,11 +29,9 @@ type NamespaceState = {
 	interner: SegmentInterner
 	builder: TrieBuilder
 	program: PermissionProgram
-	meta: Map<string, PermissionMeta | undefined>
-	defaultByKey: Map<string, PermissionEffect>
+	metaByKind: { exact: Map<string, PermissionMeta | undefined>; star: Map<string, PermissionMeta | undefined> }
+	defaultByKind: { exact: Map<string, PermissionEffect>; star: Map<string, PermissionEffect> }
 }
-
-const metaKey = (kind: PermissionKind, local: string) => `${kind}:${local}`
 
 export class PermissionRegistry {
 	private readonly byKey = new Map<string, NamespaceState>()
@@ -66,16 +64,22 @@ export class PermissionRegistry {
 		const ns = this.byKey.get(nsKey)
 		if (!ns || !ns.active) return []
 		const out: Array<DeclaredPermission & { node: string }> = []
-		for (const [key, def] of ns.defaultByKey) {
-			const [kind, local] = key.split(':', 2) as [PermissionKind, string]
+		for (const [local, def] of ns.defaultByKind.exact) {
 			out.push({
-				kind,
+				kind: 'exact',
 				local,
 				default: def,
-				meta: ns.meta.get(key),
-				node: kind === 'star'
-					? `${nsKey}.${local ? `${local}.*` : '*'}`
-					: `${nsKey}.${local}`,
+				meta: ns.metaByKind.exact.get(local),
+				node: `${nsKey}.${local}`,
+			})
+		}
+		for (const [local, def] of ns.defaultByKind.star) {
+			out.push({
+				kind: 'star',
+				local,
+				default: def,
+				meta: ns.metaByKind.star.get(local),
+				node: `${nsKey}.${local ? `${local}.*` : '*'}`
 			})
 		}
 		out.sort((a, b) => (a.node < b.node ? -1 : a.node > b.node ? 1 : 0))
@@ -94,8 +98,10 @@ export class PermissionRegistry {
 		ns.interner = new SegmentInterner()
 		ns.builder = new TrieBuilder()
 		ns.program = PermissionProgram.empty()
-		ns.meta.clear()
-		ns.defaultByKey.clear()
+		ns.metaByKind.exact.clear()
+		ns.metaByKind.star.clear()
+		ns.defaultByKind.exact.clear()
+		ns.defaultByKind.star.clear()
 	}
 
 	ensureNamespace(nsKey: string): NamespaceState {
@@ -110,8 +116,8 @@ export class PermissionRegistry {
 				interner: new SegmentInterner(),
 				builder: new TrieBuilder(),
 				program: PermissionProgram.empty(),
-				meta: new Map(),
-				defaultByKey: new Map(),
+				metaByKind: { exact: new Map(), star: new Map() },
+				defaultByKind: { exact: new Map(), star: new Map() },
 			}
 			this.byKey.set(nsKey, ns)
 			this.byIndex[index] = ns
@@ -124,8 +130,10 @@ export class PermissionRegistry {
 			ns.interner = new SegmentInterner()
 			ns.builder = new TrieBuilder()
 			ns.program = PermissionProgram.empty()
-			ns.meta.clear()
-			ns.defaultByKey.clear()
+			ns.metaByKind.exact.clear()
+			ns.metaByKind.star.clear()
+			ns.defaultByKind.exact.clear()
+			ns.defaultByKind.star.clear()
 		}
 		return ns
 	}
@@ -136,9 +144,8 @@ export class PermissionRegistry {
 		const path = ns.interner.compileLocal(local)
 		ns.builder.setExact(def.default === 'allow' ? Decision.Allow : Decision.Deny, path)
 		ns.program = ns.builder.freeze()
-		const key = metaKey('exact', local)
-		ns.meta.set(key, stripDefault(def))
-		ns.defaultByKey.set(key, def.default)
+		ns.metaByKind.exact.set(local, stripDefault(def))
+		ns.defaultByKind.exact.set(local, def.default)
 	}
 
 	declareStar(
@@ -151,9 +158,8 @@ export class PermissionRegistry {
 		const path = ns.interner.compileLocal(localPrefix)
 		ns.builder.setStar(def.default === 'allow' ? Decision.Allow : Decision.Deny, path)
 		ns.program = ns.builder.freeze()
-		const key = metaKey('star', localPrefix)
-		ns.meta.set(key, stripDefault(def))
-		ns.defaultByKey.set(key, def.default)
+		ns.metaByKind.star.set(localPrefix, stripDefault(def))
+		ns.defaultByKind.star.set(localPrefix, def.default)
 	}
 }
 

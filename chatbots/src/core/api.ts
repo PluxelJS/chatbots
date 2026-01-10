@@ -2,6 +2,7 @@ import type {} from '@pluxel/hmr/services'
 
 import type {
 	PermissionCatalogNamespace,
+	PermissionExplainDto,
 	PermissionGrantDto,
 	PermissionRoleDto,
 } from './permissions-types'
@@ -31,6 +32,7 @@ export { ChatbotsRpc } from './rpc/chatbots-rpc'
 
 export type {
 	PermissionCatalogNamespace,
+	PermissionExplainDto,
 	PermissionGrantDto,
 	PermissionRoleDto,
 	SandboxCommand,

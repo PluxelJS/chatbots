@@ -1,7 +1,7 @@
 import { rpcErrorMessage } from '@pluxel/hmr/web'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { useChatbotsRpc, type PermissionCatalogNamespace, type PermissionEffect, type PermissionGrantDto, type PermissionRoleDto, type UnifiedUserDto } from '../../api'
+import { useChatbotsRpc, type PermissionCatalogNamespace, type PermissionEffect, type PermissionExplainDto, type PermissionGrantDto, type PermissionRoleDto, type UnifiedUserDto } from '../../api'
 
 export type PermissionInfo = {
 	kind: 'exact' | 'star'
@@ -113,13 +113,13 @@ export function useRoles() {
 		void refresh()
 	}, [refresh])
 
-	const options = useMemo(
-		() => roles.map((role) => ({
-			value: String(role.roleId),
-			label: role.name ? `${role.name} · r${role.rank} (#${role.roleId})` : `Role #${role.roleId} · r${role.rank}`,
-		})),
-		[roles],
-	)
+		const options = useMemo(
+			() => roles.map((role) => ({
+				value: String(role.roleId),
+				label: role.name ? `${role.name} · r${role.rank} · #${role.roleId}` : `#${role.roleId} · r${role.rank}`,
+			})),
+			[roles],
+		)
 
 	const createRole = useCallback(async (parentRoleId: number | null, rank: number, name?: string | null) => {
 		const id = await rpc.createRole(parentRoleId, rank, name)
@@ -182,9 +182,7 @@ export function useRoleGrants(roleId: number | null) {
 	const grantMany = useCallback(
 		async (nodes: string[], effect: PermissionEffect) => {
 			if (roleId === null || !nodes.length) return
-			for (const node of nodes) {
-				await rpc.grant('role', roleId, effect, node)
-			}
+			await rpc.grantMany('role', roleId, effect, nodes)
 			await refresh()
 		},
 		[roleId, refresh, rpc],
@@ -202,9 +200,7 @@ export function useRoleGrants(roleId: number | null) {
 	const revokeMany = useCallback(
 		async (nodes: string[]) => {
 			if (roleId === null || !nodes.length) return
-			for (const node of nodes) {
-				await rpc.revoke('role', roleId, node)
-			}
+			await rpc.revokeMany('role', roleId, nodes)
 			await refresh()
 		},
 		[roleId, refresh, rpc],
@@ -266,6 +262,12 @@ export function useUserPermissions(userId: number | null) {
 		[userId, refresh, rpc],
 	)
 
+	const assignRoleMany = useCallback(async (roleIds: number[]) => {
+		if (userId === null || !roleIds.length) return
+		await rpc.assignRolesToUser(userId, roleIds)
+		await refresh()
+	}, [userId, refresh, rpc])
+
 	const unassignRole = useCallback(
 		async (roleId: number) => {
 			if (userId === null) return
@@ -274,6 +276,12 @@ export function useUserPermissions(userId: number | null) {
 		},
 		[userId, refresh, rpc],
 	)
+
+	const unassignRoleMany = useCallback(async (roleIds: number[]) => {
+		if (userId === null || !roleIds.length) return
+		await rpc.unassignRolesFromUser(userId, roleIds)
+		await refresh()
+	}, [userId, refresh, rpc])
 
 	const grant = useCallback(
 		async (node: string, effect: PermissionEffect) => {
@@ -287,9 +295,7 @@ export function useUserPermissions(userId: number | null) {
 	const grantMany = useCallback(
 		async (nodes: string[], effect: PermissionEffect) => {
 			if (userId === null || !nodes.length) return
-			for (const node of nodes) {
-				await rpc.grant('user', userId, effect, node)
-			}
+			await rpc.grantMany('user', userId, effect, nodes)
 			await refresh()
 		},
 		[userId, refresh, rpc],
@@ -307,9 +313,7 @@ export function useUserPermissions(userId: number | null) {
 	const revokeMany = useCallback(
 		async (nodes: string[]) => {
 			if (userId === null || !nodes.length) return
-			for (const node of nodes) {
-				await rpc.revoke('user', userId, node)
-			}
+			await rpc.revokeMany('user', userId, nodes)
 			await refresh()
 		},
 		[userId, refresh, rpc],
@@ -333,13 +337,50 @@ export function useUserPermissions(userId: number | null) {
 		error,
 		refresh,
 		assignRole,
+		assignRoleMany,
 		unassignRole,
+		unassignRoleMany,
 		grant,
 		grantMany,
 		revoke,
 		revokeMany,
 		toggleEffect,
 	}
+}
+
+export function useUserPermissionExplain(userId: number | null) {
+	const rpc = useChatbotsRpc()
+	const [result, setResult] = useState<PermissionExplainDto | null>(null)
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	const clear = useCallback(() => {
+		setResult(null)
+		setError(null)
+	}, [])
+
+	useEffect(() => {
+		clear()
+	}, [clear, userId])
+
+	const explain = useCallback(
+		async (node: string) => {
+			if (userId === null) return
+			setLoading(true)
+			try {
+				const data = await rpc.explainUser(userId, node)
+				setResult(data)
+				setError(null)
+			} catch (err) {
+				setError(rpcErrorMessage(err, 'Failed to explain permission'))
+			} finally {
+				setLoading(false)
+			}
+		},
+		[rpc, userId],
+	)
+
+	return { result, loading, error, explain, clear }
 }
 
 export function useUserSearch() {
@@ -380,4 +421,38 @@ export function useUserSearch() {
 	}, [])
 
 	return { results, loading, error, search, getById, clear }
+}
+
+export function useBulkUserRoleAssignments(userIds: number[]) {
+	const rpc = useChatbotsRpc()
+	const [loading, setLoading] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	const assignRole = useCallback(async (roleId: number) => {
+		if (!userIds.length) return
+		setLoading(true)
+		try {
+			await rpc.assignRoleToUsers(userIds, roleId)
+			setError(null)
+		} catch (err) {
+			setError(rpcErrorMessage(err, 'Failed to assign role to users'))
+		} finally {
+			setLoading(false)
+		}
+	}, [rpc, userIds])
+
+	const unassignRole = useCallback(async (roleId: number) => {
+		if (!userIds.length) return
+		setLoading(true)
+		try {
+			await rpc.unassignRoleFromUsers(userIds, roleId)
+			setError(null)
+		} catch (err) {
+			setError(rpcErrorMessage(err, 'Failed to unassign role from users'))
+		} finally {
+			setLoading(false)
+		}
+	}, [rpc, userIds])
+
+	return { loading, error, assignRole, unassignRole }
 }

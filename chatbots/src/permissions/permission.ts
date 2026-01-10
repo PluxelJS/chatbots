@@ -3,6 +3,7 @@ import type { NodeRef } from './resolver'
 import type { PermissionService, SubjectType } from './service'
 import type { PermissionEffect, PermissionMeta } from './registry'
 import { permResolved, type PermRef } from './ref'
+import type { AuthorizationExplanation } from './auth_engine'
 
 export class ChatbotsPermissionApi {
 	constructor(private readonly perms: PermissionService) {}
@@ -61,6 +62,10 @@ export class ChatbotsPermissionApi {
 
 	canUser(userId: number, node: string | NodeRef): Promise<boolean> {
 		return this.perms.canUser(userId, node)
+	}
+
+	explainUser(userId: number, node: string | NodeRef): Promise<AuthorizationExplanation> {
+		return this.perms.explainUser(userId, node)
 	}
 }
 

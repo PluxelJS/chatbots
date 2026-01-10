@@ -6,7 +6,7 @@ import type {
 	PermissionSubjectType,
 	RolePatch,
 } from '../api'
-import type { PermissionCatalogNamespace, PermissionGrantDto, PermissionRoleDto } from '../permissions-types'
+import type { PermissionCatalogNamespace, PermissionExplainDto, PermissionExplainMatchDto, PermissionGrantDto, PermissionRoleDto } from '../permissions-types'
 import type {
 	SandboxCommandsSnapshot,
 	SandboxSendInput,
@@ -17,6 +17,7 @@ import type { PermissionService } from '../../permissions/service'
 import type { UnifiedUserDto } from '../user-types'
 import type { UserDirectory } from '../users/directory'
 import type { GrantRow, RoleRow } from '../../permissions/db/schemas'
+import { Decision } from '../../permissions/decision'
 
 type SandboxApi = {
 	snapshot: () => SandboxSnapshot
@@ -97,6 +98,18 @@ export class ChatbotsRpc extends RpcTarget {
 		await this.permissions.unassignRoleFromUser(userId, roleId)
 	}
 
+	async assignRoleToUsers(userIds: number[], roleId: number): Promise<void> {
+		for (const userId of userIds) {
+			await this.permissions.assignRoleToUser(userId, roleId)
+		}
+	}
+
+	async unassignRoleFromUsers(userIds: number[], roleId: number): Promise<void> {
+		for (const userId of userIds) {
+			await this.permissions.unassignRoleFromUser(userId, roleId)
+		}
+	}
+
 	async grant(
 		subjectType: PermissionSubjectType,
 		subjectId: number,
@@ -108,6 +121,69 @@ export class ChatbotsRpc extends RpcTarget {
 
 	async revoke(subjectType: PermissionSubjectType, subjectId: number, node: string): Promise<void> {
 		await this.permissions.revoke(subjectType, subjectId, node)
+	}
+
+	async grantMany(
+		subjectType: PermissionSubjectType,
+		subjectId: number,
+		effect: PermissionEffect,
+		nodes: string[],
+	): Promise<void> {
+		for (const node of nodes) {
+			await this.permissions.grant(subjectType, subjectId, effect, node)
+		}
+	}
+
+	async revokeMany(subjectType: PermissionSubjectType, subjectId: number, nodes: string[]): Promise<void> {
+		for (const node of nodes) {
+			await this.permissions.revoke(subjectType, subjectId, node)
+		}
+	}
+
+	async assignRolesToUser(userId: number, roleIds: number[]): Promise<void> {
+		for (const roleId of roleIds) {
+			await this.permissions.assignRoleToUser(userId, roleId)
+		}
+	}
+
+	async unassignRolesFromUser(userId: number, roleIds: number[]): Promise<void> {
+		for (const roleId of roleIds) {
+			await this.permissions.unassignRoleFromUser(userId, roleId)
+		}
+	}
+
+	async explainUser(userId: number, node: string): Promise<PermissionExplainDto> {
+		const exp = await this.permissions.explainUser(userId, node)
+		const decisionToEffect = (d: Decision.Allow | Decision.Deny): PermissionEffect => (d === Decision.Allow ? 'allow' : 'deny')
+		const matchToDto = (match: any): PermissionExplainMatchDto => {
+			if (!match || match.kind === 'none') return { kind: 'none' }
+			if (match.kind === 'exact') return { kind: 'exact', effect: decisionToEffect(match.effect) }
+			return { kind: 'star', depth: match.depth, effect: decisionToEffect(match.effect) }
+		}
+
+		if (exp.layer === 'unresolved') {
+			return { decision: 'deny', layer: 'unresolved', node: exp.node, reason: exp.reason }
+		}
+		if (exp.layer === 'default') {
+			return { decision: 'deny', layer: 'default', node: exp.node, reason: exp.reason }
+		}
+		if (exp.layer === 'role') {
+			return {
+				decision: decisionToEffect(exp.decision),
+				layer: 'role',
+				roleId: exp.roleId,
+				node: exp.node,
+				rule: exp.rule,
+				match: matchToDto(exp.match),
+			}
+		}
+		return {
+			decision: decisionToEffect(exp.decision),
+			layer: exp.layer,
+			node: exp.node,
+			rule: exp.rule,
+			match: matchToDto(exp.match),
+		}
 	}
 
 	async getUser(userId: number): Promise<UnifiedUserDto | null> {

@@ -1,5 +1,6 @@
 export class SegmentInterner {
 	private readonly ids = new Map<string, number>()
+	private readonly segmentsById: string[] = ['']
 	private nextId = 1
 
 	intern(segment: string): number {
@@ -8,7 +9,24 @@ export class SegmentInterner {
 		if (existing !== undefined) return existing
 		const id = this.nextId++
 		this.ids.set(s, id)
+		this.segmentsById[id] = s
 		return id
+	}
+
+	segmentById(id: number): string | null {
+		return this.segmentsById[id] ?? null
+	}
+
+	/** Convert a compiled path back to a local string (for debugging/UI; not used in hot path). */
+	formatLocal(path: Uint32Array, depth: number = path.length): string {
+		const n = Math.max(0, Math.min(depth, path.length))
+		if (n === 0) return ''
+		const segs = new Array<string>(n)
+		for (let i = 0; i < n; i++) {
+			const seg = this.segmentById(path[i]!)
+			segs[i] = seg ?? `#${path[i]!}`
+		}
+		return segs.join('.')
 	}
 
 	/**
@@ -38,4 +56,3 @@ export class SegmentInterner {
 		return out
 	}
 }
-

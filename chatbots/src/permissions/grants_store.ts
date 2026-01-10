@@ -144,12 +144,14 @@ export class GrantsStore implements GrantsStoreApi {
 			local: row.local,
 		}
 
-		const existing = (await em.findOne(this.entities.grant as any, where)) as GrantRow | null
-		if (existing) {
-			await em.nativeUpdate(this.entities.grant as any, { id: existing.id }, { effect: row.effect, updatedAt })
+		try {
+			await em.insert(this.entities.grant as any, { ...row, updatedAt })
 			return
+		} catch (err) {
+			const existing = (await em.findOne(this.entities.grant as any, where)) as GrantRow | null
+			if (!existing) throw err
+			await em.nativeUpdate(this.entities.grant as any, { id: existing.id }, { effect: row.effect, updatedAt })
 		}
-		await em.insert(this.entities.grant as any, { ...row, updatedAt })
 	}
 
 	async revokeGrant(row: {

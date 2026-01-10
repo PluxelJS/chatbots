@@ -38,12 +38,17 @@
 3) 同深度冲突在本实现中不会发生（同一节点同类规则写入会覆盖并清除相反标记；DB 也保证唯一行），等价于“Deny wins”
 4) 无匹配 => `Unset`
 
-最终授权层叠（first non-Unset wins）：
+最终授权层叠（**first-set-wins**；等价于“first non-Unset wins”）：
 
 1) 用户 overrides（user grants）
 2) 角色（role effective programs，按稳定顺序）
 3) 插件声明的默认（declaration program，仅已声明节点）
 4) 全局默认：Deny
+
+> 这是本系统的核心语义：一旦某一层对该节点给出 **Allow/Deny（非 Unset）**，就立刻返回，不再继续看后续层。
+>
+> 注意：“Deny wins”只发生在**单个 program 内部**（例如 exact deny > exact allow；同一深度 star 冲突时 deny 优先；以及实现层面保证写入覆盖会清掉相反 flag）。
+> 它不等价于“跨层 deny 永远优先”：用户 overrides 可以 Allow 覆盖角色 Deny，这是刻意设计（first-set-wins）。
 
 未知/未声明节点：默认 Deny（resolver 解析失败或 catalog 不存在直接 Deny）。
 
@@ -114,6 +119,7 @@ catalog 不持久化，插件必须运行时声明。
 - 单继承（tree）：`parentRoleId` nullable
 - `rank` 用于稳定优先级（高 rank 先判断；同 rank 以 roleId 升序）
 - 预计算 `effective[nsIndex] = PermissionProgram | null`
+- `effective` 的构建顺序是“从根到叶（祖先 -> 当前 role）”依次写入，因此**更接近用户的 role（子 role）的 grants 会覆盖祖先 grants**（覆盖语义由 `TrieBuilder` 保证）。
 - 当 role grants 或 role 结构更新：重建该 role 子树（角色 adjacency + 子树遍历）
 
 文件：`role_tree.ts`
@@ -185,3 +191,15 @@ chatbots.cmd.reg('reload').perm(RELOAD).action(...)
 - Root-star `<ns>.*` 的 `localPrefix=""`，其 `path` 必须是空 `Uint32Array`；`PermissionProgram.decide()` 必须先检查 root star flags 才能生效
 - 即使理论上不会出现 flag 同时存在，也保证 tie 语义为 Deny wins（Exact/Star 都是先 Deny 再 Allow）
 - exact 命中优先于任何 prefix.* 命中（不比较深度，先判 exact 再回退到 star）
+
+## 10. Trace / Explain（不影响热路径）
+
+为了便于 UI/调试解释“为什么允许/拒绝”，提供独立的 explain API：
+
+- `PermissionProgram.explain(path)`：返回该 program 内“哪个规则赢了”（exact/star/none + 深度/效果）
+- `AuthEngine.authorizeWithTrace(...)` / `PermissionService.explainUser(...)`：返回“哪一层赢了”（user/role/declaration/default）以及对应的规则 node（例如 `ns.command.*`）
+
+设计约束：
+
+- **不影响热路径**：正常授权仍走 `decide()` + `authorizeUserSync()`；explain 走单独的方法，不在热路径里插入 trace 分支。
+- explain 可能会分配字符串（用于拼 rule/node），属于 debug/UI 慢路径，允许更高常数开销。
