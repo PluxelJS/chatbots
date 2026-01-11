@@ -1,6 +1,7 @@
 export type {
 	PermissionCatalogNamespace,
 	PermissionEffect,
+	PermissionExplainDto,
 	PermissionGrantDto,
 	PermissionRoleDto,
 	PermissionSubjectType,
@@ -15,4 +16,3 @@ export type {
 	SandboxSnapshot,
 	UnifiedUserDto,
 } from '../../core/api'
-

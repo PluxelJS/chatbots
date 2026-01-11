@@ -53,6 +53,33 @@ export interface Command<P extends string, F extends Flags, C = unknown, R = unk
 	readonly aliases: readonly string[]
 }
 
+export type CommandMatch<C = unknown> = {
+	cmd: Command<any, any, C, any>
+	consumed: number
+	tokens: string[]
+}
+
+export type CommandDispatchResult<C = unknown, R = unknown> =
+	| { matched: false; tokens: string[] }
+	| { matched: true; cmd: Command<any, any, C, any>; tokens: string[]; result: R }
+
+export interface CommandBus<C = unknown> {
+	register: <CMD extends Command<any, any, C, any>>(cmd: CMD) => CommandBus<C>
+	unregister: (cmd: Command<any, any, C, any>) => void
+	list: () => Command<any, any, C, any>[]
+	/** Returns the longest match (if any) without running the command. */
+	match: (input: string) => CommandMatch<C> | undefined
+	/**
+	 * Runs the longest match; returns `undefined` when no command matches.
+	 *
+	 * Note: command handlers may also return `undefined`, so use `dispatchDetailed` if you need to distinguish
+	 * "unknown command" vs "known command returning void".
+	 */
+	dispatch: (input: string, ctx: C) => Promise<any>
+	/** Like `dispatch`, but returns `{ matched: false }` for unknown commands even when the handler returns `undefined`. */
+	dispatchDetailed: (input: string, ctx: C) => Promise<CommandDispatchResult<C, any>>
+}
+
 /* ──────────────────────────────────────────────────────────────
  * 分词器：支持简单引号/转义
  * ---------------------------------------------------------------- */
@@ -106,6 +133,17 @@ interface CompiledPattern {
 	optional: string[]
 	restKey?: string
 	usage: string
+}
+
+/** Extract the command name tokens from a pattern (before any `<req>` / `[opt]` / `[...rest]`). */
+export function getCommandNameTokens(pattern: string): string[] {
+	const parts = pattern.trim().split(/\s+/).filter(Boolean)
+	const nameTokens: string[] = []
+	for (const p of parts) {
+		if (p.startsWith('<') || p.startsWith('[')) break
+		nameTokens.push(p)
+	}
+	return nameTokens
 }
 
 function compilePattern(pattern: string): CompiledPattern {
@@ -223,11 +261,10 @@ export class CommandError extends Error {
 	}
 }
 
-export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInsensitive?: boolean }) {
+export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInsensitive?: boolean }): CommandBus<C> {
 	type AnyCmd = Command<any, any, C, any>
 	const norm = (s: string) => (opts?.caseInsensitive ? s.toLowerCase() : s)
 
-	const byHead = new Map<string, AnyCmd>()
 	const all = new Set<AnyCmd>()
 
 	type Node = { cmd?: AnyCmd; next: Map<string, Node> }
@@ -276,17 +313,6 @@ export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInse
 		}
 	}
 
-	const rebuildByHead = () => {
-		byHead.clear()
-		for (const cmd of all) {
-			if (cmd.nameTokens.length === 1) byHead.set(norm(cmd.nameTokens[0]), cmd)
-			for (const a of cmd.aliases) {
-				const toks = a.split(/\s+/)
-				if (toks.length === 1) byHead.set(norm(toks[0]), cmd)
-			}
-		}
-	}
-
 	const assertNoConflict = (tokens: readonly string[], cmd: AnyCmd) => {
 		const node = getNode(tokens)
 		if (node?.cmd && node.cmd !== cmd) {
@@ -296,7 +322,7 @@ export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInse
 		}
 	}
 
-	const find = (tokens: string[]) => {
+	const findLongestMatch = (tokens: string[]) => {
 		let cur = root
 		let last: AnyCmd | undefined
 		let consumed = 0
@@ -311,19 +337,36 @@ export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInse
 		return last ? { cmd: last, consumed } : undefined
 	}
 
+	const stripPrefixInPlace = (tokens: string[]) => {
+		if (!opts?.prefix) return
+		const p = opts.prefix
+		if (tokens[0]?.startsWith(p)) {
+			tokens[0] = tokens[0].slice(p.length)
+			if (!tokens[0]) tokens.shift()
+		} else {
+			throw new CommandError(`Missing prefix "${p}"`)
+		}
+	}
+
+	const prepareTokens = (input: string) => {
+		const tokens = parseArgsStringToArgv(input)
+		if (!tokens.length) throw new CommandError('Empty input')
+		stripPrefixInPlace(tokens)
+		if (!tokens.length) throw new CommandError('Missing command name')
+		return tokens
+	}
+
 	return {
 		register<CMD extends AnyCmd>(cmd: CMD) {
 			all.add(cmd)
 			if (cmd.nameTokens.length === 0) throw new Error(`Empty command name in pattern "${cmd.pattern}"`)
 			assertNoConflict(cmd.nameTokens, cmd)
-			if (cmd.nameTokens.length === 1) byHead.set(norm(cmd.nameTokens[0]), cmd)
 			put(cmd.nameTokens, cmd)
 			for (const a of cmd.aliases) {
 				const toks = a.split(/\s+/)
 				if (toks.join(' ') !== cmd.nameTokens.join(' ')) {
 					assertNoConflict(toks, cmd)
 				}
-				if (toks.length === 1) byHead.set(norm(toks[0]), cmd)
 				put(toks, cmd)
 			}
 			return this
@@ -335,37 +378,33 @@ export function createCommandBus<C = unknown>(opts?: { prefix?: string; caseInse
 			for (const a of cmd.aliases) {
 				remove(a.split(/\s+/), cmd)
 			}
-			rebuildByHead()
 		},
 
 		list(): AnyCmd[] {
 			return Array.from(all)
 		},
 
+		match(input: string): CommandMatch<C> | undefined {
+			const tokens = prepareTokens(input)
+			const found = findLongestMatch(tokens)
+			return found ? { ...found, tokens } : undefined
+		},
+
 		async dispatch(input: string, ctx: C): Promise<any> {
-			const tokens = parseArgsStringToArgv(input)
-			if (!tokens.length) throw new CommandError('Empty input')
-
-			if (opts?.prefix) {
-				const p = opts.prefix
-				if (tokens[0]?.startsWith(p)) {
-					tokens[0] = tokens[0].slice(p.length)
-					if (!tokens[0]) tokens.shift()
-				} else {
-					throw new CommandError(`Missing prefix "${p}"`)
-				}
-			}
-			if (!tokens.length) throw new CommandError('Missing command name')
-
-			const fast = byHead.get(norm(tokens[0]))
-			if (fast && fast.nameTokens.length === 1) {
-				return fast.runTokens(tokens.slice(1), ctx)
-			}
-
-			const found = find(tokens)
+			const tokens = prepareTokens(input)
+			const found = findLongestMatch(tokens)
 			if (!found) return undefined
 			const rest = tokens.slice(found.consumed)
 			return found.cmd.runTokens(rest, ctx)
+		},
+
+		async dispatchDetailed(input: string, ctx: C): Promise<CommandDispatchResult<C, any>> {
+			const tokens = prepareTokens(input)
+			const found = findLongestMatch(tokens)
+			if (!found) return { matched: false, tokens }
+			const rest = tokens.slice(found.consumed)
+			const result = await found.cmd.runTokens(rest, ctx)
+			return { matched: true, cmd: found.cmd, tokens, result }
 		},
 	}
 }

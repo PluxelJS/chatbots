@@ -6,6 +6,7 @@ import {
 	CommandError,
 	getCommandMeta,
 	hasRichParts,
+	parseChatCommandText,
 	partsToText,
 } from '@pluxel/bot-layer'
 import type {
@@ -24,6 +25,7 @@ import { createPermissionCommandKit, type CommandKit as PermCommandKit } from '.
 import { createPermissionApi, type ChatbotsPermissionApi } from '../../permissions/permission'
 import type { ChatbotsCommandContext } from '../types'
 import { CommandRegistry } from './command-registry'
+import type { Rates } from 'pluxel-plugin-kv'
 
 export interface ChatbotsRuntimeOptions {
 	cmdPrefix: string
@@ -50,6 +52,7 @@ export class ChatbotsRuntime {
 		private readonly bot: BotLayer,
 		private readonly mikro: MikroOrm,
 		private readonly options: ChatbotsRuntimeOptions,
+		private readonly rates: Rates,
 		users: UserDirectory,
 		permissions: PermissionService,
 		disposeEntities: () => Promise<void>,
@@ -58,6 +61,8 @@ export class ChatbotsRuntime {
 		this.permissions = permissions
 		this.permission = createPermissionApi(this.permissions)
 		this.cmd = createPermissionCommandKit(this.registry.bus, this.permissions, {
+			scopeKey: this.ctx.pluginInfo?.id ?? 'chatbots',
+			rates: this.rates,
 			onRegister: (cmd) => this.registry.registerCommandCleanup(cmd, this.ctx),
 		})
 		this.disposeEntities = disposeEntities
@@ -68,13 +73,14 @@ export class ChatbotsRuntime {
 		bot: BotLayer,
 		mikro: MikroOrm,
 		options: ChatbotsRuntimeOptions,
+		rates: Rates,
 	): Promise<ChatbotsRuntime> {
 		const { dir, batch } = await UserDirectory.create(mikro, {
 			cacheMax: options.userCacheMax,
 			cacheTtlMs: options.userCacheTtlMs,
 		})
 		const permissions = await PermissionService.create(mikro)
-		return new ChatbotsRuntime(ctx, bot, mikro, options, dir, permissions, async () => {
+		return new ChatbotsRuntime(ctx, bot, mikro, options, rates, dir, permissions, async () => {
 			await permissions.dispose()
 			await batch.dispose()
 		})
@@ -88,22 +94,18 @@ export class ChatbotsRuntime {
 	}
 
 	async dispatchSandboxMessage(msg: AnyMessage): Promise<void> {
-		const text = this.buildCommandText(msg).trim()
-		if (!text) return
-
-		const prefix = this.getCmdPrefix()
-		if (!text.toLowerCase().startsWith(prefix.toLowerCase())) return
-
-		const body = text.slice(prefix.length).trim()
-		if (!body) return
-
-		await this.dispatchCommand(body, msg)
+		const text = this.buildCommandText(msg)
+		const parsed = parseChatCommandText(text, { prefix: this.getCmdPrefix(), stripAtSuffix: true })
+		if (!parsed?.input) return
+		await this.dispatchCommand(parsed.input, msg)
 	}
 
 	getCommandKit(caller?: Context): PermCommandKit<ChatbotsCommandContext> {
 		const ctx = caller ?? this.ctx
 		return this.registry.getOrCreateKit(ctx, (ownerCtx) =>
 			createPermissionCommandKit(this.registry.bus, this.permissions, {
+				scopeKey: ownerCtx.pluginInfo?.id ?? this.ctx.pluginInfo?.id ?? 'chatbots',
+				rates: this.rates,
 				onRegister: (cmd) => this.registry.registerCommandCleanup(cmd, ownerCtx),
 			}),
 		)
@@ -121,18 +123,13 @@ export class ChatbotsRuntime {
 
 	private registerCommandPipeline() {
 		const prefix = this.getCmdPrefix()
-		const prefixLower = prefix.toLowerCase()
 
 		const stop = this.bot.events.message.on((msg) => {
 			if (msg.user.isBot) return
-			const text = this.buildCommandText(msg).trim()
-			if (!text) return
-			if (!text.toLowerCase().startsWith(prefixLower)) return
-
-			const body = text.slice(prefix.length).trim()
-			if (!body) return
-
-			void this.dispatchCommand(body, msg as AnyMessage)
+			const text = this.buildCommandText(msg)
+			const parsed = parseChatCommandText(text, { prefix, stripAtSuffix: true })
+			if (!parsed?.input) return
+			void this.dispatchCommand(parsed.input, msg as AnyMessage)
 		})
 
 		this.ctx.scope.collectEffect(stop)
@@ -198,8 +195,10 @@ export class ChatbotsRuntime {
 		try {
 			const { user, identity } = await this.users.ensureUserForMessage(msg)
 			const ctx: ChatbotsCommandContext = { msg, user, identity }
-			const result = await this.registry.bus.dispatch(body, ctx)
-			if (result === undefined || this.disposed) return
+			const dispatched = await this.registry.bus.dispatchDetailed(body, ctx)
+			if (!dispatched.matched || this.disposed) return
+			const result = dispatched.result
+			if (result === undefined) return
 			await this.safeReply(msg, result)
 		} catch (e) {
 			if (e instanceof CommandError) {

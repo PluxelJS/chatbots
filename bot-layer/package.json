@@ -15,9 +15,13 @@
     "build": "pluxel build",
     "typecheck:parts": "tsc -p parts/tsconfig.json",
     "test:parts": "bun test parts",
-    "test": "pnpm test:parts"
+    "test:src": "bun test src",
+    "test": "pnpm test:parts && pnpm test:src"
   },
   "dependencies": {
+    "pluxel-plugin-kook": "workspace:^",
+    "pluxel-plugin-milky": "workspace:^",
+    "pluxel-plugin-telegram": "workspace:^",
     "type-flag": "^4.0.2"
   },
   "exports": {
@@ -30,10 +34,6 @@
       "default": "./dist/parts/index.mjs"
     },
     "./parts/rolldown/parts-transform": {
-      "@pluxel/hmr": "./parts/rolldown/parts-transform.ts",
-      "default": "./dist/parts/rolldown/parts-transform.mjs"
-    },
-    "./parts/vite/parts-transform": {
       "@pluxel/hmr": "./parts/rolldown/parts-transform.ts",
       "default": "./dist/parts/rolldown/parts-transform.mjs"
     },
@@ -52,7 +52,6 @@
       ".": "./dist/index.mjs",
       "./parts": "./dist/parts/index.mjs",
       "./parts/rolldown/parts-transform": "./dist/parts/rolldown/parts-transform.mjs",
-      "./parts/vite/parts-transform": "./dist/parts/rolldown/parts-transform.mjs",
       "./parts/runtime": "./dist/parts/runtime.mjs",
       "./web": "./dist/web.mjs",
       "./package.json": "./package.json"

@@ -1,6 +1,5 @@
 import type { Context } from '@pluxel/hmr'
 import { v } from '@pluxel/hmr/config'
-import type { Events } from '@pluxel/core/services'
 import type { Platform } from '../types'
 import type { AnyBridgeDefinition, BridgeDefinition, BridgeManager, DispatchFn } from './types'
 import { kookBridge } from './kook'
@@ -33,7 +32,7 @@ export const getBridgeDefinition = <P extends Platform>(platform: P) =>
 	DEFINITIONS.get(platform) as unknown as BridgeDefinition<P>
 
 /** 运行时注册桥接定义（第三方平台扩展用） */
-export const registerBridgeDefinition = <P extends Platform, E extends keyof Events, Instance>(
+export const registerBridgeDefinition = <P extends Platform, E extends string, Instance>(
 	def: BridgeDefinition<P, E, Instance>,
 ): (() => void) => {
 	DEFINITIONS.set(def.platform, def as unknown as AnyBridgeDefinition)

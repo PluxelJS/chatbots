@@ -2,6 +2,7 @@ import { BasePlugin, Config, Plugin, getPluginInfo } from '@pluxel/hmr'
 import { MikroOrm } from 'pluxel-plugin-mikro-orm'
 
 import { BotLayer } from '@pluxel/bot-layer'
+import { Rates } from 'pluxel-plugin-kv'
 import { ChatbotsConfigSchema, type ChatbotsConfig } from './config'
 import { ChatbotsRuntime } from './runtime'
 import { createPermissionFacade, type ChatbotsPermissionFacade } from '../permissions/permission'
@@ -19,6 +20,7 @@ export class Chatbots extends BasePlugin {
 	constructor(
 		private readonly botLayer: BotLayer,
 		private readonly mikro: MikroOrm,
+		private readonly rates: Rates,
 	) {
 		super()
 	}
@@ -32,7 +34,7 @@ export class Chatbots extends BasePlugin {
 			userCacheMax: this.config.userCacheMax,
 			linkTokenTtlSeconds: this.config.linkTokenTtlSeconds,
 			registerUserCommands: this.config.registerUserCommands,
-		})
+		}, this.rates)
 		this.runtime.bootstrap()
 		this.sandbox = new ChatbotsSandbox(this.runtime, { cmdPrefix: this.config.cmdPrefix })
 		this.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })

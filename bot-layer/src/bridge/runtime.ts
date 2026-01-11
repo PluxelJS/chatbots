@@ -40,7 +40,7 @@ const startBridge = <P extends AnyBridgeDefinition>(
 	}
 
 	// 监听平台 ready 事件
-	const unlisten = ctx.events.on(def.event, attach as any)
+	const unlisten = (ctx.events as any).on(def.event, attach as any)
 
 	return () => {
 		if (disposed) return
