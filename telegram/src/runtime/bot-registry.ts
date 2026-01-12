@@ -5,10 +5,7 @@ import type { Bot } from '../bot'
 
 export type BotState = ReturnType<Bot['getStatusSnapshot']>
 
-type SecretFields = {
-	tokenCiphertext: string
-	tokenIv: string
-	tokenTag: string
+type TokenFields = {
 	tokenPreview: string
 }
 
@@ -43,7 +40,7 @@ type AuditFields = {
 	secure: boolean
 }
 
-export type TelegramBotRecord = SecretFields &
+export type TelegramBotRecord = TokenFields &
 	IdentityFields &
 	WebhookFields &
 	PollingFields &
@@ -52,7 +49,7 @@ export type TelegramBotRecord = SecretFields &
 		id: string
 	}
 
-export type TelegramBotPublic = Omit<TelegramBotRecord, 'tokenCiphertext' | 'tokenIv' | 'tokenTag'>
+export type TelegramBotPublic = TelegramBotRecord
 
 export type CreateBotInput = {
 	token: string
@@ -62,64 +59,29 @@ export type CreateBotInput = {
 }
 
 export type UpdateBotInput = Partial<Pick<CreateBotInput, 'mode' | 'webhookUrl' | 'webhookSecretToken'>>
-
-class TokenBox {
-	private readonly key: Buffer
-
-	constructor() {
-		const seed =
-			process.env.TELEGRAM_BOT_SECRET_KEY ??
-			process.env.BOT_ORCHESTRATOR_KEY ??
-			'dev-telegram-bot-secret'
-		this.key = crypto.createHash('sha256').update(seed).digest()
-	}
-
-	encrypt(token: string) {
-		const iv = crypto.randomBytes(12)
-		const cipher = crypto.createCipheriv('aes-256-gcm', this.key, iv)
-		const encrypted = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()])
-		const tag = cipher.getAuthTag()
-		return {
-			tokenCiphertext: encrypted.toString('base64'),
-			tokenIv: iv.toString('base64'),
-			tokenTag: tag.toString('base64'),
-			tokenPreview: this.mask(token),
-		}
-	}
-
-	decrypt(record: Pick<TelegramBotRecord, 'tokenCiphertext' | 'tokenIv' | 'tokenTag'>) {
-		const iv = Buffer.from(record.tokenIv, 'base64')
-		const tag = Buffer.from(record.tokenTag, 'base64')
-		const decipher = crypto.createDecipheriv('aes-256-gcm', this.key, iv)
-		decipher.setAuthTag(tag)
-		const decrypted = Buffer.concat([
-			decipher.update(Buffer.from(record.tokenCiphertext, 'base64')),
-			decipher.final(),
-		])
-		return decrypted.toString('utf8')
-	}
-
-	private mask(token: string) {
-		if (token.length <= 8) return `${token.slice(0, 2)}***${token.slice(-2)}`
-		return `${token.slice(0, 4)}…${token.slice(-4)}`
-	}
-}
-
-const toPublic = (doc: TelegramBotRecord): TelegramBotPublic => {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const { tokenCiphertext, tokenIv, tokenTag, ...rest } = doc
-	return rest
+const maskToken = (token: string) => {
+	if (token.length <= 8) return `${token.slice(0, 2)}***${token.slice(-2)}`
+	return `${token.slice(0, 4)}…${token.slice(-4)}`
 }
 
 /**
- * 管理 Telegram Bot 的持久化、加密和游标观察。
+ * 管理 Telegram Bot 的持久化、Vault token 管理和游标观察。
  */
 export class TelegramBotRegistry {
-	private readonly tokenBox = new TokenBox()
+	private readonly vault: ReturnType<Context['vault']['open']>
 	private collection!: Collection<TelegramBotRecord>
 	private readyPromise: Promise<void> | null = null
 
-	constructor(private readonly ctx: Context, private readonly collectionName = 'telegram:bots') {}
+	constructor(
+		private readonly ctx: Context,
+		private readonly collectionName = 'telegram:bots',
+	) {
+		this.vault = ctx.vault.open()
+	}
+
+	private tokenKey(id: string) {
+		return `${this.collectionName}:${id}:token`
+	}
 
 	async init() {
 		this.collection = new Collection<TelegramBotRecord>({
@@ -134,13 +96,20 @@ export class TelegramBotRegistry {
 		return this.readyPromise ?? Promise.resolve()
 	}
 
+	async getToken(id: string) {
+		const token = await this.vault.getToken(this.tokenKey(id))
+		if (!token) throw new Error('Telegram bot token 缺失（vault 中未找到），请重新添加 bot')
+		return token
+	}
+
 	async create(input: CreateBotInput): Promise<TelegramBotPublic> {
 		const token = input.token.trim()
 		if (!token) throw new Error('token 不能为空')
 		const now = Date.now()
-		const encrypted = this.tokenBox.encrypt(token)
+		const id = crypto.randomUUID()
+		await this.vault.setToken(this.tokenKey(id), token)
 		const doc: TelegramBotRecord = {
-			id: crypto.randomUUID(),
+			id,
 			mode: input.mode ?? 'polling',
 			state: 'initializing',
 			stateMessage: '等待连接',
@@ -157,14 +126,21 @@ export class TelegramBotRegistry {
 			createdAt: now,
 			updatedAt: now,
 			secure: true,
-			...encrypted,
+			tokenPreview: maskToken(token),
 		}
-		await this.collection.insert(doc)
-		return toPublic(doc)
+		try {
+			await this.collection.insert(doc)
+		} catch (e) {
+			await this.vault.deleteToken(this.tokenKey(id)).catch(() => {})
+			throw e
+		}
+		return doc
 	}
 
 	async delete(id: string) {
-		return Boolean(await this.collection.removeOne({ id }))
+		const ok = Boolean(await this.collection.removeOne({ id }))
+		if (ok) await this.vault.deleteToken(this.tokenKey(id)).catch(() => {})
+		return ok
 	}
 
 	findOne(id: string) {
@@ -172,7 +148,7 @@ export class TelegramBotRegistry {
 	}
 
 	list(limit = 64) {
-		return this.collection.find({}, { sort: { updatedAt: -1 }, limit }).fetch().map(toPublic)
+		return this.collection.find({}, { sort: { updatedAt: -1 }, limit }).fetch()
 	}
 
 	async update(id: string, patch: Partial<TelegramBotRecord>) {
@@ -192,7 +168,7 @@ export class TelegramBotRegistry {
 		if (!doc) return null
 		await this.update(id, patch)
 		const next = this.findOne(id)
-		return next ? toPublic(next) : null
+		return next ?? null
 	}
 
 	observe(limit: number, listener: () => void) {
@@ -209,9 +185,5 @@ export class TelegramBotRegistry {
 			stop?.()
 			cursor.cleanup()
 		}
-	}
-
-	decryptToken(record: Pick<TelegramBotRecord, 'tokenCiphertext' | 'tokenIv' | 'tokenTag'>) {
-		return this.tokenBox.decrypt(record)
 	}
 }

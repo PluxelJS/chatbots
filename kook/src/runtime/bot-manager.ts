@@ -79,7 +79,7 @@ export class KookBotManager {
 		}
 
 		await this.repo.update(id, { state: 'connecting', stateMessage: '正在启动', lastError: undefined })
-		const token = this.repo.decryptToken(doc)
+		const token = await this.repo.getToken(id)
 
 		const client = new Bot(
 			this.baseClient.headers({ Authorization: `Bot ${token}` }),
@@ -109,7 +109,7 @@ export class KookBotManager {
 			const message = error instanceof Error ? error.message : String(error)
 			await this.repo.update(id, { state: 'error', lastError: message, stateMessage: '启动失败' })
 			this.botInstances.delete(id)
-			if (doc.verifyToken) this.botsByVerify.delete(doc.verifyToken)
+			if (verifyKey) this.botsByVerify.delete(verifyKey)
 			throw error
 		}
 	}
@@ -117,9 +117,12 @@ export class KookBotManager {
 	async disconnectBot(id: string) {
 		const bot = this.botInstances.get(id)
 		const doc = this.repo.findOne(id)
-		if (doc) {
-			const verifyKey = doc.verifyToken ?? (doc ? this.repo.decryptToken(doc) : undefined)
-			if (verifyKey) this.botsByVerify.delete(verifyKey)
+		if (bot) {
+			for (const [key, value] of this.botsByVerify) {
+				if (value === bot) this.botsByVerify.delete(key)
+			}
+		} else if (doc?.verifyToken) {
+			this.botsByVerify.delete(doc.verifyToken)
 		}
 		if (!bot) {
 			if (doc) {

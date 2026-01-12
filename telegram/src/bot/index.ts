@@ -154,7 +154,7 @@ export class Bot extends AbstractBot {
 			webhook: this.config.webhook,
 		})
 		// 获取 Bot 信息
-		const me = await this.getMe()
+		const me = await this.$raw.request<UserFromGetMe>('GET', 'getMe')
 		if (!me.ok) {
 			this.updateStatus({
 				state: 'error',
@@ -192,7 +192,7 @@ export class Bot extends AbstractBot {
 
 		if (this.mode === 'webhook') {
 			// 删除 Webhook
-			await this.deleteWebhook({ drop_pending_updates: false }).catch(() => {})
+			await this.$raw.call('deleteWebhook', { drop_pending_updates: false }).catch(() => {})
 		}
 
 		this.ctx.logger.info('Telegram bot stopped', { bot: this.selfInfo?.username })
@@ -210,8 +210,8 @@ export class Bot extends AbstractBot {
 			lastError: undefined,
 		})
 
-		// 先删除可能存在的 Webhook
-		await this.deleteWebhook({ drop_pending_updates: false }).catch(() => {})
+		// 先删除可能存在的 Webhook（便于在 polling/webhook 间切换）
+		await this.$raw.call('deleteWebhook', { drop_pending_updates: false }).catch(() => {})
 
 		// 注册清理效果
 		const cleanup = () => this.stop().catch(() => {})
@@ -292,7 +292,7 @@ export class Bot extends AbstractBot {
 
 	/** 获取更新 */
 	private async fetchUpdates() {
-		const result = await this.getUpdates({
+		const result = await this.$raw.request<Update[]>('GET', 'getUpdates', {
 			offset: this.offset,
 			timeout: Math.ceil(this.pollingOptions.timeoutMs / 1000),
 			limit: this.pollingOptions.limit,
@@ -329,15 +329,15 @@ export class Bot extends AbstractBot {
 			webhook: { url: webhook.url, secretToken: webhook.secretToken },
 		})
 
-			const result = await this.setWebhook({
-				url: webhook.url,
-				certificate: webhook.certificate,
-				ip_address: webhook.ipAddress,
-				max_connections: webhook.maxConnections,
-				allowed_updates: webhook.allowedUpdates as any,
-				drop_pending_updates: webhook.dropPendingUpdates,
-				secret_token: webhook.secretToken,
-			})
+		const result = await this.$raw.call('setWebhook', {
+			url: webhook.url,
+			certificate: webhook.certificate,
+			ip_address: webhook.ipAddress,
+			max_connections: webhook.maxConnections,
+			allowed_updates: webhook.allowedUpdates as any,
+			drop_pending_updates: webhook.dropPendingUpdates,
+			secret_token: webhook.secretToken,
+		})
 
 		if (!result.ok) {
 			this.updateStatus({

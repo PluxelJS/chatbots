@@ -278,7 +278,7 @@ export function AddBotForm({ onCreate }: { onCreate: (input: CreateBotInput) => 
 			<Stack gap="sm">
 				<Group gap="xs">
 					<IconRocket size={16} />
-					<Text fw={700}>新增 KOOK Bot（加密存储 token）</Text>
+					<Text fw={700}>新增 KOOK Bot（安全存储 token）</Text>
 				</Group>
 				{error && (
 					<Alert color="red" radius="md">
@@ -316,7 +316,7 @@ export function AddBotForm({ onCreate }: { onCreate: (input: CreateBotInput) => 
 					/>
 				</Collapse>
 				<Text size="xs" c="dimmed">
-					仅需 token，模式与 verify token 可在列表中修改；仅保存加密后的 token。
+					仅需 token，模式与 verify token 可在列表中修改；token 由内核 Vault 安全存储。
 				</Text>
 			</Stack>
 		</Card>

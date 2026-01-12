@@ -1,16 +1,23 @@
 # Telegram Bot API method -> HTTP method.
 #
-# NOTE: do not put multipart shortcuts here (sendPhoto/sendDocument/sendAnimation),
-# otherwise a generic define() would override them.
+# NOTE: this file is an allowlist for generating `TELEGRAM_API_PROTO` methods.
+# Multipart-capable methods (e.g. sendPhoto/setWebhook) are safe to include: the raw layer
+# will automatically coerce payloads to `FormData` when needed.
 
 # Getting updates
 getMe GET
+getUpdates GET
+setWebhook POST
+deleteWebhook POST
+getWebhookInfo GET
 
 # Updating messages
 editMessageCaption POST
 editMessageMedia POST
+editMessageText POST
 editMessageReplyMarkup POST
 stopPoll POST
+deleteMessage POST
 
 # Stickers
 sendSticker POST
@@ -57,6 +64,14 @@ sendContact POST
 sendPoll POST
 sendDice POST
 sendChatAction POST
+
+# Sending messages
+sendMessage POST
+
+# Sending media (multipart-capable)
+sendPhoto POST
+sendDocument POST
+sendAnimation POST
 
 # Chat management
 getChat GET
@@ -133,4 +148,3 @@ getUserChatBoosts GET
 
 # Business
 getBusinessConnection GET
-

@@ -26,7 +26,7 @@
 - `chatbots/milky/src/runtime/`：运行时编排（多 Bot 管理 + RPC/SSE）
   - `runtime.ts`：`MilkyRuntime`（插件运行时入口：repo/manager/sse 的组合）
   - `bot-manager.ts`：`MilkyBotManager`（Bot 实例管理与状态落库）
-  - `bot-registry.ts`：bot 配置与状态持久化（含 token 加密）
+  - `bot-registry.ts`：bot 配置与状态持久化（token 由 ctx.vault 管理）
   - `rpc.ts`：`MilkyBotRpc`（UI/RPC 调用入口）
   - `sse.ts`：SSE bridge（推送快照/游标）
   - `index.ts`：runtime 对外出口

@@ -228,7 +228,7 @@ function AddBotForm({ onCreate }: { onCreate: (input: CreateBotInput) => Promise
 			<Stack gap="sm">
 				<Group gap="xs">
 					<IconRocket size={16} />
-					<Text fw={700}>新增 Telegram Bot（加密存储 token）</Text>
+					<Text fw={700}>新增 Telegram Bot（安全存储 token）</Text>
 				</Group>
 				{error && (
 					<Alert color="red" radius="md">
@@ -498,4 +498,3 @@ export function SummaryPanel() {
 export function ManageTab() {
 	return <StatusPanel />
 }
-

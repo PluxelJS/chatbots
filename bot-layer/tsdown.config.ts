@@ -6,7 +6,7 @@ export default defineConfig({
 		index: './src/index.ts',
 		'parts/index': './parts/index.ts',
 		'parts/runtime': './parts/runtime.ts',
-		'parts/rolldown/parts-transform': './parts/rolldown/parts-transform.ts',
+		'parts/rolldown': './parts/rolldown/parts-transform.ts',
 		web: './src/web.ts',
 	},
 	dts: {

@@ -11,10 +11,7 @@ export default defineConfig({
 	plugins: [],
 	format: ['esm'],
 	env: {},
-	copy: [
-		'api.mjs.d.mts',
-		'api.mjs.d.ts',
-	],
+	copy: [],
 	clean: true,
 	minify: true,
 	treeshake: true,

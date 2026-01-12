@@ -83,7 +83,7 @@ export class MilkyBotManager {
 			await this.repo.update(id, { state: 'connecting', stateMessage: '正在启动', lastError: undefined })
 		}
 
-		const accessToken = this.repo.decryptAccessToken(doc)
+		const accessToken = await this.repo.getAccessToken(id)
 		const bot = new MilkyBot(
 			this.baseClient,
 			{ baseUrl: doc.baseUrl, accessToken: accessToken || undefined },

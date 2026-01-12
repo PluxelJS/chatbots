@@ -36,14 +36,14 @@ export class TelegramBotManager {
 	getOverview() {
 		const statuses = this.repo.list()
 		const runningStates = new Set(['polling', 'webhook'])
-			const active = statuses.filter((status) => runningStates.has(status.state)).length
-			const configured = statuses.length
-			return {
-				name: this.ctx.pluginInfo.displayName,
-				configuredBots: configured,
-				activeBots: active,
-				totalBots: statuses.length,
-				modeBreakdown: {
+		const active = statuses.filter((status) => runningStates.has(status.state)).length
+		const configured = statuses.length
+		return {
+			name: this.ctx.pluginInfo.displayName,
+			configuredBots: configured,
+			activeBots: active,
+			totalBots: statuses.length,
+			modeBreakdown: {
 				polling: statuses.filter((s) => s.mode === 'polling').length,
 				webhook: statuses.filter((s) => s.mode === 'webhook').length,
 				api: statuses.filter((s) => s.mode === 'api').length,
@@ -108,7 +108,7 @@ export class TelegramBotManager {
 		}
 
 		await this.repo.update(id, { state: 'authenticating', stateMessage: '正在启动', lastError: undefined })
-		const token = this.repo.decryptToken(doc)
+		const token = await this.repo.getToken(id)
 		const config = this.toBotConfig(doc, token)
 
 		if (doc.mode === 'webhook' && !config.webhook?.url) {
@@ -151,7 +151,6 @@ export class TelegramBotManager {
 	async disconnectBot(id: string) {
 		const bot = this.botsById.get(id)
 		const doc = this.repo.findOne(id)
-		const token = doc ? this.repo.decryptToken(doc) : undefined
 		if (!bot) {
 			if (doc) await this.repo.update(id, { state: 'stopped', stateMessage: '已断开' })
 			return { id, status: 'stopped' }
@@ -161,8 +160,7 @@ export class TelegramBotManager {
 			this.ctx.logger.warn('Telegram bot 停止失败', { id, error })
 		})
 		this.botsById.delete(id)
-		if (token) this.botsByToken.delete(token)
-		if (token) this.webhookBotsByToken.delete(token)
+		this.removeTokenMappings(bot)
 		if (doc) {
 			await this.repo.update(id, { state: 'stopped', stateMessage: '已断开', connectedAt: undefined })
 		}
@@ -226,6 +224,15 @@ export class TelegramBotManager {
 			const error = e instanceof Error ? e : new Error(String(e))
 			this.ctx.logger.warn('Telegram bot 状态更新失败', { id, error })
 		})
+	}
+
+	private removeTokenMappings(bot: Bot) {
+		for (const [token, value] of this.botsByToken) {
+			if (value === bot) this.botsByToken.delete(token)
+		}
+		for (const [token, value] of this.webhookBotsByToken) {
+			if (value === bot) this.webhookBotsByToken.delete(token)
+		}
 	}
 }
 

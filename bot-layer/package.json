@@ -33,9 +33,9 @@
       "@pluxel/hmr": "./parts/index.ts",
       "default": "./dist/parts/index.mjs"
     },
-    "./parts/rolldown/parts-transform": {
+    "./parts/rolldown": {
       "@pluxel/hmr": "./parts/rolldown/parts-transform.ts",
-      "default": "./dist/parts/rolldown/parts-transform.mjs"
+      "default": "./dist/parts/rolldown.mjs"
     },
     "./parts/runtime": {
       "@pluxel/hmr": "./parts/runtime.ts",
@@ -51,7 +51,7 @@
     "exports": {
       ".": "./dist/index.mjs",
       "./parts": "./dist/parts/index.mjs",
-      "./parts/rolldown/parts-transform": "./dist/parts/rolldown/parts-transform.mjs",
+      "./parts/rolldown": "./dist/parts/rolldown.mjs",
       "./parts/runtime": "./dist/parts/runtime.mjs",
       "./web": "./dist/web.mjs",
       "./package.json": "./package.json"

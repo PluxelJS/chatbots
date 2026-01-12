@@ -48,14 +48,14 @@ function makeChatSession(
 		return res
 	}
 
-		const reply: TelegramConversation['reply'] = async (toMessageId, text, options) => {
-			const merged = mergeSendOptions(options)
-			const replyParameters = merged?.reply_parameters
-				? { ...(merged.reply_parameters as unknown as Record<string, unknown>), message_id: toMessageId }
-				: { message_id: toMessageId }
+	const reply: TelegramConversation['reply'] = async (toMessageId, text, options) => {
+		const merged = mergeSendOptions(options)
+		const replyParameters = merged?.reply_parameters
+			? { ...(merged.reply_parameters as unknown as Record<string, unknown>), message_id: toMessageId }
+			: { message_id: toMessageId }
 
-			const res = await api.sendMessage({
-				chat_id: chatId,
+		const res = await api.sendMessage({
+			chat_id: chatId,
 			text,
 			...(merged ?? {}),
 			reply_parameters: replyParameters,

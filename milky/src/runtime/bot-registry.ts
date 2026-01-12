@@ -6,10 +6,7 @@ import { maskSecret, normalizeBaseUrl as normalizeBaseUrlValue } from '../shared
 
 export type BotState = MilkyBotStatus
 
-type SecretFields = {
-	accessTokenCiphertext: string
-	accessTokenIv: string
-	accessTokenTag: string
+type TokenFields = {
 	tokenPreview: string
 }
 
@@ -40,17 +37,14 @@ type AuditFields = {
 	secure: boolean
 }
 
-export type MilkyBotRecord = SecretFields &
+export type MilkyBotRecord = TokenFields &
 	IdentityFields &
 	RuntimeFields &
 	AuditFields & {
 		id: string
 	}
 
-export type MilkyBotPublic = Omit<
-	MilkyBotRecord,
-	'accessTokenCiphertext' | 'accessTokenIv' | 'accessTokenTag'
->
+export type MilkyBotPublic = MilkyBotRecord
 
 export type CreateBotInput = {
 	baseUrl: string
@@ -61,62 +55,26 @@ export type CreateBotInput = {
 export type UpdateBotInput = Partial<Pick<CreateBotInput, 'baseUrl' | 'name'>> & {
 	accessToken?: string
 }
-
-class TokenBox {
-	private readonly key: Buffer
-
-	constructor() {
-		const seed =
-			process.env.MILKY_BOT_SECRET_KEY ??
-			process.env.BOT_ORCHESTRATOR_KEY ??
-			'dev-milky-bot-secret'
-		this.key = crypto.createHash('sha256').update(seed).digest()
-	}
-
-	encrypt(token?: string) {
-		const raw = (token ?? '').trim()
-		if (!raw) {
-			return { accessTokenCiphertext: '', accessTokenIv: '', accessTokenTag: '', tokenPreview: '—' }
-		}
-		const iv = crypto.randomBytes(12)
-		const cipher = crypto.createCipheriv('aes-256-gcm', this.key, iv)
-		const encrypted = Buffer.concat([cipher.update(raw, 'utf8'), cipher.final()])
-		const tag = cipher.getAuthTag()
-		return {
-			accessTokenCiphertext: encrypted.toString('base64'),
-			accessTokenIv: iv.toString('base64'),
-			accessTokenTag: tag.toString('base64'),
-			tokenPreview: maskSecret(raw),
-		}
-	}
-
-	decrypt(record: Pick<MilkyBotRecord, 'accessTokenCiphertext' | 'accessTokenIv' | 'accessTokenTag'>) {
-		if (!record.accessTokenCiphertext) return ''
-		const iv = Buffer.from(record.accessTokenIv, 'base64')
-		const tag = Buffer.from(record.accessTokenTag, 'base64')
-		const decipher = crypto.createDecipheriv('aes-256-gcm', this.key, iv)
-		decipher.setAuthTag(tag)
-		const decrypted = Buffer.concat([
-			decipher.update(Buffer.from(record.accessTokenCiphertext, 'base64')),
-			decipher.final(),
-		])
-		return decrypted.toString('utf8')
-	}
-
-}
-
-const toPublic = (doc: MilkyBotRecord): MilkyBotPublic => {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const { accessTokenCiphertext, accessTokenIv, accessTokenTag, ...rest } = doc
-	return rest
+const normalizeAccessToken = (accessToken?: string) => {
+	const token = (accessToken ?? '').trim()
+	return token ? token : undefined
 }
 
 export class MilkyBotRegistry {
-	private readonly tokenBox = new TokenBox()
+	private readonly vault: ReturnType<Context['vault']['open']>
 	private collection!: Collection<MilkyBotRecord>
 	private readyPromise: Promise<void> | null = null
 
-	constructor(private readonly ctx: Context, private readonly collectionName = 'milky:bots') {}
+	constructor(
+		private readonly ctx: Context,
+		private readonly collectionName = 'milky:bots',
+	) {
+		this.vault = ctx.vault.open()
+	}
+
+	private accessTokenKey(id: string) {
+		return `${this.collectionName}:${id}:accessToken`
+	}
 
 	async init() {
 		this.collection = new Collection<MilkyBotRecord>({
@@ -131,13 +89,19 @@ export class MilkyBotRegistry {
 		return this.readyPromise ?? Promise.resolve()
 	}
 
+	async getAccessToken(id: string) {
+		return (await this.vault.getToken(this.accessTokenKey(id))) ?? undefined
+	}
+
 	async create(input: CreateBotInput): Promise<MilkyBotPublic> {
 		const now = Date.now()
 		const baseUrl = normalizeBaseUrlValue(input.baseUrl)
-		const enc = this.tokenBox.encrypt(input.accessToken)
+		const accessToken = normalizeAccessToken(input.accessToken)
+		const id = crypto.randomUUID()
+		if (accessToken) await this.vault.setToken(this.accessTokenKey(id), accessToken)
 
 		const doc: MilkyBotRecord = {
-			id: crypto.randomUUID(),
+			id,
 			name: input.name?.trim() || undefined,
 			baseUrl,
 			state: 'initializing',
@@ -155,15 +119,22 @@ export class MilkyBotRegistry {
 			connectedAt: undefined,
 			createdAt: now,
 			updatedAt: now,
-			secure: Boolean(enc.accessTokenCiphertext),
-			...enc,
+			secure: Boolean(accessToken),
+			tokenPreview: accessToken ? maskSecret(accessToken) : '—',
 		}
-		await this.collection.insert(doc)
-		return toPublic(doc)
+		try {
+			await this.collection.insert(doc)
+		} catch (e) {
+			if (accessToken) await this.vault.deleteToken(this.accessTokenKey(id)).catch(() => {})
+			throw e
+		}
+		return doc
 	}
 
 	async delete(id: string) {
-		return Boolean(await this.collection.removeOne({ id }))
+		const ok = Boolean(await this.collection.removeOne({ id }))
+		if (ok) await this.vault.deleteToken(this.accessTokenKey(id)).catch(() => {})
+		return ok
 	}
 
 	findOne(id: string) {
@@ -171,7 +142,7 @@ export class MilkyBotRegistry {
 	}
 
 	list(limit = 64) {
-		return this.collection.find({}, { sort: { updatedAt: -1 }, limit }).fetch().map(toPublic)
+		return this.collection.find({}, { sort: { updatedAt: -1 }, limit }).fetch()
 	}
 
 	async update(id: string, patch: Partial<MilkyBotRecord>) {
@@ -194,14 +165,26 @@ export class MilkyBotRegistry {
 		if (typeof patch.baseUrl === 'string') nextPatch.baseUrl = normalizeBaseUrlValue(patch.baseUrl)
 		if (typeof patch.name === 'string') nextPatch.name = patch.name.trim() || undefined
 		if ('accessToken' in patch) {
-			const enc = this.tokenBox.encrypt(patch.accessToken)
-			Object.assign(nextPatch, enc)
-			nextPatch.secure = Boolean(enc.accessTokenCiphertext)
+			const key = this.accessTokenKey(id)
+			const before = await this.vault.getToken(key)
+			const accessToken = normalizeAccessToken(patch.accessToken)
+			try {
+				if (accessToken) await this.vault.setToken(key, accessToken)
+				else await this.vault.deleteToken(key)
+			} catch (e) {
+				// Best-effort rollback (no compatibility required, but keep state sane).
+				if (before) await this.vault.setToken(key, before).catch(() => {})
+				else await this.vault.deleteToken(key).catch(() => {})
+				throw e
+			}
+
+			nextPatch.secure = Boolean(accessToken)
+			nextPatch.tokenPreview = accessToken ? maskSecret(accessToken) : '—'
 		}
 
 		await this.update(id, nextPatch)
 		const next = this.findOne(id)
-		return next ? toPublic(next) : null
+		return next ?? null
 	}
 
 	observe(limit: number, listener: () => void) {
@@ -218,9 +201,5 @@ export class MilkyBotRegistry {
 			stop?.()
 			cursor.cleanup()
 		}
-	}
-
-	decryptAccessToken(record: Pick<MilkyBotRecord, 'accessTokenCiphertext' | 'accessTokenIv' | 'accessTokenTag'>) {
-		return this.tokenBox.decrypt(record)
 	}
 }

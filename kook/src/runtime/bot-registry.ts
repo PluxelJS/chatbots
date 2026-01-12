@@ -6,10 +6,7 @@ import { BotMode } from '../config'
 
 export type BotState = ReturnType<Bot['getStatusSnapshot']>
 
-type SecretFields = {
-	tokenCiphertext: string
-	tokenIv: string
-	tokenTag: string
+type TokenFields = {
 	tokenPreview: string
 }
 
@@ -42,7 +39,7 @@ type AuditFields = {
 	secure: boolean
 }
 
-export type KookBotRecord = SecretFields &
+export type KookBotRecord = TokenFields &
 	IdentityFields &
 	GatewayFields &
 	LifecycleFields &
@@ -50,7 +47,7 @@ export type KookBotRecord = SecretFields &
 		id: string
 	}
 
-export type KookBotPublic = Omit<KookBotRecord, 'tokenCiphertext' | 'tokenIv' | 'tokenTag'>
+export type KookBotPublic = KookBotRecord
 
 export type CreateBotInput = {
 	token: string
@@ -60,63 +57,29 @@ export type CreateBotInput = {
 
 export type UpdateBotInput = Partial<Pick<CreateBotInput, 'mode' | 'verifyToken'>>
 
-class TokenBox {
-	private readonly key: Buffer
-
-	constructor() {
-		const seed =
-			process.env.KOOK_BOT_SECRET_KEY ??
-			process.env.BOT_ORCHESTRATOR_KEY ??
-			'dev-kook-bot-secret-key'
-		this.key = crypto.createHash('sha256').update(seed).digest()
-	}
-
-	encrypt(token: string) {
-		const iv = crypto.randomBytes(12)
-		const cipher = crypto.createCipheriv('aes-256-gcm', this.key, iv)
-		const enc = Buffer.concat([cipher.update(token, 'utf8'), cipher.final()])
-		const tag = cipher.getAuthTag()
-		return {
-			tokenCiphertext: enc.toString('base64'),
-			tokenIv: iv.toString('base64'),
-			tokenTag: tag.toString('base64'),
-			tokenPreview: this.mask(token),
-		}
-	}
-
-	decrypt(record: Pick<KookBotRecord, 'tokenCiphertext' | 'tokenIv' | 'tokenTag'>) {
-		const iv = Buffer.from(record.tokenIv, 'base64')
-		const tag = Buffer.from(record.tokenTag, 'base64')
-		const decipher = crypto.createDecipheriv('aes-256-gcm', this.key, iv)
-		decipher.setAuthTag(tag)
-		const dec = Buffer.concat([
-			decipher.update(Buffer.from(record.tokenCiphertext, 'base64')),
-			decipher.final(),
-		])
-		return dec.toString('utf8')
-	}
-
-	private mask(token: string) {
-		if (token.length <= 8) return `${token.slice(0, 2)}***${token.slice(-2)}`
-		return `${token.slice(0, 4)}…${token.slice(-4)}`
-	}
-}
-
-const toPublic = (doc: KookBotRecord): KookBotPublic => {
-	// eslint-disable-next-line @typescript-eslint/no-unused-vars
-	const { tokenCiphertext, tokenIv, tokenTag, ...rest } = doc
-	return rest
+const maskToken = (token: string) => {
+	if (token.length <= 8) return `${token.slice(0, 2)}***${token.slice(-2)}`
+	return `${token.slice(0, 4)}…${token.slice(-4)}`
 }
 
 /**
- * 集中管理 Bot 持久化、加密与游标监听。
+ * 集中管理 Bot 持久化、Vault token 管理与游标监听。
  */
 export class KookBotRegistry {
-	private readonly tokenBox = new TokenBox()
+	private readonly vault: ReturnType<Context['vault']['open']>
 	private collection!: Collection<KookBotRecord>
 	private readyPromise: Promise<void> | null = null
 
-	constructor(private readonly ctx: Context, private readonly collectionName = 'kook:bots') {}
+	constructor(
+		private readonly ctx: Context,
+		private readonly collectionName = 'kook:bots',
+	) {
+		this.vault = ctx.vault.open()
+	}
+
+	private tokenKey(id: string) {
+		return `${this.collectionName}:${id}:token`
+	}
 
 	async init() {
 		this.collection = new Collection<KookBotRecord>({
@@ -131,13 +94,20 @@ export class KookBotRegistry {
 		return this.readyPromise ?? Promise.resolve()
 	}
 
+	async getToken(id: string) {
+		const token = await this.vault.getToken(this.tokenKey(id))
+		if (!token) throw new Error('KOOK bot token 缺失（vault 中未找到），请重新添加 bot')
+		return token
+	}
+
 	async create(input: CreateBotInput): Promise<KookBotPublic> {
 		const token = input.token.trim()
 		if (!token) throw new Error('token 不能为空')
 		const now = Date.now()
-		const encrypted = this.tokenBox.encrypt(token)
+		const id = crypto.randomUUID()
+		await this.vault.setToken(this.tokenKey(id), token)
 		const doc: KookBotRecord = {
-			id: crypto.randomUUID(),
+			id,
 			mode: input.mode ?? 'gateway',
 			verifyToken: input.verifyToken,
 			createdAt: now,
@@ -145,14 +115,21 @@ export class KookBotRegistry {
 			state: 'initializing',
 			stateMessage: '等待连接',
 			secure: true,
-			...encrypted,
+			tokenPreview: maskToken(token),
 		}
-		await this.collection.insert(doc)
-		return toPublic(doc)
+		try {
+			await this.collection.insert(doc)
+		} catch (e) {
+			await this.vault.deleteToken(this.tokenKey(id)).catch(() => {})
+			throw e
+		}
+		return doc
 	}
 
 	async delete(id: string) {
-		return Boolean(await this.collection.removeOne({ id }))
+		const ok = Boolean(await this.collection.removeOne({ id }))
+		if (ok) await this.vault.deleteToken(this.tokenKey(id)).catch(() => {})
+		return ok
 	}
 
 	findOne(id: string) {
@@ -160,7 +137,7 @@ export class KookBotRegistry {
 	}
 
 	list(limit = 64) {
-		return this.collection.find({}, { sort: { updatedAt: -1 }, limit }).fetch().map(toPublic)
+		return this.collection.find({}, { sort: { updatedAt: -1 }, limit }).fetch()
 	}
 
 	async update(id: string, patch: Partial<KookBotRecord>) {
@@ -180,7 +157,7 @@ export class KookBotRegistry {
 		if (!doc) return null
 		await this.update(id, patch)
 		const next = this.findOne(id)
-		return next ? toPublic(next) : null
+		return next ?? null
 	}
 
 	observe(limit: number, listener: () => void) {
@@ -197,9 +174,5 @@ export class KookBotRegistry {
 			stop?.()
 			cursor.cleanup()
 		}
-	}
-
-	decryptToken(record: KookBotRecord) {
-		return this.tokenBox.decrypt(record)
 	}
 }
