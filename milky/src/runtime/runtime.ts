@@ -13,6 +13,7 @@ export class MilkyRuntime {
 	public events!: MilkyChannel
 
 	private ctx!: Context
+	private logger!: Context['logger']
 	private config!: Config<MilkyConfigType>
 	private repo!: MilkyBotRegistry
 	private manager!: MilkyBotManager
@@ -28,6 +29,7 @@ export class MilkyRuntime {
 
 	async bootstrap(ctx: Context, config: Config<MilkyConfigType>, abort?: AbortSignal) {
 		this.ctx = ctx
+		this.logger = ctx.logger.with({ platform: 'milky' })
 		this.config = config
 		this.abort = abort
 		const inHmr = Boolean((this.ctx as unknown as { env?: { isHmrRuntime?: boolean } }).env?.isHmrRuntime)
@@ -115,7 +117,7 @@ export class MilkyRuntime {
 					await this.manager.connectBot(b.id)
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.warn('autoConnect failed for {id}', { platform: 'milky', id: b.id, error })
+					this.logger.warn('autoConnect failed for {id}', { id: b.id, error })
 				}
 			}),
 		)
@@ -129,7 +131,7 @@ export class MilkyRuntime {
 			if (this.abort?.aborted) return
 			void this.autoConnectBots().catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('autoConnect failed', { platform: 'milky', error })
+				this.logger.warn('autoConnect failed', { error })
 			})
 		}, 0)
 	}

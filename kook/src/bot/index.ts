@@ -26,6 +26,7 @@ export class Bot extends AbstractBot {
 	private status: KookBotStatus
 	private readonly mode: 'gateway' | 'webhook' | 'api'
 	private readonly onStatusChange?: (status: KookBotStatus) => void
+	private readonly logger: Context['logger']
 
 	private static seq = 0
 
@@ -39,6 +40,7 @@ export class Bot extends AbstractBot {
 	) {
 		super(http)
 		this.instanceId = `kook-bot-${++Bot.seq}`
+		this.logger = ctx.logger.with({ platform: 'kook', instanceId: this.instanceId })
 		this.status = createInitialStatus(this.instanceId)
 		this.mode = mode
 		this.onStatusChange = onStatusChange
@@ -123,7 +125,7 @@ export class Bot extends AbstractBot {
 				stateMessage: '网关启动失败',
 			})
 			const err = error instanceof Error ? error : new Error(String(error))
-			this.ctx.logger.error('KOOK 网关启动失败', { error: err })
+			this.logger.error('KOOK 网关启动失败', { error: err })
 		})
 
 		return res.data.id
@@ -155,7 +157,7 @@ export class Bot extends AbstractBot {
 					const msg = e instanceof Error ? e.message : String(e)
 					this.updateStatus({ lastError: msg, stateMessage: '网关异常' })
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.error('网关异常', { platform: 'kook', error })
+					this.logger.error('网关异常', { error })
 				},
 				onStateChange: (prev, next, meta) => {
 					this.updateStatus({
@@ -163,7 +165,7 @@ export class Bot extends AbstractBot {
 						stateMessage: this.describeState(next, meta),
 						gateway: this.client?.getSnapshot(),
 					})
-					this.ctx.logger.info('state {prev} -> {next}', { platform: 'kook', prev, next, meta })
+					this.logger.debug('gateway state {prev} -> {next}', { prev, next })
 				},
 			},
 			(url, options) =>
@@ -191,6 +193,6 @@ export class Bot extends AbstractBot {
 		this.updateStatus({ state: 'stopped', stateMessage: 'stop()' })
 		await this.client?.stop()
 		await this.offline().catch(() => {})
-		this.ctx.logger.info('机器人已停止。')
+		this.logger.info('机器人已停止。')
 	}
 }

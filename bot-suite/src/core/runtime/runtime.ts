@@ -207,7 +207,7 @@ export class ChatbotsRuntime {
 				return
 			}
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('command dispatch failed', { error, body })
+			this.ctx.logger.warn('command dispatch failed', { error })
 		}
 	}
 

@@ -19,6 +19,7 @@ export class KookBotManager {
 	private readonly botInstances = new Map<string, Bot>()
 	private readonly botsByVerify = new Map<string, Bot>()
 	public readonly events: KookChannel
+	private readonly logger: Context['logger']
 
 	constructor(
 		private readonly ctx: Context,
@@ -26,6 +27,7 @@ export class KookBotManager {
 		private readonly websocket: WebSocketPlugin,
 		private baseClient: HttpClient,
 	) {
+		this.logger = ctx.logger.with({ platform: 'kook' })
 		this.events = createKookChannel(this.ctx)
 	}
 
@@ -65,7 +67,7 @@ export class KookBotManager {
 			await this.disconnectBot(id)
 			await this.connectBot(id).catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('bot 重连失败', { platform: 'kook', id, error })
+				this.logger.warn('bot 重连失败 ({id})', { id, error })
 			})
 		}
 		return { ok: true, bot: updated }
@@ -132,7 +134,7 @@ export class KookBotManager {
 		}
 		await bot.stop().catch((e) => {
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('bot 停止失败', { platform: 'kook', id, error })
+			this.logger.warn('bot 停止失败 ({id})', { id, error })
 		})
 		this.botInstances.delete(id)
 		delete this.bots[id]
@@ -154,9 +156,9 @@ export class KookBotManager {
 	disconnectAll() {
 		return Promise.allSettled(
 			Array.from(this.botInstances.keys()).map((id) =>
-				this.disconnectBot(id).catch((error) => {
-					const err = error instanceof Error ? error : new Error(String(error))
-					this.ctx.logger.warn('断开 bot 失败', { platform: 'kook', id, error: err })
+				this.disconnectBot(id).catch((e) => {
+					const error = e instanceof Error ? e : new Error(String(e))
+					this.logger.warn('断开 bot 失败 ({id})', { id, error })
 				}),
 			),
 		)
@@ -170,7 +172,7 @@ export class KookBotManager {
 					payload = await c.req.json()
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.warn('webhook: 解析 JSON 失败', { platform: 'kook', error })
+					this.logger.warn('webhook: 解析 JSON 失败', { error })
 					return c.json({ error: 'invalid json' }, 400)
 				}
 				const data = payload?.d
@@ -188,7 +190,7 @@ export class KookBotManager {
 				return c.json({ ok: true })
 			})
 		})
-		this.ctx.logger.info('webhook 路由已注册 {path}', { platform: 'kook', path })
+		this.logger.info('webhook 路由已注册 {path}', { path })
 	}
 
 	registerSseChannel(channel: SseChannel, limit = 64) {
@@ -212,10 +214,10 @@ export class KookBotManager {
 			gateway: status.gateway,
 			lastEventAt: status.lastEventAt,
 			lastSequence: status.lastSequence,
-	}).catch((e) => {
-		const error = e instanceof Error ? e : new Error(String(e))
-		this.ctx.logger.warn('bot 状态更新失败', { platform: 'kook', id, error })
-	})
+		}).catch((e) => {
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.logger.warn('bot 状态更新失败 ({id})', { id, error })
+		})
 	}
 }
 

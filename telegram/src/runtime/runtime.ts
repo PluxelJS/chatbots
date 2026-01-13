@@ -20,6 +20,7 @@ export class TelegramRuntime {
 	public events!: TelegramChannel
 
 	private ctx!: Context
+	private logger!: Context['logger']
 	private config!: Config<TelegramConfigType>
 	private manager!: TelegramBotManager
 	private repo!: TelegramBotRegistry
@@ -42,6 +43,7 @@ export class TelegramRuntime {
 
 	async bootstrap(ctx: Context, config: Config<TelegramConfigType>, abort?: AbortSignal) {
 		this.ctx = ctx
+		this.logger = ctx.logger.with({ platform: 'telegram' })
 		this.config = config
 		this.abort = abort
 
@@ -141,7 +143,7 @@ export class TelegramRuntime {
 					await this.manager.connectBot(b.id)
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.warn('autoConnect failed for {id}', { platform: 'telegram', id: b.id, error })
+					this.logger.warn('autoConnect failed for {id}', { id: b.id, error })
 				}
 			}),
 		)
@@ -156,7 +158,7 @@ export class TelegramRuntime {
 			if (this.abort?.aborted) return
 			void this.autoConnectBots().catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('autoConnect failed', { platform: 'telegram', error })
+				this.logger.warn('autoConnect failed', { error })
 			})
 		}, 0)
 	}

@@ -4,13 +4,28 @@ import type { BridgeStatusTracker } from '../status'
 
 const toCleanup = (fn: CleanupFn): (() => void) | null => (typeof fn === 'function' ? fn : null)
 
-const safeRun = (ctx: Context, message: string, props: Record<string, unknown> | null, fn?: (() => void) | null) => {
+const safeRun = (
+	ctx: Context,
+	message: string,
+	props: Record<string, unknown> | null,
+	fn?: (() => void) | null,
+) => {
 	if (!fn) return
 	try {
 		fn()
 	} catch (e) {
 		const error = e instanceof Error ? e : new Error(String(e))
-		ctx.logger.warn(message, props ? { ...props, error } : { error })
+		if (!props) {
+			ctx.logger.warn(message, { error })
+			return
+		}
+
+		// Avoid passing both `err` and `error` (PLX-ERR-002)
+		const { err: _err, error: _error, ...rest } = props as Record<string, unknown> & {
+			err?: unknown
+			error?: unknown
+		}
+		ctx.logger.warn(message, { ...rest, error })
 	}
 }
 
@@ -27,14 +42,15 @@ const startBridge = <P extends AnyBridgeDefinition>(
 	const attach = (instance: InstanceOf<P>) => {
 		if (disposed || !instance) return
 
-		ctx.logger.debug('{platform} bridge attach', { platform: def.platform })
+		const logger = ctx.logger.with({ platform: def.platform })
+		logger.debug('bridge attach')
 		const detachInstance = toCleanup(def.attach(ctx, instance, dispatch))
 		status?.setAttached(def.platform)
 
 		// 通过平台实例的 scope 自动管理生命周期
 		const anyInstance = instance as any
 		anyInstance?.ctx?.scope?.collectEffect?.(() => {
-			safeRun(ctx, 'bridge detach failed ({platform})', { platform: def.platform }, detachInstance)
+			safeRun(ctx, 'bridge detach failed', { platform: def.platform }, detachInstance)
 			status?.setDetached(def.platform)
 		})
 	}
@@ -45,7 +61,7 @@ const startBridge = <P extends AnyBridgeDefinition>(
 	return () => {
 		if (disposed) return
 		disposed = true
-		safeRun(ctx, 'bridge watcher cleanup failed ({platform})', { platform: def.platform }, unlisten)
+		safeRun(ctx, 'bridge watcher cleanup failed', { platform: def.platform }, unlisten)
 	}
 }
 

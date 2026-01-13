@@ -38,6 +38,7 @@ export class MilkyBot extends AbstractBot {
 
 	private readonly baseUrl: string
 	private readonly instanceId: string
+	private readonly logger: Context['logger']
 
 	private abort?: AbortController
 	private running = false
@@ -57,6 +58,7 @@ export class MilkyBot extends AbstractBot {
 		super(http, { baseUrl: config.baseUrl, accessToken: config.accessToken })
 		this.baseUrl = config.baseUrl.replace(/\/+$/, '')
 		this.instanceId = `milky-${++MilkyBot.seq}`
+		this.logger = ctx.logger.with({ platform: 'milky', instanceId: this.instanceId })
 		this.onStatusChange = onStatusChange
 		const preview = config.accessToken ? maskSecret(config.accessToken) : '—'
 		this.status = onStatusChange
@@ -143,7 +145,7 @@ export class MilkyBot extends AbstractBot {
 				lastError: e instanceof Error ? e.message : String(e),
 			})
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.error('event loop crashed', { platform: 'milky', error })
+			this.logger.error('event loop crashed', { error })
 		})
 	}
 

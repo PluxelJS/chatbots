@@ -16,6 +16,7 @@ export class MilkyBotManager {
 	public readonly events: MilkyChannel
 	private readonly enableStatusPersistence: boolean
 	private readonly statusDebounceMs: number
+	private readonly logger: Context['logger']
 	private readonly pendingStatus = new Map<
 		string,
 		{ timer: ReturnType<typeof setTimeout> | null; patch: Partial<MilkyBotRecord> }
@@ -27,6 +28,7 @@ export class MilkyBotManager {
 		private readonly baseClient: HttpClient,
 		options?: { enableStatusPersistence?: boolean; statusDebounceMs?: number },
 	) {
+		this.logger = ctx.logger.with({ platform: 'milky' })
 		this.events = createMilkyChannel(ctx)
 		this.enableStatusPersistence = options?.enableStatusPersistence ?? true
 		this.statusDebounceMs = Math.max(0, options?.statusDebounceMs ?? 250)
@@ -68,7 +70,7 @@ export class MilkyBotManager {
 			await this.disconnectBot(id)
 			await this.connectBot(id).catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('bot 重连失败', { platform: 'milky', id, error })
+				this.logger.warn('bot 重连失败 ({id})', { id, error })
 			})
 		}
 		return { ok: true, bot: updated }
@@ -107,7 +109,7 @@ export class MilkyBotManager {
 			}
 			this.botInstances.delete(id)
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.error('bot 启动失败', { platform: 'milky', id, error })
+			this.logger.error('bot 启动失败 ({id})', { id, error })
 			throw e
 		}
 	}
@@ -124,7 +126,7 @@ export class MilkyBotManager {
 		this.cancelPendingStatusUpdate(id)
 		await bot.$control.stop().catch((e) => {
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('bot 停止失败', { platform: 'milky', id, error })
+			this.logger.warn('bot 停止失败 ({id})', { id, error })
 		})
 		this.botInstances.delete(id)
 		if (doc && this.enableStatusPersistence) {
@@ -185,7 +187,7 @@ export class MilkyBotManager {
 			.update(id, patch)
 			.catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('bot 状态更新失败', { platform: 'milky', id, error })
+				this.logger.warn('bot 状态更新失败 ({id})', { id, error })
 			})
 	}
 

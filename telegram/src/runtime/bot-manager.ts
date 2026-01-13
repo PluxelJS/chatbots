@@ -19,6 +19,7 @@ export class TelegramBotManager {
 	private readonly botsByToken = new Map<string, Bot>()
 	private readonly webhookBotsByToken = new Map<string, Bot>()
 	public readonly events: TelegramChannel
+	private readonly logger: Context['logger']
 
 	constructor(
 		private readonly ctx: Context,
@@ -26,6 +27,7 @@ export class TelegramBotManager {
 		private baseClient: HttpClient,
 		private readonly apiBase: string,
 	) {
+		this.logger = ctx.logger.with({ platform: 'telegram' })
 		this.events = createTelegramChannel(ctx)
 	}
 
@@ -94,7 +96,7 @@ export class TelegramBotManager {
 			await this.disconnectBot(id)
 			await this.connectBot(id).catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('bot 重连失败', { platform: 'telegram', id, error })
+				this.logger.warn('bot 重连失败 ({id})', { id, error })
 			})
 		}
 		return { ok: true, bot: updated }
@@ -134,7 +136,7 @@ export class TelegramBotManager {
 				displayName: bot.selfInfo?.first_name ?? bot.selfInfo?.username,
 				connectedAt: Date.now(),
 			})
-			this.ctx.logger.info('bot started', { platform: 'telegram', bot: bot.selfInfo?.username, mode: doc.mode })
+			this.logger.info('bot started', { bot: bot.selfInfo?.username, mode: doc.mode })
 			return { id, status: 'connected' }
 		} catch (e) {
 			const message = e instanceof Error ? e.message : String(e)
@@ -143,7 +145,7 @@ export class TelegramBotManager {
 			this.botsByToken.delete(token)
 			this.webhookBotsByToken.delete(token)
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.error('bot 启动失败', { platform: 'telegram', error })
+			this.logger.error('bot 启动失败', { error })
 			throw e
 		}
 	}
@@ -157,7 +159,7 @@ export class TelegramBotManager {
 		}
 		await bot.stop().catch((e) => {
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('bot 停止失败', { platform: 'telegram', id, error })
+			this.logger.warn('bot 停止失败 ({id})', { id, error })
 		})
 		this.botsById.delete(id)
 		this.removeTokenMappings(bot)
@@ -220,10 +222,10 @@ export class TelegramBotManager {
 			pollingBackoff: status.polling?.backoffIndex,
 			webhookUrl: status.webhook?.url,
 			webhookSecretToken: status.webhook?.secretToken,
-	}).catch((e) => {
-		const error = e instanceof Error ? e : new Error(String(e))
-		this.ctx.logger.warn('bot 状态更新失败', { platform: 'telegram', id, error })
-	})
+		}).catch((e) => {
+			const error = e instanceof Error ? e : new Error(String(e))
+			this.logger.warn('bot 状态更新失败 ({id})', { id, error })
+		})
 	}
 
 	private removeTokenMappings(bot: Bot) {

@@ -77,6 +77,7 @@ export class Bot extends AbstractBot {
 	public readonly apiBase: string
 	public readonly mode: 'polling' | 'webhook' | 'api'
 
+	private readonly logger: Context['logger']
 	private running = false
 	private offset = 0
 	private abort?: AbortController
@@ -112,6 +113,7 @@ export class Bot extends AbstractBot {
 		}
 		this.instanceId = `tg-bot-${++Bot.seq}`
 		this.status = createInitialStatus(this.instanceId, this.mode, this.token)
+		this.logger = ctx.logger.with({ platform: 'telegram', instanceId: this.instanceId })
 		this.onStatusChange = onStatusChange
 		this.$control = {
 			info: {
@@ -168,7 +170,7 @@ export class Bot extends AbstractBot {
 			username: me.data.username,
 			displayName: me.data.first_name ?? me.data.username,
 		})
-		this.ctx.logger.info('Telegram bot authenticated', { bot: this.selfInfo.username })
+		this.logger.info('Telegram bot authenticated', { bot: this.selfInfo.username })
 
 		if (this.mode === 'polling') {
 			await this.startPolling()
@@ -195,7 +197,7 @@ export class Bot extends AbstractBot {
 			await this.$raw.call('deleteWebhook', { drop_pending_updates: false }).catch(() => {})
 		}
 
-		this.ctx.logger.info('Telegram bot stopped', { bot: this.selfInfo?.username })
+		this.logger.info('Telegram bot stopped', { bot: this.selfInfo?.username })
 	}
 
 	/** 启动 Polling */
@@ -305,14 +307,14 @@ export class Bot extends AbstractBot {
 				// 远端关闭或网络抖动导致的 Abort 视为一次空轮询，直接返回空数组
 				return []
 			}
-			this.ctx.logger.warn('getUpdates failed', {
-				platform: 'telegram',
+			const error = new Error(message)
+			this.logger.warn('getUpdates failed', {
 				code: result.code,
-				message,
 				offset: this.offset,
-				bot: this.selfInfo?.username ?? this.token,
+				bot: this.selfInfo?.username,
+				error,
 			})
-			throw new Error(message)
+			throw error
 		}
 
 		return (result.data ?? []).filter((u: Update) => typeof u?.update_id === 'number')
@@ -355,7 +357,8 @@ export class Bot extends AbstractBot {
 			stateMessage: 'Webhook 已就绪',
 			lastError: undefined,
 		})
-		this.ctx.logger.info('webhook set', { platform: 'telegram', url: webhook.url })
+		const origin = safeUrlOrigin(webhook.url)
+		this.logger.info`webhook set (${origin})`
 	}
 
 	/** 处理 Webhook 请求（由外部路由调用） */
@@ -394,12 +397,12 @@ export class Bot extends AbstractBot {
 	/** 发送错误事件 */
 	private emitError(e: unknown): void {
 		const meta: UpdateMeta | undefined =
-			this.offset > 0 ? { botId: this.token, updateId: this.offset } : undefined
+			this.offset > 0 ? { botId: this.instanceId, updateId: this.offset } : undefined
 		this.events.error.emit(e, meta)
 		const message = e instanceof Error ? e.message : String(e)
 		this.updateStatus({ lastError: message })
 		const error = e instanceof Error ? e : new Error(String(e))
-		this.ctx.logger.error('polling error', { platform: 'telegram', error })
+		this.logger.error('polling error', { error })
 	}
 
 	private recordUpdate(updateId: number) {
@@ -411,3 +414,11 @@ export class Bot extends AbstractBot {
 }
 
 export { AbstractBot } from './api'
+
+function safeUrlOrigin(value: string): string {
+	try {
+		return new URL(value).origin
+	} catch {
+		return 'invalid-url'
+	}
+}
