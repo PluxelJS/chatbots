@@ -1,0 +1,60 @@
+{
+  "$schema": "https://market.pluxel.dev/schema/package.json",
+  "name": "pluxel-plugin-bot-core",
+  "version": "0.1.0",
+  "description": "Bot-core runtime and platform adapters.",
+  "type": "module",
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "files": [
+    "dist",
+    "!**/*.map"
+  ],
+  "scripts": {
+    "build": "pluxel build",
+    "typecheck:parts": "tsc -p parts/tsconfig.json",
+    "test:parts": "bun test parts",
+    "test:src": "bun test src",
+    "test": "pnpm test:parts && pnpm test:src"
+  },
+  "dependencies": {
+    "pluxel-plugin-kook": "workspace:^",
+    "pluxel-plugin-milky": "workspace:^",
+    "pluxel-plugin-telegram": "workspace:^",
+    "type-flag": "^4.0.2"
+  },
+  "exports": {
+    ".": {
+      "@pluxel/hmr": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./parts": {
+      "@pluxel/hmr": "./parts/index.ts",
+      "default": "./dist/parts/index.mjs"
+    },
+    "./parts/rolldown": {
+      "@pluxel/hmr": "./parts/rolldown/parts-transform.ts",
+      "default": "./dist/parts/rolldown.mjs"
+    },
+    "./parts/runtime": {
+      "@pluxel/hmr": "./parts/runtime.ts",
+      "default": "./dist/parts/runtime.mjs"
+    },
+    "./web": {
+      "@pluxel/hmr": "./src/web.ts",
+      "default": "./dist/web.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./parts": "./dist/parts/index.mjs",
+      "./parts/rolldown": "./dist/parts/rolldown.mjs",
+      "./parts/runtime": "./dist/parts/runtime.mjs",
+      "./web": "./dist/web.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}
