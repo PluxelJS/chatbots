@@ -143,7 +143,7 @@ export class MilkyBot extends AbstractBot {
 				lastError: e instanceof Error ? e.message : String(e),
 			})
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.error('[Milky] event loop crashed', { error })
+			this.ctx.logger.error('event loop crashed', { platform: 'milky', error })
 		})
 	}
 

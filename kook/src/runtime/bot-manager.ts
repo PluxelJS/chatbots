@@ -65,7 +65,7 @@ export class KookBotManager {
 			await this.disconnectBot(id)
 			await this.connectBot(id).catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('KOOK bot 重连失败', { id, error })
+				this.ctx.logger.warn('bot 重连失败', { platform: 'kook', id, error })
 			})
 		}
 		return { ok: true, bot: updated }
@@ -132,7 +132,7 @@ export class KookBotManager {
 		}
 		await bot.stop().catch((e) => {
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('KOOK bot 停止失败', { id, error })
+			this.ctx.logger.warn('bot 停止失败', { platform: 'kook', id, error })
 		})
 		this.botInstances.delete(id)
 		delete this.bots[id]
@@ -156,7 +156,7 @@ export class KookBotManager {
 			Array.from(this.botInstances.keys()).map((id) =>
 				this.disconnectBot(id).catch((error) => {
 					const err = error instanceof Error ? error : new Error(String(error))
-					this.ctx.logger.warn('断开 KOOK bot 失败', { id, error: err })
+					this.ctx.logger.warn('断开 bot 失败', { platform: 'kook', id, error: err })
 				}),
 			),
 		)
@@ -170,7 +170,7 @@ export class KookBotManager {
 					payload = await c.req.json()
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.warn('KOOK webhook: 解析 JSON 失败', { error })
+					this.ctx.logger.warn('webhook: 解析 JSON 失败', { platform: 'kook', error })
 					return c.json({ error: 'invalid json' }, 400)
 				}
 				const data = payload?.d
@@ -188,7 +188,7 @@ export class KookBotManager {
 				return c.json({ ok: true })
 			})
 		})
-		this.ctx.logger.info('KOOK webhook 路由已注册 {path}', { path })
+		this.ctx.logger.info('webhook 路由已注册 {path}', { platform: 'kook', path })
 	}
 
 	registerSseChannel(channel: SseChannel, limit = 64) {
@@ -212,10 +212,10 @@ export class KookBotManager {
 			gateway: status.gateway,
 			lastEventAt: status.lastEventAt,
 			lastSequence: status.lastSequence,
-		}).catch((e) => {
-			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('KOOK bot 状态更新失败', { id, error })
-		})
+	}).catch((e) => {
+		const error = e instanceof Error ? e : new Error(String(e))
+		this.ctx.logger.warn('bot 状态更新失败', { platform: 'kook', id, error })
+	})
 	}
 }
 

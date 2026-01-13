@@ -68,7 +68,7 @@ export class MilkyBotManager {
 			await this.disconnectBot(id)
 			await this.connectBot(id).catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('[Milky] bot 重连失败', { id, error })
+				this.ctx.logger.warn('bot 重连失败', { platform: 'milky', id, error })
 			})
 		}
 		return { ok: true, bot: updated }
@@ -107,7 +107,7 @@ export class MilkyBotManager {
 			}
 			this.botInstances.delete(id)
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.error('[Milky] bot 启动失败', { id, error })
+			this.ctx.logger.error('bot 启动失败', { platform: 'milky', id, error })
 			throw e
 		}
 	}
@@ -124,7 +124,7 @@ export class MilkyBotManager {
 		this.cancelPendingStatusUpdate(id)
 		await bot.$control.stop().catch((e) => {
 			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('[Milky] bot 停止失败', { id, error })
+			this.ctx.logger.warn('bot 停止失败', { platform: 'milky', id, error })
 		})
 		this.botInstances.delete(id)
 		if (doc && this.enableStatusPersistence) {
@@ -185,7 +185,7 @@ export class MilkyBotManager {
 			.update(id, patch)
 			.catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('[Milky] bot 状态更新失败', { id, error })
+				this.ctx.logger.warn('bot 状态更新失败', { platform: 'milky', id, error })
 			})
 	}
 

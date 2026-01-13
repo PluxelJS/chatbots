@@ -305,7 +305,8 @@ export class Bot extends AbstractBot {
 				// 远端关闭或网络抖动导致的 Abort 视为一次空轮询，直接返回空数组
 				return []
 			}
-			this.ctx.logger.warn('telegram: getUpdates failed', {
+			this.ctx.logger.warn('getUpdates failed', {
+				platform: 'telegram',
 				code: result.code,
 				message,
 				offset: this.offset,
@@ -354,7 +355,7 @@ export class Bot extends AbstractBot {
 			stateMessage: 'Webhook 已就绪',
 			lastError: undefined,
 		})
-		this.ctx.logger.info('Telegram webhook set', { url: webhook.url })
+		this.ctx.logger.info('webhook set', { platform: 'telegram', url: webhook.url })
 	}
 
 	/** 处理 Webhook 请求（由外部路由调用） */
@@ -398,7 +399,7 @@ export class Bot extends AbstractBot {
 		const message = e instanceof Error ? e.message : String(e)
 		this.updateStatus({ lastError: message })
 		const error = e instanceof Error ? e : new Error(String(e))
-		this.ctx.logger.error('telegram: polling error', { error })
+		this.ctx.logger.error('polling error', { platform: 'telegram', error })
 	}
 
 	private recordUpdate(updateId: number) {

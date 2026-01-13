@@ -155,7 +155,7 @@ export class Bot extends AbstractBot {
 					const msg = e instanceof Error ? e.message : String(e)
 					this.updateStatus({ lastError: msg, stateMessage: '网关异常' })
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.error('KOOK 网关异常', { error })
+					this.ctx.logger.error('网关异常', { platform: 'kook', error })
 				},
 				onStateChange: (prev, next, meta) => {
 					this.updateStatus({
@@ -163,7 +163,7 @@ export class Bot extends AbstractBot {
 						stateMessage: this.describeState(next, meta),
 						gateway: this.client?.getSnapshot(),
 					})
-					this.ctx.logger.info('[state] {prev} -> {next}', { prev, next, meta })
+					this.ctx.logger.info('state {prev} -> {next}', { platform: 'kook', prev, next, meta })
 				},
 			},
 			(url, options) =>

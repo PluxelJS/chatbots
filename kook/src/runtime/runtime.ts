@@ -137,7 +137,7 @@ export class KookRuntime {
 					await this.manager.connectBot(b.id)
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.warn('KOOK autoConnect failed for {id}', { id: b.id, error })
+					this.ctx.logger.warn('autoConnect failed for {id}', { platform: 'kook', id: b.id, error })
 				}
 			}),
 		)
@@ -152,7 +152,7 @@ export class KookRuntime {
 			if (this.abort?.aborted) return
 			void this.autoConnectBots().catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('[KOOK] autoConnect failed', { error })
+				this.ctx.logger.warn('autoConnect failed', { platform: 'kook', error })
 			})
 		}, 0)
 	}

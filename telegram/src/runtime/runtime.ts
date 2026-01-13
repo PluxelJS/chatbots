@@ -141,7 +141,7 @@ export class TelegramRuntime {
 					await this.manager.connectBot(b.id)
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.warn('telegram autoConnect failed for {id}', { id: b.id, error })
+					this.ctx.logger.warn('autoConnect failed for {id}', { platform: 'telegram', id: b.id, error })
 				}
 			}),
 		)
@@ -156,7 +156,7 @@ export class TelegramRuntime {
 			if (this.abort?.aborted) return
 			void this.autoConnectBots().catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('[Telegram] autoConnect failed', { error })
+				this.ctx.logger.warn('autoConnect failed', { platform: 'telegram', error })
 			})
 		}, 0)
 	}

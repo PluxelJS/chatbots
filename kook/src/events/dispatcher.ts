@@ -35,7 +35,7 @@ export function dispatchKookEvent(events: KookChannel, ctx: Context, bot: Bot, d
 				.sendMessage({ target_id: session.channelId, content: value })
 				.catch((e) => {
 					const error = e instanceof Error ? e : new Error(String(e))
-					ctx.logger.error('message 监听器返回的信息发送失败。', { error })
+					ctx.logger.error('message 监听器返回的信息发送失败。', { platform: 'kook', error })
 				})
 		}
 

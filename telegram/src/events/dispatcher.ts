@@ -32,7 +32,7 @@ export function dispatchUpdate(
 				.sendMessage({ chat_id: session.chatId, text: result.value })
 				.catch((e: unknown) => {
 					const error = e instanceof Error ? e : new Error(String(e))
-					ctx.logger.error('telegram: message 监听器返回的信息发送失败。', { error })
+					ctx.logger.error('message 监听器返回的信息发送失败。', { platform: 'telegram', error })
 				})
 		}
 		return

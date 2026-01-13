@@ -115,7 +115,7 @@ export class MilkyRuntime {
 					await this.manager.connectBot(b.id)
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
-					this.ctx.logger.warn('[Milky] autoConnect failed for {id}', { id: b.id, error })
+					this.ctx.logger.warn('autoConnect failed for {id}', { platform: 'milky', id: b.id, error })
 				}
 			}),
 		)
@@ -129,7 +129,7 @@ export class MilkyRuntime {
 			if (this.abort?.aborted) return
 			void this.autoConnectBots().catch((e) => {
 				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn('[Milky] autoConnect failed', { error })
+				this.ctx.logger.warn('autoConnect failed', { platform: 'milky', error })
 			})
 		}, 0)
 	}
