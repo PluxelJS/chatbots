@@ -46,6 +46,7 @@ import { useRoles } from '../permissions/hooks'
 import { useChatUiColorScheme } from '../../shared/styles/chatui'
 
 import {
+	CHATBOTS_NAMESPACE,
 	useChatbotsRpc,
 	useChatbotsSse,
 	type SandboxCommand,
@@ -382,7 +383,7 @@ function useSandboxData() {
 	useEffect(() => {
 			const offOpen = sse.onOpen(() => setConnected(true))
 			const offError = sse.onError(() => setConnected(false))
-			const off = sse.ns('chatbots').on(
+			const off = sse.ns(CHATBOTS_NAMESPACE).on(
 				(msg) => {
 					const p = msg.payload as SandboxEvent | undefined
 					if (p?.type === 'sync') setMessages(p.messages)

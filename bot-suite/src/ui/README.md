@@ -50,7 +50,7 @@ Most edits are staged locally and only persisted on `Commit`:
 
 ## RPC contract notes
 
-The permissions console uses the `chatbots` RPC extension (implemented in `chatbots/bot-suite/src/core/sandbox`).
+The permissions console uses the `bot-suite` RPC extension (implemented in `chatbots/bot-suite/src/core/rpc/chatbots-rpc.ts`).
 
 - User search RPC is `searchUsersByName(query, limit?)`.
 - Role deletion RPC is `deleteRole(roleId)`.

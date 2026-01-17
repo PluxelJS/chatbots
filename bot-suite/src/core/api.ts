@@ -49,11 +49,11 @@ export type {
 declare module '@pluxel/hmr/services' {
 	namespace UI {
 		interface rpc {
-			chatbots: ChatbotsRpc
+			'bot-suite': ChatbotsRpc
 		}
 
 		interface sse {
-			chatbots: SandboxEvent
+			'bot-suite': SandboxEvent
 		}
 	}
 }

@@ -1,8 +1,10 @@
 import { type PluginExtensionContext, useExtensionContext } from '@pluxel/hmr/web'
-import type { ChatbotsRpc as ChatbotsRpcServer } from '../../core/api'
+import type {} from '../../core/api'
 import { useMemo } from 'react'
 
-export type ChatbotsRpc = ChatbotsRpcServer
+export const CHATBOTS_NAMESPACE = 'bot-suite' as const
+
+export type ChatbotsRpc = PluginExtensionContext['services']['hmr']['ui'][typeof CHATBOTS_NAMESPACE]
 export type ChatbotsSse = PluginExtensionContext['services']['hmr']['sse']
 
 function useChatbotsRuntime(): { rpc: ChatbotsRpc; sse: ChatbotsSse } {
@@ -10,7 +12,7 @@ function useChatbotsRuntime(): { rpc: ChatbotsRpc; sse: ChatbotsSse } {
 	const hmr = services.hmr
 	return useMemo(
 		() => ({
-			rpc: (hmr.ui as any).chatbots as ChatbotsRpc,
+			rpc: hmr.ui[CHATBOTS_NAMESPACE],
 			sse: hmr.sse,
 		}),
 		[hmr],
