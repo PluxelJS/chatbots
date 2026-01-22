@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'bun:test'
 
-import { CommandError, createCommandBus } from 'pluxel-plugin-bot-core'
-import { createCommandKit } from 'pluxel-plugin-bot-core'
-
-import { createRatesPlugin } from './kit'
+import { CommandRegistry } from '../runtime/command-registry'
+import { createPermissionCommandKit } from './kit'
+import { Decision } from '../../permissions/decision'
+import { ChatCommand } from './decorators'
 
 type Ctx = {
 	user: { id: number }
@@ -13,6 +13,19 @@ type Ctx = {
 
 describe('chatbots cmd rates plugin', () => {
 	it('blocks after first allowed hit (cooldown)', async () => {
+		const declaredExact = new Set<string>()
+		const declaredStar = new Set<string>()
+		const perms = {
+			registry: { getNamespaceEpoch: (_nsIndex: number) => 1 },
+			resolver: {
+				resolve: (node: string) => (declaredExact.has(node) ? ({ nsIndex: 0, path: new Uint32Array([1]), ver: 1 } as any) : null),
+				resolveGrant: (node: string) => (declaredStar.has(node) ? ({ nsIndex: 0, path: new Uint32Array([1]), ver: 1, kind: 'star', local: 'cmd', nsKey: 'owner' } as any) : null),
+			},
+			declareExact: (nsKey: string, local: string) => void declaredExact.add(`${nsKey}.${local}`),
+			declareStar: (nsKey: string, localPrefix: string) => void declaredStar.add(`${nsKey}.${localPrefix}.*`),
+			authorizeUserFast: async () => Decision.Allow,
+		} as any
+
 		let hits = 0
 		const rates = {
 			cooldown: async () => {
@@ -23,12 +36,25 @@ describe('chatbots cmd rates plugin', () => {
 			tokenBucket: async () => ({ ok: true } as const),
 		} as any
 
-		const bus = createCommandBus<Ctx>({ caseInsensitive: true })
-		const kit = createCommandKit(bus as any, { plugins: [createRatesPlugin(rates, { scopeKey: 'owner' })] })
+		const owner = {
+			pluginInfo: { id: 'owner' },
+			scope: { collectEffect: (_fn: any) => {} },
+		} as any
 
-		;(kit.reg('ping') as any)
-			.rates({ type: 'cooldown', ttlMs: 1000 })
-			.action(() => 'pong')
+	const registry = new CommandRegistry<Ctx>({ caseInsensitive: true })
+	const kit = createPermissionCommandKit(registry as any, perms, { owner, scopeKey: 'owner', rates })
+
+	class P {
+		@ChatCommand({
+			triggers: ['ping'],
+			rates: { rule: { type: 'cooldown', ttlMs: 1000 } },
+		})
+		ping(c: any) {
+			return c.argv().handle(() => 'pong')
+		}
+	}
+
+	kit.install(new P())
 
 		const ctx: Ctx = {
 			user: { id: 1 },
@@ -36,7 +62,16 @@ describe('chatbots cmd rates plugin', () => {
 			msg: { platform: 'telegram', channel: { id: 10 } },
 		}
 
-		expect(await bus.dispatch('ping', ctx)).toBe('pong')
-		await expect(bus.dispatch('ping', ctx)).rejects.toBeInstanceOf(CommandError)
+		{
+			const r = await registry.router.dispatch('ping', ctx)
+			expect(r.ok).toBe(true)
+			expect((r as any).val).toBe('pong')
+		}
+
+		{
+			const r = await registry.router.dispatch('ping', ctx)
+			expect(r.ok).toBe(false)
+			expect((r as any).err).toMatchObject({ name: 'CmdError', code: 'E_RATE_LIMITED' })
+		}
 	})
 })

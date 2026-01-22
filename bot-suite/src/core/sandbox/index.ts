@@ -4,7 +4,6 @@ import {
 	createSandboxAdapter,
 	createSandboxMessage,
 	getAdapter,
-	getCommandMeta,
 	normalizePartsForAdapter,
 	registerSandboxAdapter,
 } from 'pluxel-plugin-bot-core'
@@ -88,16 +87,14 @@ export class ChatbotsSandbox {
 	}
 
 	commands(): SandboxCommandsSnapshot {
-		const list = this.runtime.cmd.list().map((cmd) => {
-			const meta = getCommandMeta(cmd)
-			return {
-				name: cmd.nameTokens.join(' '),
-				usage: cmd.toUsage(),
-				aliases: [...cmd.aliases],
-				desc: meta?.desc,
-				group: meta?.group,
-			}
-		})
+		const list = this.runtime.cmd.list().map((cmd) => ({
+			name: cmd.name,
+			usage: cmd.usage ?? cmd.name,
+			aliases: [...cmd.aliases],
+			desc: cmd.description,
+			group: cmd.group,
+			permNode: cmd.permNode,
+		}))
 		list.sort((a, b) => a.name.localeCompare(b.name))
 		return { prefix: this.cmdPrefix, commands: list }
 	}

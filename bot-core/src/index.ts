@@ -1,7 +1,6 @@
 export * from './bot-core'
 export * from './chat'
 export * from './cmd'
-export * from './cmd/kit'
 export * from './outbound/payload'
 export * from './render/normalize'
 export * from './render/text'

@@ -161,8 +161,8 @@ catalog 不持久化，插件必须运行时声明。
 权限核心不依赖 cmd。指令集成位于 `core/commands/kit.ts`：
 
 - `PermRef`：稳定引用 `{ node, _ref? }`，其中 `_ref` 是可选的缓存 `NodeRef`（定义在 `ref.ts`）
-- `withPermissions(kit, perms)`：返回支持链式 `.perm(PermRef)` 的 CommandKit
-- `.perm(...)` 热路径：
+- `CommandKit`：text/op 统一入口（decorator + property draft + install）
+- `.perm(...)` 热路径（指令执行前）：
   - epoch 校验命中 => 直接 `authorizeUser(userId, NodeRef)`（不做字符串解析）
   - epoch 不匹配 => 重新 resolve 并更新 `PermRef._ref`
   - `_ref` 只是缓存提示：必须以 `nsEpoch` 校验为准；允许并发下重复 resolve（幂等）
@@ -170,8 +170,47 @@ catalog 不持久化，插件必须运行时声明。
 建议模式（插件侧）：
 
 ```ts
-const RELOAD = chatbots.permission.declareExact('command.reload', { default: 'deny' })
-chatbots.cmd.reg('reload').perm(RELOAD).action(...)
+import { ChatCommand, InstallChatCommands, cmd } from 'pluxel-plugin-bot-suite'
+import * as v from 'valibot'
+
+class MyPlugin extends BasePlugin {
+  @InstallChatCommands()
+  override init() {
+    // 可选：如果你想显式控制 meta / default（或关闭 auto-declare），可手动声明：
+    // chatbots.permission.declareExact('cmd.reload', { default: 'deny', description: 'Reload plugin' })
+  }
+
+  @ChatCommand({ triggers: ['reload'], usage: 'reload' })
+  reload = cmd().handle(() => 'ok')
+}
+```
+
+需要位置参数映射时，显式写 `.argv(map)`：
+
+```ts
+@ChatCommand({ localId: 'say', triggers: ['say'], usage: 'say [...text]' })
+say = cmd()
+  .argv((p) => ({ text: p._.join(' ') }))
+  .handle(({ text }) => text)
+```
+
+默认行为：
+- `@ChatCommand(...)`：默认 `perm=true`（等价于 `perm: true`），即自动绑定权限节点 `cmd.<localId>`。
+- `@ChatOp(...)`：默认 `perm=true`（等价于 `perm: true`）。
+- 如果不需要权限（例如公开指令 / 内置指令），显式写 `perm: false`。
+- auto-declare（当节点尚未声明时）：
+  - `declareExact(cmd.<localId>)`：默认效果由 Chatbots 配置 `cmdPermDefaultEffect` 控制（`allow|deny`）。
+  - `declareStar(cmd.* / cmd.<group>.*)`：由 `cmdPermAutoDeclareStars` 控制，用于批量 grant。
+
+可选：
+- `InstallChatCommands({ group: 'meme' })`：为该插件的指令打统一 group（用于帮助/浏览过滤）。
+- `InstallChatCommands({ scope: 'meme' })`：为 localId 自动加前缀（子命令写法），例如 `localId:'list'` => `meme.list`。
+
+可选：当某些指令依赖可选能力（feature flag / optional deps）时，可用 `enabled` 在 install 时跳过：
+
+```ts
+@ChatCommand({ localId: 'debug', enabled: (self) => Boolean((self as any).cfg.debug) })
+debug(c) { return c.argv().handle(() => 'ok') }
 ```
 
 相关文件：`core/commands/kit.ts`、`core/runtime/runtime.ts`、`core/plugin.ts`

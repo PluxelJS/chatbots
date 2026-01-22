@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer'
 
 import { BasePlugin, Plugin } from '@pluxel/hmr'
+import * as v from 'valibot'
 import {
 	mc,
 	p,
@@ -12,7 +13,7 @@ import {
 	type MentionPart,
 	type ResolvedAttachment,
 } from 'pluxel-plugin-bot-suite/core'
-import { Chatbots, type ChatbotsCommandContext } from 'pluxel-plugin-bot-suite'
+import { ChatCommand, Chatbots, type ChatbotsCommandContext, type CommandDraft } from 'pluxel-plugin-bot-suite'
 import { MemeWorker, type MemeMetadata } from 'pluxel-plugin-meme-worker/meme-worker'
 
 const LIST_PER_PAGE = 20
@@ -29,55 +30,90 @@ export class MemeTest extends BasePlugin {
 	}
 
 	override init(): void {
-		this.registerCommands()
+		this.registerPermissions()
+		this.chatbots.cmd.group('meme').install(this)
 		this.ctx.logger.info('ready')
 	}
 
-	private registerCommands() {
+	private registerPermissions() {
 		const permission = this.chatbots.permission
 		permission.declareStar('cmd.meme', { default: 'allow', description: 'Meme commands' })
-		const permList = permission.declareExact('cmd.meme.list', {
+		permission.declareExact('cmd.meme.list', {
 			default: 'allow',
 			description: 'List meme keys',
 		})
-		const permInfo = permission.declareExact('cmd.meme.info', {
+		permission.declareExact('cmd.meme.info', {
 			default: 'allow',
 			description: 'Show meme metadata',
 		})
-		const permMake = permission.declareExact('cmd.meme.make', {
+		permission.declareExact('cmd.meme.make', {
 			default: 'allow',
 			description: 'Render meme image',
 		})
+	}
 
-		this.chatbots.cmd.group('meme', (cmd) => {
-			cmd
-				.reg('meme list [query]')
-				.describe('List memes or search by keyword')
-				.perm(permList)
-				.action(({ query }) => this.listMemes(query))
-			// Convenience aliases (so `meme list.img` works without a space)
-			cmd
-				.reg('meme list.img')
-				.describe('Render meme list image')
-				.perm(permList)
-				.action(() => this.listMemes('img'))
-			cmd
-				.reg('meme list.image')
-				.describe('Render meme list image')
-				.perm(permList)
-				.action(() => this.listMemes('img'))
-			cmd
-				.reg('meme info <key>')
-				.describe('Show meme metadata')
-				.perm(permInfo)
-				.action(({ key }) => this.showInfo(key))
+	@ChatCommand({
+		localId: 'meme.list',
+		triggers: ['meme list'],
+		usage: 'meme list [query]',
+		description: 'List memes or search by keyword',
+		perm: 'cmd.meme.list',
+	})
+	private defineMemeList(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ query: v.optional(v.string()) }))
+			.argv((p) => ({ query: p._[0] }))
+			.handle(({ query }) => this.listMemes(query))
+	}
 
-			cmd
-				.reg('meme make <key> [...text]')
-				.describe('Render a meme (default: avatars, then attachments)')
-				.perm(permMake)
-				.action(({ key, text }, ctx) => this.renderMeme(key, text, ctx))
-		})
+	@ChatCommand({
+		localId: 'meme.list.img',
+		triggers: ['meme list.img'],
+		usage: 'meme list.img',
+		description: 'Render meme list image',
+		perm: 'cmd.meme.list',
+	})
+	private defineMemeListImg(c: CommandDraft<ChatbotsCommandContext>) {
+		return c.argv().handle(() => this.listMemes('img'))
+	}
+
+	@ChatCommand({
+		localId: 'meme.list.image',
+		triggers: ['meme list.image'],
+		usage: 'meme list.image',
+		description: 'Render meme list image',
+		perm: 'cmd.meme.list',
+	})
+	private defineMemeListImage(c: CommandDraft<ChatbotsCommandContext>) {
+		return c.argv().handle(() => this.listMemes('img'))
+	}
+
+	@ChatCommand({
+		localId: 'meme.info',
+		triggers: ['meme info'],
+		usage: 'meme info <key>',
+		description: 'Show meme metadata',
+		perm: 'cmd.meme.info',
+	})
+	private defineMemeInfo(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ key: v.string() }))
+			.argv((p) => ({ key: p._[0] }))
+			.handle(({ key }) => this.showInfo(key))
+	}
+
+	@ChatCommand({
+		localId: 'meme.make',
+		triggers: ['meme make'],
+		usage: 'meme make <key> [...text]',
+		description: 'Render a meme (default: avatars, then attachments)',
+		perm: 'cmd.meme.make',
+	})
+	private defineMemeMake(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ key: v.string(), text: v.array(v.string()) }))
+			.argv((p) => ({ key: p._[0], text: p._.slice(1) }))
+			.handle(({ key, text }, ctx) => this.renderMeme(key, text, ctx))
 	}
 
 	private async listMemes(query?: string): Promise<MessageContent> {

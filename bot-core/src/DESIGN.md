@@ -106,19 +106,12 @@ Telegram 特别说明：
 - `await collectMedia(msg, { includeAvatars: true, avatarPrefer: 'public' })`
 - `await resolveMedia(items, { concurrency: 4, signal })`
 
-## Commands（Command Bus / Command Kit）
+## Commands（Schema-first + Text Routing）
 
-bot-core 提供一套轻量命令系统，用于把文本（例如 `/help foo`）路由到 handler：
+命令体系已抽离为独立包 `@pluxel/cmd`（cmdkit）；bot-core 的 `src/cmd` 仅做 re-export（便于 bot 侧组合）。
 
-- `createCommandBus()`：输入字符串 -> 分词 -> 最长匹配 -> 执行
-  - `dispatch(input, ctx)`：未命中返回 `undefined`
-  - `dispatchDetailed(input, ctx)`：可区分 “未命中” 与 “命中但 handler 返回 void”
-  - `match(input)`：只做最长匹配，不执行（用于 help / autocomplete / 预检）
-- `createCommandKit(bus, { plugins })`：更适合声明式注册
-  - `.reg(pattern).alias().describe().meta().use().action()`
-  - `plugins` 用于扩展 builder（例如在上层实现 `.perm(...)` / `.rates(...)` 这类语义），核心只承载 `meta + middleware` 原语，不固化策略。
+- `cmd(id)`：唯一 builder，最终 `.build()` 得到 `Executable`
+- `createRouter()`：文本路由（最长匹配），`router.dispatch(text, ctx?)` 负责选择并执行
+- chat 层：`createChatCommandRouter()` + `handleChatCommand()` 负责解析 `/cmd args` 并执行（unknown command 通过 `CmdError(code=E_CMD_NOT_FOUND)` 判断）
 
-设计原则：
-
-- **匹配是纯路由**：策略（权限/限速/审计/埋点）在 “已命中命令” 后通过 middleware 实现
-- **扩展靠插件**：通过 TypeScript 声明合并扩展 `CommandMetaExt`，让上层语义既类型自然又不污染核心
+更完整的设计与示例见 `src/cmd/design.md` 与 `packages/cmd/DESIGN.md`。

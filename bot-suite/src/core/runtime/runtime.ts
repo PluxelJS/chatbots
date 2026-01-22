@@ -3,8 +3,6 @@ import type { Context } from '@pluxel/hmr'
 import { MikroOrm } from 'pluxel-plugin-mikro-orm'
 
 import {
-	CommandError,
-	getCommandMeta,
 	hasRichParts,
 	parseChatCommandText,
 	normalizeReplyPayload,
@@ -13,25 +11,31 @@ import {
 import type {
 	AnyMessage,
 	BotCore,
-	CommandKit,
 	MessageContent,
 	Part,
 	Platform,
 	SandboxSession,
 } from 'pluxel-plugin-bot-core'
+import { CmdError, isErr } from '@pluxel/cmd'
 
 import { UserDirectory } from '../users/directory'
 import { PermissionService } from '../../permissions/service'
-import { createPermissionCommandKit, type CommandKit as PermCommandKit } from '../commands/kit'
+import { createPermissionCommandKit, type CommandKit as ChatbotsCommandKit } from '../commands/kit'
+import { ChatCommand } from '../commands/decorators'
 import { createPermissionApi, type ChatbotsPermissionApi } from '../../permissions/permission'
 import type { ChatbotsCommandContext } from '../types'
 import { CommandRegistry } from './command-registry'
 import type { Rates } from 'pluxel-plugin-kv'
+import * as v from 'valibot'
+import type { CommandDraft } from '../commands/draft'
 
 export interface ChatbotsRuntimeOptions {
 	cmdPrefix: string
 	debug: boolean
 	devCommands: boolean
+	cmdPermDefaultEffect: 'allow' | 'deny'
+	cmdPermAutoDeclare: boolean
+	cmdPermAutoDeclareStars: boolean
 	userCacheTtlMs: number
 	userCacheMax: number
 	linkTokenTtlSeconds: number
@@ -42,7 +46,7 @@ export class ChatbotsRuntime {
 	public readonly users: UserDirectory
 	public readonly permissions: PermissionService
 	public readonly permission: ChatbotsPermissionApi
-	public readonly cmd: PermCommandKit<ChatbotsCommandContext>
+	public readonly cmd: ChatbotsCommandKit<ChatbotsCommandContext>
 
 	private readonly registry = new CommandRegistry<ChatbotsCommandContext>({ caseInsensitive: true })
 	private disposed = false
@@ -61,10 +65,15 @@ export class ChatbotsRuntime {
 		this.users = users
 		this.permissions = permissions
 		this.permission = createPermissionApi(this.permissions)
-		this.cmd = createPermissionCommandKit(this.registry.bus, this.permissions, {
+		this.cmd = createPermissionCommandKit(this.registry, this.permissions, {
+			owner: this.ctx,
 			scopeKey: this.ctx.pluginInfo?.id ?? 'bot-suite',
 			rates: this.rates,
-			onRegister: (cmd) => this.registry.registerCommandCleanup(cmd, this.ctx),
+			permDefaults: {
+				defaultEffect: this.options.cmdPermDefaultEffect,
+				autoDeclare: this.options.cmdPermAutoDeclare,
+				autoDeclareStars: this.options.cmdPermAutoDeclareStars,
+			},
 		})
 		this.disposeEntities = disposeEntities
 	}
@@ -89,9 +98,7 @@ export class ChatbotsRuntime {
 
 	bootstrap() {
 		this.registerCommandPipeline()
-		this.registerCoreCommands()
-		if (this.options.devCommands) this.registerDevCommands()
-		if (this.options.registerUserCommands) this.registerUserCommands()
+		this.registerBuiltinCommands()
 	}
 
 	async dispatchSandboxMessage(msg: AnyMessage): Promise<void> {
@@ -101,13 +108,18 @@ export class ChatbotsRuntime {
 		await this.dispatchCommand(parsed.input, msg)
 	}
 
-	getCommandKit(caller?: Context): PermCommandKit<ChatbotsCommandContext> {
+	getCommandKit(caller?: Context): ChatbotsCommandKit<ChatbotsCommandContext> {
 		const ctx = caller ?? this.ctx
 		return this.registry.getOrCreateKit(ctx, (ownerCtx) =>
-			createPermissionCommandKit(this.registry.bus, this.permissions, {
+			createPermissionCommandKit(this.registry, this.permissions, {
+				owner: ownerCtx,
 				scopeKey: ownerCtx.pluginInfo?.id ?? this.ctx.pluginInfo?.id ?? 'bot-suite',
 				rates: this.rates,
-				onRegister: (cmd) => this.registry.registerCommandCleanup(cmd, ownerCtx),
+				permDefaults: {
+					defaultEffect: this.options.cmdPermDefaultEffect,
+					autoDeclare: this.options.cmdPermAutoDeclare,
+					autoDeclareStars: this.options.cmdPermAutoDeclareStars,
+				},
 			}),
 		)
 	}
@@ -193,21 +205,32 @@ export class ChatbotsRuntime {
 	}
 
 	private async dispatchCommand(body: string, msg: AnyMessage): Promise<void> {
+		const { user, identity } = await this.users.ensureUserForMessage(msg)
+		const ctx: ChatbotsCommandContext = { msg, user, identity }
+
 		try {
-			const { user, identity } = await this.users.ensureUserForMessage(msg)
-			const ctx: ChatbotsCommandContext = { msg, user, identity }
-			const dispatched = await this.registry.bus.dispatchDetailed(body, ctx)
-			if (!dispatched.matched || this.disposed) return
-			const result = dispatched.result
+			const dispatched = await this.registry.router.dispatch(body, ctx)
+			if (this.disposed) return
+			if (isErr(dispatched)) {
+				const err = dispatched.err
+				if (err instanceof CmdError && err.code === 'E_CMD_NOT_FOUND') return
+				this.ctx.logger.warn('command error', { err, id: (err.details as any)?.id })
+				await this.safeReply(msg, err.publicMessage)
+				return
+			}
+
+			const result = dispatched.val
 			if (result === undefined) return
 			await this.safeReply(msg, result)
 		} catch (e) {
-			if (e instanceof CommandError) {
-				await this.safeReply(msg, e.message)
-				return
-			}
-			const error = e instanceof Error ? e : new Error(String(e))
-			this.ctx.logger.warn('command dispatch failed', { error })
+			if (this.disposed) return
+			if (e instanceof CmdError && e.code === 'E_CMD_NOT_FOUND') return
+			const err =
+				e instanceof CmdError
+					? e
+					: new CmdError('E_INTERNAL', 'Command failed', { message: (e as any)?.message ?? 'Command failed', cause: e })
+			this.ctx.logger.warn('command error', { err, id: (err.details as any)?.id })
+			await this.safeReply(msg, err.publicMessage)
 		}
 	}
 
@@ -273,162 +296,215 @@ export class ChatbotsRuntime {
 		return [`Prefix: ${prefix}`, ...lines].join('\n')
 	}
 
-	private findCommand(name: string) {
-		const normalized = name.trim().toLowerCase()
-		if (!normalized) return undefined
-		return this.cmd.list().find((c) => c.nameTokens.join(' ').toLowerCase() === normalized)
+	private registerBuiltinCommands() {
+		this.cmd.install(this)
 	}
 
-	private hasGroup(name: string): boolean {
-		const normalized = name.trim()
-		if (!normalized) return false
-		for (const cmd of this.cmd.list()) {
-			const meta = getCommandMeta(cmd)
-			if (meta?.group === normalized) return true
-		}
-		return false
+	@ChatCommand({
+		localId: 'help',
+		group: 'core',
+		triggers: ['help'],
+		usage: 'help [command]',
+		description: '查看帮助',
+		perm: false,
+	})
+	private defineCoreHelp(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ command: v.optional(v.string()) }))
+			.argv((p) => ({ command: p._[0] }))
+			.handle(({ command }) => {
+				const prefix = this.getCmdPrefix()
+				const list = this.cmd.list()
+				if (!command) return this.formatHelp(prefix)
+				const normalized = command.trim().toLowerCase()
+				const found = list.find(
+					(c) => c.name.toLowerCase() === normalized || c.aliases.some((a) => a.toLowerCase() === normalized),
+				)
+				if (found) return `${prefix}${found.usage ?? found.name}`
+				const hasGroup = list.some((c) => (c.group ?? '').toLowerCase() === normalized)
+				if (hasGroup) return this.formatHelp(prefix, command)
+				return `Unknown command: ${command}\n\n${this.formatHelp(prefix)}`
+			})
 	}
 
-	private registerCoreCommands() {
-		const prefix = this.getCmdPrefix()
+	@ChatCommand({
+		localId: 'info',
+		group: 'core',
+		triggers: ['info', 'about', 'status'],
+		usage: 'info [platform]',
+		description: '当前平台抽象信息',
+		perm: false,
+	})
+	private defineCoreInfo(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ platform: v.optional(v.string()) }))
+			.argv((p) => ({ platform: p._[0] }))
+			.handle(({ platform }, ctx) => {
+				const prefix = this.getCmdPrefix()
+				const target = String(platform ?? ctx.msg.platform)
+				const adapterList = this.bot.adapters.list()
+				const adapters = adapterList.map((a) => ({
+					platform: a.name,
+					policy: a.policy,
+				}))
 
-		this.cmd.group('core', (cmd) => {
-			cmd
-				.reg('help [command]')
-				.describe('查看帮助')
-				.action(({ command }) => {
-					if (!command) return this.formatHelp(prefix)
-					const found = this.findCommand(command)
-					if (found) return `${prefix}${found.toUsage()}`
-					if (this.hasGroup(command)) return this.formatHelp(prefix, command)
-					return `Unknown command: ${command}\n\n${this.formatHelp(prefix)}`
+				const normalized = target.toLowerCase()
+				const adapter = adapterList.find((a) => String(a.name).toLowerCase() === normalized)
+				if (!adapter) {
+					const names = adapterList.map((a) => a.name).join(', ')
+					return `Unknown platform: ${target}. Available: ${names}`
+				}
+
+				const snapshot = this.bot.bridgeStatus
+				const bridgeStatus = snapshot.bridges.find((b) => b.platform === adapter.name) ?? null
+				const hasBridgeDefinition = Boolean(this.bot.bridges.get(adapter.name as any))
+
+				return this.buildJsonBlock({
+					runtime: {
+						cmdPrefix: prefix,
+						debug: Boolean(this.options.debug),
+						devCommands: this.options.devCommands,
+					},
+					target: {
+						platform: adapter.name,
+						policy: adapter.policy,
+						bridgeStatus,
+						hasBridgeDefinition,
+					},
+					registered: {
+						adapters,
+						bridges: this.bot.bridges.list().map((b) => b.platform),
+						status: snapshot,
+					},
+					message: this.summarizeMessage(ctx.msg as AnyMessage),
 				})
+			})
+	}
 
-			cmd
-				.reg('info [platform]')
-				.describe('当前平台抽象信息')
-				.alias('about', 'status')
-				.action(({ platform }, ctx) => {
-					const target = String(platform ?? ctx.msg.platform)
-					const adapters = this.bot.adapters.list().map((a) => ({
-						platform: a.name,
-						policy: a.policy,
-					}))
+	@ChatCommand({
+		localId: 'echo',
+		group: 'dev',
+		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
+		triggers: ['echo'],
+		usage: 'echo',
+		description: '原样复读当前消息（parts）',
+		perm: false,
+	})
+	private defineDevEcho(c: CommandDraft<ChatbotsCommandContext>) {
+		return c.argv().handle((_input, ctx) => (ctx.msg.parts.length ? ctx.msg.parts : ctx.msg.text || '[empty]'))
+	}
 
-					const adapter = this.bot.adapters
-						.list()
-						.find((a) => String(a.name).toLowerCase() === target.toLowerCase())
-					if (!adapter) {
-						const names = this.bot.adapters.list().map((a) => a.name).join(', ')
-						return `Unknown platform: ${target}. Available: ${names}`
-					}
-
-					const snapshot = this.bot.bridgeStatus
-					const bridgeStatus = snapshot.bridges.find((b) => b.platform === adapter.name) ?? null
-					const hasBridgeDefinition = Boolean(this.bot.bridges.get(adapter.name as any))
-
-					return this.buildJsonBlock({
-						runtime: {
-							cmdPrefix: prefix,
-							debug: Boolean(this.options.debug),
-							devCommands: this.options.devCommands,
-						},
-						target: {
-							platform: adapter.name,
-							policy: adapter.policy,
-							bridgeStatus,
-							hasBridgeDefinition,
-						},
-						registered: {
-							adapters,
-							bridges: this.bot.bridges.list().map((b) => b.platform),
-							status: snapshot,
-						},
-						message: this.summarizeMessage(ctx.msg as AnyMessage),
-					})
+	@ChatCommand({
+		localId: 'parts',
+		group: 'dev',
+		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
+		triggers: ['parts'],
+		usage: 'parts [ref|msg]',
+		description: '返回解析后的 parts JSON（默认优先引用消息）',
+		perm: false,
+	})
+	private defineDevParts(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ scope: v.optional(v.string()) }))
+			.argv((p) => ({ scope: p._[0] }))
+			.handle(({ scope }, ctx) => {
+				const mode = String(scope ?? '').trim().toLowerCase()
+				const hasRef = Boolean(ctx.msg.reference?.parts?.length)
+				const useRef = mode ? mode === 'ref' : hasRef
+				const target = useRef ? ctx.msg.reference : undefined
+				const parts = target?.parts?.length ? target.parts : ctx.msg.parts
+				const hint =
+					!hasRef && !mode
+						? 'Tip: reply/quote a message then run /parts to inspect ctx.msg.reference.parts'
+						: undefined
+				return this.buildJsonBlock({
+					target: useRef && target ? 'reference' : 'message',
+					platform: ctx.msg.platform,
+					renderedText: this.renderPartsForMessage(parts, ctx.msg as AnyMessage),
+					hint,
+					parts,
 				})
+			})
+	}
+
+	@ChatCommand({
+		localId: 'meta',
+		group: 'dev',
+		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
+		triggers: ['meta'],
+		usage: 'meta',
+		description: '返回基础元信息/附件摘要',
+		perm: false,
+	})
+	private defineDevMeta(c: CommandDraft<ChatbotsCommandContext>) {
+		return c.argv().handle((_input, ctx) => this.buildJsonBlock(this.summarizeMessage(ctx.msg)))
+	}
+
+	@ChatCommand({
+		localId: 'say',
+		group: 'dev',
+		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
+		triggers: ['say'],
+		usage: 'say [...text]',
+		description: '直接回复文本',
+		perm: false,
+	})
+	private defineDevSay(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ text: v.array(v.string()) }))
+			.argv((p) => ({ text: p._ }))
+			.handle(({ text }) => {
+				if (!text?.length) return undefined
+				return text.join(' ')
+			})
+	}
+
+	@ChatCommand({
+		localId: 'user.me',
+		group: 'user',
+		enabled: (rt) => (rt as ChatbotsRuntime).options.registerUserCommands,
+		triggers: ['user me'],
+		usage: 'user me',
+		description: '查看当前跨平台用户信息',
+		perm: false,
+	})
+	private defineUserMe(c: CommandDraft<ChatbotsCommandContext>) {
+		return c.argv().handle((_input, ctx) => {
+			const pairs = ctx.user.identities.map((i) => `${i.platform}:${i.platformUserId}`).join(', ')
+			return `uid=${ctx.user.id}\nidentities=${pairs || '[none]'}`
 		})
 	}
 
-	private registerDevCommands() {
-		this.cmd.group('dev', (cmd) => {
-			cmd
-				.reg('echo')
-				.describe('原样复读当前消息（parts）')
-				.action((_argv, ctx) => (ctx.msg.parts.length ? ctx.msg.parts : ctx.msg.text || '[empty]'))
-
-			cmd
-				.reg('parts [scope]')
-				.describe('返回解析后的 parts JSON（默认优先引用消息）')
-				.usage('parts [ref|msg]')
-				.action(({ scope }, ctx) => {
-					const mode = String(scope ?? '').trim().toLowerCase()
-					const hasRef = Boolean(ctx.msg.reference?.parts?.length)
-					const useRef = mode ? mode === 'ref' : hasRef
-					const target = useRef ? ctx.msg.reference : undefined
-					const parts = target?.parts?.length ? target.parts : ctx.msg.parts
-					const hint =
-						!hasRef && !mode
-							? 'Tip: reply/quote a message then run /parts to inspect ctx.msg.reference.parts'
-							: undefined
-					return this.buildJsonBlock({
-						target: useRef && target ? 'reference' : 'message',
-						platform: ctx.msg.platform,
-						renderedText: this.renderPartsForMessage(parts, ctx.msg as AnyMessage),
-						hint,
-						parts,
-					})
-				})
-
-			cmd
-				.reg('meta')
-				.describe('返回基础元信息/附件摘要')
-				.action((_argv, ctx) => this.buildJsonBlock(this.summarizeMessage(ctx.msg)))
-
-			cmd
-				.reg('say [...text]')
-				.describe('直接回复文本')
-				.action(({ text }) => {
-					if (!text?.length) return undefined
-					return text.join(' ')
-				})
-		})
-	}
-
-	private registerUserCommands() {
-		this.cmd.group('user', (cmd) => {
-			cmd
-				.reg('user me')
-				.describe('查看当前跨平台用户信息')
-				.action((_argv, ctx) => {
-					const pairs = ctx.user.identities
-						.map((i) => `${i.platform}:${i.platformUserId}`)
-						.join(', ')
-					return `uid=${ctx.user.id}\nidentities=${pairs || '[none]'}`
-				})
-
-			cmd
-				.reg('user link [code]')
-				.describe('生成/使用绑定码，用于跨平台绑定同一用户')
-				.usage('user link [CODE]')
-				.action(async ({ code }, ctx) => {
-					if (!code) {
-						const { code: created, expiresAt } = await this.users.createLinkToken(
-							ctx.user.id,
-							this.options.linkTokenTtlSeconds,
-						)
-						const secs = Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
-						return `Link code: ${created}\nExpires in ~${secs}s\n\nRun on another platform: ${this.getCmdPrefix()}user link ${created}`
-					}
-
-					const res = await this.users.consumeLinkToken(
-						String(code).trim().toUpperCase(),
-						ctx.identity.platform,
-						ctx.identity.platformUserId,
+	@ChatCommand({
+		localId: 'user.link',
+		group: 'user',
+		enabled: (rt) => (rt as ChatbotsRuntime).options.registerUserCommands,
+		triggers: ['user link'],
+		usage: 'user link [CODE]',
+		description: '生成/使用绑定码，用于跨平台绑定同一用户',
+		perm: false,
+	})
+	private defineUserLink(c: CommandDraft<ChatbotsCommandContext>) {
+		return c
+			.input(v.object({ code: v.optional(v.string()) }))
+			.argv((p) => ({ code: p._[0] }))
+			.handle(async ({ code }, ctx) => {
+				if (!code) {
+					const { code: created, expiresAt } = await this.users.createLinkToken(
+						ctx.user.id,
+						this.options.linkTokenTtlSeconds,
 					)
-					if (!res.ok) return res.message
-					return `Linked. uid=${res.userId}`
-				})
-		})
+					const secs = Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000))
+					return `Link code: ${created}\nExpires in ~${secs}s\n\nRun on another platform: ${this.getCmdPrefix()}user link ${created}`
+				}
+
+				const res = await this.users.consumeLinkToken(
+					String(code).trim().toUpperCase(),
+					ctx.identity.platform,
+					ctx.identity.platformUserId,
+				)
+				if (!res.ok) return res.message
+				return `Linked. uid=${res.userId}`
+			})
 	}
 }

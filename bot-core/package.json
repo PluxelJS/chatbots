@@ -18,12 +18,13 @@
     "test:src": "bun test src",
     "test": "pnpm test:parts && pnpm test:src"
   },
-  "dependencies": {
-    "pluxel-plugin-kook": "workspace:^",
-    "pluxel-plugin-milky": "workspace:^",
-    "pluxel-plugin-telegram": "workspace:^",
-    "type-flag": "^4.0.2"
-  },
+	"dependencies": {
+		"@pluxel/cmd": "workspace:^",
+		"pluxel-plugin-kook": "workspace:^",
+		"pluxel-plugin-milky": "workspace:^",
+		"pluxel-plugin-telegram": "workspace:^",
+		"valibot": "^1.2.0"
+	},
   "exports": {
     ".": {
       "@pluxel/hmr": "./src/index.ts",

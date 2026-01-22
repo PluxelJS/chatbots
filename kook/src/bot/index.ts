@@ -26,7 +26,7 @@ export class Bot extends AbstractBot {
 	private status: KookBotStatus
 	private readonly mode: 'gateway' | 'webhook' | 'api'
 	private readonly onStatusChange?: (status: KookBotStatus) => void
-	private readonly logger: Context['logger']
+	private readonly logger: ReturnType<Context['logger']['with']>
 
 	private static seq = 0
 

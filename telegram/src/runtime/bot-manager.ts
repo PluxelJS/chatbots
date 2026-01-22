@@ -19,7 +19,7 @@ export class TelegramBotManager {
 	private readonly botsByToken = new Map<string, Bot>()
 	private readonly webhookBotsByToken = new Map<string, Bot>()
 	public readonly events: TelegramChannel
-	private readonly logger: Context['logger']
+	private readonly logger: ReturnType<Context['logger']['with']>
 
 	constructor(
 		private readonly ctx: Context,
@@ -109,8 +109,22 @@ export class TelegramBotManager {
 			return { id, status: doc.state }
 		}
 
-		await this.repo.update(id, { state: 'authenticating', stateMessage: '正在启动', lastError: undefined })
-		const token = await this.repo.getToken(id)
+		let token: string
+		try {
+			token = await this.repo.getToken(id)
+		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e)
+			await this.repo.update(id, {
+				state: 'error',
+				stateMessage: 'Token 缺失（请重新添加 bot）',
+				lastError: message,
+				connectedAt: undefined,
+				secure: false,
+			})
+			throw e
+		}
+
+		await this.repo.update(id, { state: 'authenticating', stateMessage: '正在启动', lastError: undefined, secure: true })
 		const config = this.toBotConfig(doc, token)
 
 		if (doc.mode === 'webhook' && !config.webhook?.url) {

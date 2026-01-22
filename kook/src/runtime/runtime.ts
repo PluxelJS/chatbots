@@ -17,7 +17,7 @@ export class KookRuntime {
 	public baseClient!: HttpClient
 
 	private ctx!: Context
-	private logger!: Context['logger']
+	private logger!: ReturnType<Context['logger']['with']>
 	private config!: Config<KookConfigType>
 	private repo!: KookBotRegistry
 	public manager!: KookBotManager
@@ -131,7 +131,7 @@ export class KookRuntime {
 		if (this.config.autoConnect === false) return
 		await this.repo.whenReady()
 		if (this.abort?.aborted) return
-		const bots = this.repo.list(128)
+		const bots = this.repo.list(128).filter((b) => b.secure !== false)
 		if (bots.length === 0) return
 		await Promise.allSettled(
 			bots.map(async (b) => {
@@ -139,6 +139,10 @@ export class KookRuntime {
 					await this.manager.connectBot(b.id)
 				} catch (e) {
 					const error = e instanceof Error ? e : new Error(String(e))
+					if (error.message.includes('token 缺失') || error.message.includes('vault 中未找到')) {
+						this.logger.info('autoConnect skipped (missing token) for {id}', { id: b.id })
+						return
+					}
 					this.logger.warn('autoConnect failed for {id}', { id: b.id, error })
 				}
 			}),

@@ -493,7 +493,8 @@ function CommandPicker({ commands, cmdPrefix, opened, onClose, onSelect }: Comma
 				c.name.toLowerCase().includes(q) ||
 				c.aliases.some((a) => a.toLowerCase().includes(q)) ||
 				c.desc?.toLowerCase().includes(q) ||
-				c.group?.toLowerCase().includes(q),
+				c.group?.toLowerCase().includes(q) ||
+				c.permNode?.toLowerCase().includes(q),
 		)
 	}, [commands, search])
 
@@ -578,6 +579,11 @@ function CommandPicker({ commands, cmdPrefix, opened, onClose, onSelect }: Comma
 													{cmd.desc && (
 														<Text size="xs" c="dimmed">
 															{cmd.desc}
+														</Text>
+													)}
+													{cmd.permNode && (
+														<Text size="xs" c="dimmed" style={{ fontFamily: 'monospace' }}>
+															perm: {cmd.permNode}
 														</Text>
 													)}
 												</Box>

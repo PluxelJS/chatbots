@@ -21,8 +21,13 @@
   "scripts": {
     "build": "pluxel build"
   },
+  "dependencies": {
+    "valibot": "^1.2.0"
+  },
   "peerDependencies": {
+    "pluxel-plugin-bot-core": "workspace:*",
     "pluxel-plugin-bot-suite": "workspace:*",
+    "@pluxel/cmd": "workspace:*",
     "pluxel-plugin-meme-worker": "workspace:*"
   },
   "pluxel": {

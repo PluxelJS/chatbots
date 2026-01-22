@@ -10,6 +10,7 @@ export type SandboxCommand = {
 	aliases: string[]
 	desc?: string
 	group?: string
+	permNode?: string
 }
 
 export type SandboxPart = Part extends infer P

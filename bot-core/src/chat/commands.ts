@@ -1,14 +1,16 @@
 import type { AnyMessage, Part, ReplyOptions, ReplyPayload } from '../types'
-import type { Awaitable, CommandBus } from '../cmd'
-import { CommandError, createCommandBus } from '../cmd'
+import type { ExecCtx, Router } from '../cmd'
+import { CmdError, createRouter, isErr } from '../cmd'
 import { normalizeReplyPayload } from '../outbound/payload'
 
+type Awaitable<T> = T | Promise<T>
+
 /**
- * Chat command helpers built on top of `createCommandBus`.
+ * Chat command helpers built on top of `createRouter`.
  *
  * - Parses `/cmd args` style input from `msg.textRaw` / `msg.text`
  * - Supports Telegram-style `/cmd@botname` stripping
- * - Supports "void result but still handled" via `dispatchDetailed` (no ambiguity with unknown commands)
+ * - Distinguishes unknown commands via `CmdError(code=E_CMD_NOT_FOUND)`
  * - Allows explicitly passing through via `CHAT_COMMAND_PASS`
  */
 export const CHAT_COMMAND_PASS = Symbol.for('pluxel:chat-command:pass')
@@ -19,8 +21,6 @@ export type ChatCommandResult =
 	| string
 	| void
 	| typeof CHAT_COMMAND_PASS
-
-export type ChatCommandBus = CommandBus<AnyMessage>
 
 export type ParsedChatCommand = {
 	/** Original message text (trimmed) */
@@ -44,12 +44,22 @@ export type HandleChatCommandOptions = {
 	autoReply?: boolean
 	/** Forwarded to `msg.reply(...)` when auto replying */
 	replyOptions?: ReplyOptions
+	/**
+	 * Customize the execution ctx passed to command middlewares/handlers.
+	 *
+	 * Default: `{ msg, actorId, traceId, now }`.
+	 */
+	makeCtx?: (msg: AnyMessage) => ChatCommandCtx
 	/** Customize error-to-reply mapping */
-	formatError?: (err: CommandError, msg: AnyMessage) => Awaitable<ChatCommandResult>
+	formatError?: (err: CmdError, msg: AnyMessage) => Awaitable<ChatCommandResult>
 }
 
-export const createChatCommandBus = (opts?: { caseInsensitive?: boolean }): ChatCommandBus =>
-	createCommandBus<AnyMessage>({ caseInsensitive: opts?.caseInsensitive ?? true })
+export type ChatCommandCtx<M extends AnyMessage = AnyMessage> = ExecCtx & { msg: M }
+
+export type ChatCommandRouter<M extends AnyMessage = AnyMessage> = Router
+
+export const createChatCommandRouter = (opts?: { caseInsensitive?: boolean }): ChatCommandRouter =>
+	createRouter({ caseInsensitive: opts?.caseInsensitive ?? true })
 
 export const parseChatCommandText = (
 	text: string | null | undefined,
@@ -85,11 +95,11 @@ export type HandleChatCommandResult =
 	| { handled: false; kind: 'not_command' | 'unknown_command'; parsed?: ParsedChatCommand }
 	| { handled: false; kind: 'passed_through'; parsed: ParsedChatCommand }
 	| { handled: true; kind: 'handled'; parsed: ParsedChatCommand; result?: ChatCommandResult }
-	| { handled: true; kind: 'error'; parsed: ParsedChatCommand; error: CommandError }
+	| { handled: true; kind: 'error'; parsed: ParsedChatCommand; error: CmdError }
 
 export const handleChatCommand = async (
 	msg: AnyMessage,
-	bus: ChatCommandBus,
+	router: ChatCommandRouter,
 	opts?: HandleChatCommandOptions,
 ): Promise<HandleChatCommandResult> => {
 	const autoReply = opts?.autoReply ?? true
@@ -97,23 +107,48 @@ export const handleChatCommand = async (
 	const parsed = parseChatCommandText(msg.textRaw ?? msg.text, opts)
 	if (!parsed) return { handled: false, kind: 'not_command' }
 
-	try {
-		const dispatched = await bus.dispatchDetailed(parsed.input, msg)
-		if (!dispatched.matched) return { handled: false, kind: 'unknown_command', parsed }
+	const defaultCtx: ChatCommandCtx = {
+		msg,
+		actorId: msg.user?.id !== undefined && msg.user?.id !== null ? String(msg.user.id) : undefined,
+		traceId: msg.messageId !== null ? `${msg.platform}:${String(msg.messageId)}` : undefined,
+		now: Date.now(),
+	}
+	const ctx = opts?.makeCtx ? opts.makeCtx(msg) : defaultCtx
 
-		const result = dispatched.result as ChatCommandResult
+	try {
+		const dispatched = await router.dispatch(parsed.input, ctx)
+		if (isErr(dispatched)) {
+			const err = dispatched.err
+			if (err instanceof CmdError && err.code === 'E_CMD_NOT_FOUND') {
+				return { handled: false, kind: 'unknown_command', parsed }
+			}
+			if (autoReply) {
+				const out = opts?.formatError ? await opts.formatError(err, msg) : err.publicMessage
+				const payload = toReplyPayload(out)
+				if (payload) await msg.reply(payload, opts?.replyOptions)
+			}
+			return { handled: true, kind: 'error', parsed, error: err }
+		}
+
+		const result = dispatched.val as ChatCommandResult
 		if (result === CHAT_COMMAND_PASS) return { handled: false, kind: 'passed_through', parsed }
 
 		if (autoReply) {
-			const payload = toReplyPayload(result)
+			const payload = toReplyPayload(result as ChatCommandResult)
 			if (payload) await msg.reply(payload, opts?.replyOptions)
 		}
 
-		return { handled: true, kind: 'handled', parsed, result }
+		return { handled: true, kind: 'handled', parsed, result: result as ChatCommandResult }
 	} catch (e) {
-		const err = e instanceof CommandError ? e : new CommandError((e as any)?.message ?? 'Command failed')
+		const err =
+			e instanceof CmdError
+				? e
+				: new CmdError('E_INTERNAL', 'Command failed', {
+						message: (e as any)?.message ?? 'Command failed',
+						cause: e,
+					})
 		if (autoReply) {
-			const out = opts?.formatError ? await opts.formatError(err, msg) : String(err.message)
+			const out = opts?.formatError ? await opts.formatError(err, msg) : err.publicMessage
 			const payload = toReplyPayload(out)
 			if (payload) await msg.reply(payload, opts?.replyOptions)
 		}

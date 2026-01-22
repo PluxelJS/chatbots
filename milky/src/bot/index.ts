@@ -38,7 +38,7 @@ export class MilkyBot extends AbstractBot {
 
 	private readonly baseUrl: string
 	private readonly instanceId: string
-	private readonly logger: Context['logger']
+	private readonly logger: ReturnType<Context['logger']['with']>
 
 	private abort?: AbortController
 	private running = false

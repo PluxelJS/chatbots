@@ -44,6 +44,11 @@
     "test:core": "bun test --conditions=@pluxel/hmr src/core/commands",
     "test:perm": "bun test --conditions=@pluxel/hmr src/permissions"
   },
+  "dependencies": {
+    "@mikro-orm/libsql": "^6.6.3",
+    "@pluxel/cmd": "workspace:*",
+    "valibot": "^1.2.0"
+  },
   "peerDependencies": {
     "pluxel-plugin-bot-core": "workspace:*",
     "pluxel-plugin-kook": "workspace:^",

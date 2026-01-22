@@ -283,3 +283,7 @@ build/
 
 # Build cache manifests
 *.tsbuildinfo
+
+# Local plugin runtime data (not source-controlled)
+bot-suite/data/
+bot-suite/data/*.sqlite

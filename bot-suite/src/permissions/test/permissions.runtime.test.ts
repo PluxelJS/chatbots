@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'bun:test'
 
 import { rm } from 'node:fs/promises'
+import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
@@ -302,18 +303,23 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 	})
 })
 
-async function withPermissionsHost(
-	plugins: any[],
-	fn: (ctx: { host: any; perms: PermissionsHost }) => Promise<void>,
-): Promise<void> {
-	const dbName = path.join(process.cwd(), 'data', `permissions-${randomUUID()}.sqlite`)
-	try {
-		await withTestHost(async (host) => {
-			host.registerAll(MikroOrmLibsql, PermissionsHost, ...plugins)
+	async function withPermissionsHost(
+		plugins: any[],
+		fn: (ctx: { host: any; perms: PermissionsHost }) => Promise<void>,
+	): Promise<void> {
+		const dataDir = path.join(process.cwd(), 'data')
+		await mkdir(dataDir, { recursive: true })
+		const dbName = path.join(dataDir, `permissions-${randomUUID()}.sqlite`)
+		try {
+			await withTestHost(async (host) => {
+				const cfg = host.ctx.configService as unknown as { ready?: Promise<void> }
+				if (cfg.ready) await cfg.ready
 
-			host.setConfig('MikroOrm', { config: { dbName, ensureSchemaOnInit: true } })
+				host.registerAll(MikroOrmLibsql, PermissionsHost, ...plugins)
 
-			await host.commitStrict()
+				host.setConfig('MikroOrm', { config: { dbName, ensureSchemaOnInit: true } })
+
+				await host.commitStrict()
 			await waitForRunning(host, PermissionsHost, 10_000)
 
 			const perms = host.getOrThrow(PermissionsHost)

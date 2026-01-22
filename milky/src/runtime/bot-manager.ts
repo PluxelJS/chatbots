@@ -16,7 +16,7 @@ export class MilkyBotManager {
 	public readonly events: MilkyChannel
 	private readonly enableStatusPersistence: boolean
 	private readonly statusDebounceMs: number
-	private readonly logger: Context['logger']
+	private readonly logger: ReturnType<Context['logger']['with']>
 	private readonly pendingStatus = new Map<
 		string,
 		{ timer: ReturnType<typeof setTimeout> | null; patch: Partial<MilkyBotRecord> }
@@ -86,6 +86,19 @@ export class MilkyBotManager {
 		}
 
 		const accessToken = await this.repo.getAccessToken(id)
+		if (doc.secure && !accessToken) {
+			if (this.enableStatusPersistence) {
+				await this.repo.update(id, {
+					state: 'error',
+					stateMessage: 'Token 缺失（请重新添加 bot）',
+					lastError: 'Milky bot accessToken 缺失（vault 中未找到）',
+					connectedAt: undefined,
+					secure: false,
+					tokenPreview: '—',
+				})
+			}
+			throw new Error('Milky bot accessToken 缺失（vault 中未找到），请重新添加 bot')
+		}
 		const bot = new MilkyBot(
 			this.baseClient,
 			{ baseUrl: doc.baseUrl, accessToken: accessToken || undefined },

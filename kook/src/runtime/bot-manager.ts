@@ -19,7 +19,7 @@ export class KookBotManager {
 	private readonly botInstances = new Map<string, Bot>()
 	private readonly botsByVerify = new Map<string, Bot>()
 	public readonly events: KookChannel
-	private readonly logger: Context['logger']
+	private readonly logger: ReturnType<Context['logger']['with']>
 
 	constructor(
 		private readonly ctx: Context,
@@ -80,8 +80,22 @@ export class KookBotManager {
 			return { status: doc.state, id }
 		}
 
-		await this.repo.update(id, { state: 'connecting', stateMessage: '正在启动', lastError: undefined })
-		const token = await this.repo.getToken(id)
+		let token: string
+		try {
+			token = await this.repo.getToken(id)
+		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e)
+			await this.repo.update(id, {
+				state: 'error',
+				stateMessage: 'Token 缺失（请重新添加 bot）',
+				lastError: message,
+				connectedAt: undefined,
+				secure: false,
+			})
+			throw e
+		}
+
+		await this.repo.update(id, { state: 'connecting', stateMessage: '正在启动', lastError: undefined, secure: true })
 
 		const client = new Bot(
 			this.baseClient.headers({ Authorization: `Bot ${token}` }),

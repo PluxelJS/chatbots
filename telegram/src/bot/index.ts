@@ -77,7 +77,7 @@ export class Bot extends AbstractBot {
 	public readonly apiBase: string
 	public readonly mode: 'polling' | 'webhook' | 'api'
 
-	private readonly logger: Context['logger']
+	private readonly logger: ReturnType<Context['logger']['with']>
 	private running = false
 	private offset = 0
 	private abort?: AbortController

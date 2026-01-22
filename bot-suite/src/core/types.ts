@@ -1,4 +1,5 @@
 import type { AnyMessage, Platform } from 'pluxel-plugin-bot-core'
+import type { ExecCtx } from '@pluxel/cmd'
 
 export type UnifiedPlatformUserId = string
 
@@ -14,7 +15,7 @@ export interface UnifiedUser {
 	createdAt: Date
 }
 
-export interface ChatbotsCommandContext<M extends AnyMessage = AnyMessage> {
+export interface ChatbotsCommandContext<M extends AnyMessage = AnyMessage> extends ExecCtx {
 	msg: M
 	user: UnifiedUser
 	identity: UnifiedIdentity
