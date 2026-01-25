@@ -1,9 +1,8 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
 import type {} from '@pluxel/hmr/services'
-import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
 import { WebSocketPlugin } from 'pluxel-plugin-websocket'
-import { KookConfig, type KookConfigType } from './config'
+import { KookConfig } from './config'
 import { KookRuntime, type KookSnapshot } from './runtime'
 import { registerKookExtensions } from './extensions'
 import type { KOOKBotRpc } from './runtime/rpc'
@@ -16,7 +15,7 @@ export type { KookSnapshot }
 
 @Plugin({ name: 'KOOK', type: 'service', startTimeoutMs: 10_000 })
 export class KOOK extends BasePlugin {
-	@UseConfig(KookConfig) private config!: InferConfig<KookConfigType>
+	private config = this.configs.use(KookConfig)
 
 	public readonly runtime: KookRuntime
 

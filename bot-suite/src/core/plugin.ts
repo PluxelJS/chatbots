@@ -1,4 +1,4 @@
-import { BasePlugin, Config, Plugin, getPluginInfo } from '@pluxel/hmr'
+import { BasePlugin, Plugin, getPluginInfo } from '@pluxel/hmr'
 import { MikroOrm } from 'pluxel-plugin-mikro-orm'
 
 import { BotCore } from 'pluxel-plugin-bot-core'
@@ -13,8 +13,7 @@ import type { CommandKit } from './commands/kit'
 
 @Plugin({ name: 'bot-suite', type: 'service' })
 export class Chatbots extends BasePlugin {
-	@Config(ChatbotsConfigSchema)
-	private config!: Config<typeof ChatbotsConfigSchema> & ChatbotsConfig
+	private config: ChatbotsConfig = this.configs.use(ChatbotsConfigSchema)
 
 	public runtime!: ChatbotsRuntime
 	private sandbox!: ChatbotsSandbox

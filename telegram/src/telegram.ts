@@ -1,8 +1,7 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
 import type {} from '@pluxel/hmr/services'
-import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
-import { TelegramConfig, type TelegramConfigType } from './config'
+import { TelegramConfig } from './config'
 import { TelegramRuntime, type TelegramSnapshot } from './runtime'
 import { registerTelegramExtensions } from './extensions'
 import type { TelegramBotRpc } from './runtime/rpc'
@@ -16,7 +15,7 @@ export type { TelegramSnapshot }
 
 @Plugin({ name: 'Telegram', type: 'service', startTimeoutMs: 10_000 })
 export class TelegramPlugin extends BasePlugin {
-	@UseConfig(TelegramConfig) private config!: InferConfig<TelegramConfigType>
+	private config = this.configs.use(TelegramConfig)
 
 	public readonly runtime: TelegramRuntime
 

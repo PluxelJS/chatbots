@@ -1,8 +1,7 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
 import type {} from '@pluxel/hmr/services'
-import { Config as UseConfig, type Config as InferConfig } from '@pluxel/hmr'
 import { WretchPlugin } from 'pluxel-plugin-wretch'
-import { MilkyConfig, type MilkyConfigType } from './config'
+import { MilkyConfig } from './config'
 import { MilkyRuntime, type MilkySnapshot } from './runtime'
 import { registerMilkyExtensions } from './extensions'
 import type { MilkyBotRpc } from './runtime/rpc'
@@ -14,7 +13,7 @@ export type { MilkySnapshot }
 
 @Plugin({ name: 'Milky', type: 'service', startTimeoutMs: 10_000 })
 export class Milky extends BasePlugin {
-	@UseConfig(MilkyConfig) private config!: InferConfig<MilkyConfigType>
+	private config = this.configs.use(MilkyConfig)
 
 	public readonly runtime: MilkyRuntime
 
