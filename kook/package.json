@@ -26,8 +26,8 @@
   },
   "dependencies": {},
   "peerDependencies": {
-    "pluxel-plugin-websocket": "workspace:*",
-    "pluxel-plugin-wretch": "workspace:*"
+    "@pluxel/wretch": "workspace:*",
+    "pluxel-plugin-websocket": "workspace:*"
   },
   "publishConfig": {
     "exports": {
@@ -42,8 +42,7 @@
     "dependOn": {
       "required": [],
       "optional": [
-        "pluxel-plugin-websocket",
-        "pluxel-plugin-wretch"
+        "pluxel-plugin-websocket"
       ]
     }
   }

@@ -1,5 +1,5 @@
 import type { Context } from '@pluxel/hmr'
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import type { UserFromGetMe } from '@grammyjs/types'
 import type { Update } from '@grammyjs/types'
 import type { TelegramChannel } from '../events'

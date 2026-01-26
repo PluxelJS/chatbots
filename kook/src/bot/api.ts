@@ -1,4 +1,4 @@
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import type { KookApi, KookApiOptions } from '../api'
 import { createKookRawApi } from '../api/raw'
 import { KOOK_API_PROTO } from '../api/prototype'

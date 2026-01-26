@@ -29,7 +29,7 @@
     "@grammyjs/types": "^3.6.1"
   },
   "peerDependencies": {
-    "pluxel-plugin-wretch": "workspace:*"
+    "@pluxel/wretch": "workspace:*"
   },
   "publishConfig": {
     "exports": {
@@ -44,7 +44,7 @@
     "dependOn": {
       "required": [],
       "optional": [
-        "pluxel-plugin-wretch"
+        "@pluxel/wretch"
       ]
     }
   }

@@ -1,6 +1,6 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
 import type {} from '@pluxel/hmr/services'
-import { WretchPlugin } from 'pluxel-plugin-wretch'
+import { WretchPlugin } from '@pluxel/wretch'
 import { TelegramConfig } from './config'
 import { TelegramRuntime, type TelegramSnapshot } from './runtime'
 import { registerTelegramExtensions } from './extensions'

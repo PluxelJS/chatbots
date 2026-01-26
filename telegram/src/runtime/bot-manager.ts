@@ -1,6 +1,6 @@
 import type { Context } from '@pluxel/hmr'
 import type { SseChannel } from '@pluxel/hmr/services'
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import type { WebhookOptions } from '../bot'
 import { Bot } from '../bot'
 import { createTelegramChannel, type TelegramChannel } from '../events'

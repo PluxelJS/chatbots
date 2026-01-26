@@ -1,4 +1,4 @@
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import { z } from 'zod'
 import type { MilkyRequest, Result, SchemaPair } from './types'
 

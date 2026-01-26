@@ -1,4 +1,4 @@
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import { AUTO_ENDPOINTS } from './endpoints'
 import { createKookRequest } from './core'
 import type { HttpMethod, JsonLike, KookApiOptions, KookAutoApi, KookRequest } from './types'

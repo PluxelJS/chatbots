@@ -1,4 +1,4 @@
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import type { MilkyApi, MilkyApiOptions } from '../api'
 import { createMilkyRawApi } from '../api'
 import { MILKY_API_PROTO } from '../api/prototype'

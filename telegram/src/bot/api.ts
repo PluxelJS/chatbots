@@ -1,4 +1,4 @@
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import type { TelegramApi, TelegramApiOptions } from '../api'
 import { createTelegramRawApi } from '../api/raw'
 import { TELEGRAM_API_PROTO } from '../api/prototype'

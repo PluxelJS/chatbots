@@ -31,7 +31,7 @@
     "zod": "^4.1.5"
   },
   "peerDependencies": {
-    "pluxel-plugin-wretch": "workspace:*"
+    "@pluxel/wretch": "workspace:*"
   },
   "publishConfig": {
     "exports": {
@@ -46,7 +46,7 @@
     "dependOn": {
       "required": [],
       "optional": [
-        "pluxel-plugin-wretch"
+        "@pluxel/wretch"
       ]
     }
   }

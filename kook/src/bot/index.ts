@@ -1,5 +1,5 @@
 import type { Context } from '@pluxel/hmr'
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import type { KookChannel } from '../events'
 import type { User } from '../types'

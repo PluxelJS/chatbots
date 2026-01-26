@@ -1,7 +1,7 @@
 import type { Context } from '@pluxel/hmr'
 import { Bot } from '../bot'
 import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import type { SseChannel } from '@pluxel/hmr/services'
 import {
 	KookBotRegistry,

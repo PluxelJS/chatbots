@@ -1,6 +1,6 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
 import type {} from '@pluxel/hmr/services'
-import { WretchPlugin } from 'pluxel-plugin-wretch'
+import { WretchPlugin } from '@pluxel/wretch'
 import { MilkyConfig } from './config'
 import { MilkyRuntime, type MilkySnapshot } from './runtime'
 import { registerMilkyExtensions } from './extensions'

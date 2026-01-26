@@ -1,4 +1,4 @@
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import * as milkySchemas from '@saltify/milky-types'
 import type { MilkyApiEndpoint } from './definitions'
 import { MILKY_API_PROTO } from './prototype'

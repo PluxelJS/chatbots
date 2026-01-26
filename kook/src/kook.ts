@@ -1,6 +1,6 @@
 import { BasePlugin, Plugin } from '@pluxel/core'
 import type {} from '@pluxel/hmr/services'
-import { WretchPlugin } from 'pluxel-plugin-wretch'
+import { WretchPlugin } from '@pluxel/wretch'
 import { WebSocketPlugin } from 'pluxel-plugin-websocket'
 import { KookConfig } from './config'
 import { KookRuntime, type KookSnapshot } from './runtime'

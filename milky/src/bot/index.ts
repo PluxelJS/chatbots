@@ -1,5 +1,5 @@
 import type { Context } from '@pluxel/hmr'
-import type { HttpClient } from 'pluxel-plugin-wretch'
+import type { HttpClient } from '@pluxel/wretch'
 import { Event } from '@saltify/milky-types'
 import type { MilkyChannel } from '../events'
 import { dispatchMilkyEvent } from '../events/dispatcher'
