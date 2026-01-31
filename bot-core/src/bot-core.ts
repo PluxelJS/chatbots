@@ -1,4 +1,4 @@
-import { BasePlugin, Plugin } from '@pluxel/hmr'
+import { BasePlugin, Config, Plugin } from '@pluxel/hmr'
 import { BotCoreConfigSchema, type BotCoreConfig } from './config'
 import { BotCoreRuntime } from './runtime'
 
@@ -8,7 +8,8 @@ import { BotCoreRuntime } from './runtime'
  */
 @Plugin({ name: 'bot-core', type: 'service' })
 export class BotCore extends BasePlugin {
-	private config: BotCoreConfig = this.configs.use(BotCoreConfigSchema)
+	@Config(BotCoreConfigSchema)
+	private config!: BotCoreConfig
 
 	public runtime!: BotCoreRuntime
 

@@ -2,7 +2,7 @@ import type { Context } from '@pluxel/hmr'
 
 import { CmdError, cmd } from '@pluxel/cmd'
 import type { CmdBuilder, ExecCtx, Interceptor, McpConfig, TextConfig, TextExecutable } from '@pluxel/cmd'
-import type { KvRateRule, RateDecision, Rates } from 'pluxel-plugin-kv'
+import type { KvRateRule, RateDecision, RatesApi } from 'pluxel-plugin-kv'
 
 import { Decision } from '../../permissions/decision'
 import type { PermissionEffect, PermissionMeta } from '../../permissions/registry'
@@ -109,7 +109,7 @@ const toRateLimitedMessage = (decision: Extract<RateDecision, { ok: false }>) =>
 }
 
 const withRatesInterceptor = <C extends ChatbotsCommandContext>(
-	rates: Rates,
+	rates: RatesApi,
 	opts: { scopeKey: string; scope: RateScope; key: string; rule: KvRateRule; message?: string },
 ): Interceptor<void> => {
 	const scopeKey = opts.scopeKey
@@ -179,7 +179,7 @@ export function createPermissionCommandKit<C extends ChatbotsCommandContext>(
 	opts: {
 		owner: Context
 		scopeKey: string
-		rates?: Rates
+		rates?: RatesApi
 		permDefaults?: {
 			/** When auto-declaring permissions, which effect should be used. Default: `allow`. */
 			defaultEffect?: PermissionEffect
@@ -293,7 +293,7 @@ export function createPermissionCommandKit<C extends ChatbotsCommandContext>(
 			}
 
 			if (spec.rates) {
-				if (!rates) throw new Error('[chatbots] rates plugin requested but Rates service is not available')
+				if (!rates) throw new Error('[chatbots] rates requested but rate service is not available')
 				const scope = spec.rates.scope ?? 'user'
 				const key = String(spec.rates.key ?? fullId(spec.localId))
 				out = out.intercept(withRatesInterceptor(rates, { scopeKey, scope, key, rule: spec.rates.rule, message: spec.rates.message }))

@@ -1,8 +1,8 @@
-import { BasePlugin, Plugin, getPluginInfo } from '@pluxel/hmr'
+import { BasePlugin, Config, Plugin, getPluginInfo } from '@pluxel/hmr'
 import { MikroOrm } from 'pluxel-plugin-mikro-orm'
 
 import { BotCore } from 'pluxel-plugin-bot-core'
-import { Rates } from 'pluxel-plugin-kv'
+import { Kv } from 'pluxel-plugin-kv'
 import { ChatbotsConfigSchema, type ChatbotsConfig } from './config'
 import { ChatbotsRuntime } from './runtime'
 import { createPermissionFacade, type ChatbotsPermissionFacade } from '../permissions/permission'
@@ -13,7 +13,8 @@ import type { CommandKit } from './commands/kit'
 
 @Plugin({ name: 'bot-suite', type: 'service' })
 export class Chatbots extends BasePlugin {
-	private config: ChatbotsConfig = this.configs.use(ChatbotsConfigSchema)
+	@Config(ChatbotsConfigSchema)
+	private config!: ChatbotsConfig
 
 	public runtime!: ChatbotsRuntime
 	private sandbox!: ChatbotsSandbox
@@ -21,7 +22,7 @@ export class Chatbots extends BasePlugin {
 	constructor(
 		private readonly botCore: BotCore,
 		private readonly mikro: MikroOrm,
-		private readonly rates: Rates,
+		private readonly kv: Kv,
 	) {
 		super()
 	}
@@ -38,7 +39,7 @@ export class Chatbots extends BasePlugin {
 			userCacheMax: this.config.userCacheMax,
 			linkTokenTtlSeconds: this.config.linkTokenTtlSeconds,
 			registerUserCommands: this.config.registerUserCommands,
-		}, this.rates)
+		}, this.kv.rates)
 		this.runtime.bootstrap()
 		this.sandbox = new ChatbotsSandbox(this.runtime, { cmdPrefix: this.config.cmdPrefix })
 

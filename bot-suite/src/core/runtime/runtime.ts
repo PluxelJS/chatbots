@@ -25,7 +25,7 @@ import { ChatCommand } from '../commands/decorators'
 import { createPermissionApi, type ChatbotsPermissionApi } from '../../permissions/permission'
 import type { ChatbotsCommandContext } from '../types'
 import { CommandRegistry } from './command-registry'
-import type { Rates } from 'pluxel-plugin-kv'
+import type { RatesApi } from 'pluxel-plugin-kv'
 import * as v from 'valibot'
 import type { CommandDraft } from '../commands/draft'
 
@@ -57,7 +57,7 @@ export class ChatbotsRuntime {
 		private readonly bot: BotCore,
 		private readonly mikro: MikroOrm,
 		private readonly options: ChatbotsRuntimeOptions,
-		private readonly rates: Rates,
+		private readonly rates: RatesApi,
 		users: UserDirectory,
 		permissions: PermissionService,
 		disposeEntities: () => Promise<void>,
@@ -83,7 +83,7 @@ export class ChatbotsRuntime {
 		bot: BotCore,
 		mikro: MikroOrm,
 		options: ChatbotsRuntimeOptions,
-		rates: Rates,
+		rates: RatesApi,
 	): Promise<ChatbotsRuntime> {
 		const { dir, batch } = await UserDirectory.create(mikro, {
 			cacheMax: options.userCacheMax,

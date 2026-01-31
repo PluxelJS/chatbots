@@ -6,7 +6,7 @@ import path from 'node:path'
 
 import { BasePlugin, Plugin, withTestHost, type TestHost } from '@pluxel/core/test'
 import { MikroOrmLibsql } from 'pluxel-plugin-mikro-orm'
-import { KvMemory, Rates } from 'pluxel-plugin-kv'
+import { KvMemory } from 'pluxel-plugin-kv'
 import { BotCore, type AnyMessage } from 'pluxel-plugin-bot-core'
 import { CmdError } from '@pluxel/cmd'
 
@@ -31,7 +31,7 @@ async function withChatbotsHost(
 			const cfg = host.ctx.configService as unknown as { ready?: Promise<void> }
 			if (cfg.ready) await cfg.ready
 
-			host.registerAll(MikroOrmLibsql, KvMemory, Rates, BotCore, Chatbots, ...plugins)
+			host.registerAll(MikroOrmLibsql, KvMemory, BotCore, Chatbots, ...plugins)
 
 			host.setConfig('MikroOrm', { config: { dbName, ensureSchemaOnInit: true } })
 			host.setConfig('bot-core', {
@@ -55,7 +55,6 @@ async function withChatbotsHost(
 					cmdPermAutoDeclareStars: true,
 				},
 			})
-			host.setConfig('Rates', { config: {} })
 
 			await host.commitStrict()
 
