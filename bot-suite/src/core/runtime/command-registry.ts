@@ -53,14 +53,14 @@ export class CommandRegistry<C extends ExecCtx> {
 		const ownerKey = owner.pluginInfo?.id
 		if (!ownerKey) throw new Error('[chatbots] command registration requires caller context')
 
-		// Hot-reload safety: treat re-register as replace.
-		this.unregister(exec.id)
+		// Hot-reload safety: treat re-add as replace.
+		this.remove(exec.id)
 		this.router.add(exec as any)
 
 		this.track(ownerKey, exec.id)
 		owner.scope.collectEffect(() => {
 			try {
-				this.unregister(exec.id)
+				this.remove(exec.id)
 			} catch {
 				// ignore
 			} finally {
@@ -76,11 +76,11 @@ export class CommandRegistry<C extends ExecCtx> {
 		const ownerKey = owner.pluginInfo?.id
 		if (!ownerKey) throw new Error('[chatbots] command registration requires caller context')
 
-		this.unregister(exec.id)
+		this.remove(exec.id)
 		this.track(ownerKey, exec.id)
 		owner.scope.collectEffect(() => {
 			try {
-				this.unregister(exec.id)
+				this.remove(exec.id)
 			} catch {
 				// ignore
 			} finally {
@@ -96,13 +96,13 @@ export class CommandRegistry<C extends ExecCtx> {
 		const ownerKey = owner.pluginInfo?.id
 		if (!ownerKey) throw new Error('[chatbots] command registration requires caller context')
 
-		this.unregister(exec.id)
+		this.remove(exec.id)
 		this.track(ownerKey, exec.id)
 		this.mcpById.set(exec.id, exec.mcp)
 
 		owner.scope.collectEffect(() => {
 			try {
-				this.unregister(exec.id)
+				this.remove(exec.id)
 			} catch {
 				// ignore
 			} finally {
@@ -116,7 +116,7 @@ export class CommandRegistry<C extends ExecCtx> {
 	 *
 	 * Prefer the strongly-typed APIs (`registerTextCommand` / `registerMcpTool`) when available.
 	 */
-	register(exec: Executable<any, any>, owner: Context): void {
+	add(exec: Executable<any, any>, owner: Context): void {
 		if (isTextExecutable(exec)) this.registerTextCommand(exec, owner)
 		else if (isMcpExecutable(exec)) this.registerMcpTool(exec, owner)
 		else this.registerOp(exec, owner)
@@ -138,7 +138,7 @@ export class CommandRegistry<C extends ExecCtx> {
 		return Array.from(this.mcpById.entries()).map(([id, mcp]) => ({ id, mcp }))
 	}
 
-	unregister(id: string): void {
+	remove(id: string): void {
 		this.infoById.delete(id)
 		this.mcpById.delete(id)
 		try {
@@ -152,7 +152,7 @@ export class CommandRegistry<C extends ExecCtx> {
 		const bucket = this.idsByOwner.get(ownerKey)
 		if (!bucket || bucket.size === 0) return
 		for (const id of Array.from(bucket)) {
-			this.unregister(id)
+			this.remove(id)
 			this.untrack(ownerKey, id)
 		}
 	}

@@ -1,10 +1,11 @@
-import { describe, expect, it } from 'bun:test'
+import '@pluxel/hmr/services'
+import { describe, expect, it } from 'vitest'
 
 import { mkdir, rm } from 'node:fs/promises'
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 
-import { BasePlugin, Plugin, withTestHost, type TestHost } from '@pluxel/core/test'
+import { BasePlugin, Plugin, withHost, type Host } from '@pluxel/test'
 import { MikroOrmLibsql } from 'pluxel-plugin-mikro-orm'
 import { KvMemory } from 'pluxel-plugin-kv'
 import { BotCore, type AnyMessage } from 'pluxel-plugin-bot-core'
@@ -16,7 +17,7 @@ import { ChatCommand } from './decorators'
 import { InstallChatCommands } from './install'
 import { cmd } from './draft'
 
-type HostCtx = { host: TestHost; chatbots: Chatbots }
+type HostCtx = { host: Host; chatbots: Chatbots }
 
 async function withChatbotsHost(
 	plugins: any[],
@@ -27,14 +28,14 @@ async function withChatbotsHost(
 	await mkdir(dataDir, { recursive: true })
 	const dbName = path.join(dataDir, `chatbots-${randomUUID()}.sqlite`)
 	try {
-		await withTestHost(async (host) => {
+		await withHost(async (host) => {
 			const cfg = host.ctx.configService as unknown as { ready?: Promise<void> }
 			if (cfg.ready) await cfg.ready
 
-			host.registerAll(MikroOrmLibsql, KvMemory, BotCore, Chatbots, ...plugins)
+			host.add([MikroOrmLibsql, KvMemory, BotCore, Chatbots, ...plugins])
 
-			host.setConfig('MikroOrm', { config: { dbName, ensureSchemaOnInit: true } })
-			host.setConfig('bot-core', {
+			host.cfg('MikroOrm').set({ config: { dbName, ensureSchemaOnInit: true } })
+			host.cfg('bot-core').set({
 				config: {
 					bridges: {
 						kook: { enabled: false },
@@ -44,7 +45,7 @@ async function withChatbotsHost(
 					debug: false,
 				},
 			})
-			host.setConfig('bot-suite', {
+			host.cfg('bot-suite').set({
 				config: {
 					cmdPrefix: '/',
 					debug: false,
@@ -56,9 +57,9 @@ async function withChatbotsHost(
 				},
 			})
 
-			await host.commitStrict()
+			await host.commit()
 
-			await fn({ host, chatbots: host.getOrThrow(Chatbots) })
+			await fn({ host, chatbots: host.require(Chatbots) })
 		})
 	} finally {
 		await rm(dbName, { force: true })
@@ -114,8 +115,8 @@ describe('chatbots cmdkit (plugin lifecycle integration)', () => {
 				expect((r as any).val).toBe('pong')
 			}
 
-			host.unregister(CmdTestA)
-			await host.commitStrict()
+			host.remove(CmdTestA)
+			await host.commit()
 
 			expect(registry.list().some((x) => x.id === 'cmd-test-a.cmd.ping')).toBe(false)
 			{
@@ -164,7 +165,7 @@ describe('chatbots cmdkit (plugin lifecycle integration)', () => {
 			}
 
 			host.replace(CmdTestA_v1, CmdTestA_v2)
-			await host.commitStrict()
+			await host.commit()
 
 			const entries = registry.list().filter((x) => x.id === 'cmd-test-a.cmd.ping')
 			expect(entries.length).toBe(1)

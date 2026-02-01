@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 import { __parts } from './runtime'
 import { parts } from './tag'
 import { mentionUser, text } from './dsl'

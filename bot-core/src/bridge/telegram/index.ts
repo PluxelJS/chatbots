@@ -11,11 +11,11 @@ export const telegramBridge: BridgeDefinition<'telegram', 'telegram:ready', Tele
 	event: 'telegram:ready',
 	attach: (ctx, telegram, dispatch) => {
 		// 使用 onFront 保证优先于命令/会话处理，从而不漏掉以 “/” 开头的消息
-		const register =
+		const add =
 			(telegram.runtime.events.message as any).onFront?.bind(telegram.runtime.events.message) ??
 			telegram.runtime.events.message.on.bind(telegram.runtime.events.message)
 
-		const unlisten = register((session: any, next: any) => {
+		const unlisten = add((session: any, next: any) => {
 			void (async () => {
 				try {
 					const normalized = await normalizeTelegramMessage(session)

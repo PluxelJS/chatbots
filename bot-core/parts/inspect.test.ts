@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, test } from 'vitest'
 import { hasRichParts } from './inspect'
 import type { Part } from './model'
 

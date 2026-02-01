@@ -44,7 +44,7 @@ export class Chatbots extends BasePlugin {
 		this.sandbox = new ChatbotsSandbox(this.runtime, { cmdPrefix: this.config.cmdPrefix })
 
 		// Extensions are best-effort: bot-suite core should still function (commands/permissions)
-		// even when running in environments without package scan context (e.g. @pluxel/core/test).
+		// even when running in environments without package scan context (e.g. @pluxel/test).
 		const safeExt = (name: string, fn: () => void) => {
 			try {
 				fn()

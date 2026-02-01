@@ -1,11 +1,12 @@
-import { describe, expect, it } from 'bun:test'
+import '@pluxel/hmr/services'
+import { describe, expect, it } from 'vitest'
 
 import { rm } from 'node:fs/promises'
 import { mkdir } from 'node:fs/promises'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 
-import { BasePlugin, Plugin, withTestHost } from '@pluxel/core/test'
+import { BasePlugin, Plugin, withHost } from '@pluxel/test'
 import { MikroOrmLibsql } from 'pluxel-plugin-mikro-orm'
 
 import { Decision } from '../decision'
@@ -66,10 +67,10 @@ class PermCallerB extends BasePlugin {
 describe('permissions: runtime (plugin context + mikro-orm)', () => {
 	it('resolver requires exact declaration (star-only does not make leaf resolvable)', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareStarOnly()
+			host.require(PermCallerA).declareStarOnly()
 			expect(perms.permissions.resolver.resolve('PermCallerA.cmd.reload')).toBeNull()
 
-			host.getOrThrow(PermCallerA).declareCommands()
+			host.require(PermCallerA).declareCommands()
 			expect(perms.permissions.resolver.resolve('PermCallerA.cmd.reload')).not.toBeNull()
 
 			// invalid segments should not throw (treated as resolve failure => deny)
@@ -79,7 +80,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('supports role inheritance + exact>star + user overrides (layering)', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareCommands()
+			host.require(PermCallerA).declareCommands()
 
 			// apply catalog activation (new namespaces require a refresh for role effective caches)
 			await perms.permission.canUser(0, 'PermCallerA.cmd.reload')
@@ -121,7 +122,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('applies stable role ordering (rank desc, roleId asc), independent of DB order', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareXy()
+			host.require(PermCallerA).declareXy()
 			await perms.permission.canUser(0, 'PermCallerA.x.y')
 
 			const roleA = await perms.permission.createRole(null, 10)
@@ -150,7 +151,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('validates grant nodes strictly and normalizes star locals', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareStarsOnly()
+			host.require(PermCallerA).declareStarsOnly()
 			await perms.permission.canUser(0, 'PermCallerA.cmd.reload')
 
 			const roleId = await perms.permission.createRole(null, 0)
@@ -175,7 +176,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('supports root-star grants (<ns>.*) in roles', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareCommands()
+			host.require(PermCallerA).declareCommands()
 			await perms.permission.canUser(0, 'PermCallerA.cmd.reload')
 
 			const roleId = await perms.permission.createRole(null, 0)
@@ -189,7 +190,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('applies longest matching prefix.* (deny wins when deeper prefix denies)', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareCmdAdmin()
+			host.require(PermCallerA).declareCmdAdmin()
 			await perms.permission.canUser(0, 'PermCallerA.cmd.reload')
 
 			const roleId = await perms.permission.createRole(null, 0)
@@ -205,7 +206,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('grant upsert overwrites (same node toggles allow/deny)', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareXy()
+			host.require(PermCallerA).declareXy()
 			await perms.permission.canUser(0, 'PermCallerA.x.y')
 
 			const roleId = await perms.permission.createRole(null, 0)
@@ -221,7 +222,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('deleteRole cleans grants/assignments and reparents children', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			host.getOrThrow(PermCallerA).declareCommands()
+			host.require(PermCallerA).declareCommands()
 			await perms.permission.canUser(0, 'PermCallerA.cmd.reload')
 
 			const roleParent = await perms.permission.createRole(null, 0, 'Parent')
@@ -249,7 +250,7 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('revoke works after plugin unload (offline cleanup; revoke does not depend on catalog)', async () => {
 		await withPermissionsHost([PermCallerA], async ({ host, perms }) => {
-			const declared = host.getOrThrow(PermCallerA).declareCommands()
+			const declared = host.require(PermCallerA).declareCommands()
 			await perms.permission.canUser(0, 'PermCallerA.cmd.reload')
 			expect(perms.permission.listNamespaces()).toEqual(['PermCallerA'])
 
@@ -266,8 +267,8 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 			const cachedRef = declared.reload._ref
 			expect(cachedRef).toBeTruthy()
 
-			host.unregister(PermCallerA)
-			await host.commitStrict()
+			host.remove(PermCallerA)
+			await host.commit()
 			await waitForRunning(host, PermissionsHost, 10_000)
 
 			expect(perms.permission.listNamespaces()).toEqual([])
@@ -280,8 +281,8 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 
 	it('infers namespace from caller and isolates namespaces', async () => {
 		await withPermissionsHost([PermCallerA, PermCallerB], async ({ host, perms }) => {
-			const a = host.getOrThrow(PermCallerA).declareCommands()
-			const b = host.getOrThrow(PermCallerB).declareReload()
+			const a = host.require(PermCallerA).declareCommands()
+			const b = host.require(PermCallerB).declareReload()
 
 			expect(a.reload.node).toBe('PermCallerA.cmd.reload')
 			expect(b.reload.node).toBe('PermCallerB.cmd.reload')
@@ -311,18 +312,18 @@ describe('permissions: runtime (plugin context + mikro-orm)', () => {
 		await mkdir(dataDir, { recursive: true })
 		const dbName = path.join(dataDir, `permissions-${randomUUID()}.sqlite`)
 		try {
-			await withTestHost(async (host) => {
+			await withHost(async (host) => {
 				const cfg = host.ctx.configService as unknown as { ready?: Promise<void> }
 				if (cfg.ready) await cfg.ready
 
-				host.registerAll(MikroOrmLibsql, PermissionsHost, ...plugins)
+				host.add([MikroOrmLibsql, PermissionsHost, ...plugins])
 
-				host.setConfig('MikroOrm', { config: { dbName, ensureSchemaOnInit: true } })
+				host.cfg('MikroOrm').set({ config: { dbName, ensureSchemaOnInit: true } })
 
-				await host.commitStrict()
+				await host.commit()
 			await waitForRunning(host, PermissionsHost, 10_000)
 
-			const perms = host.getOrThrow(PermissionsHost)
+			const perms = host.require(PermissionsHost)
 			await fn({ host, perms })
 		})
 	} finally {
