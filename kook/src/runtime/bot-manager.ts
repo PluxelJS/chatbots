@@ -1,6 +1,6 @@
 import type { Context } from '@pluxel/hmr'
 import { Bot } from '../bot'
-import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
+import type { WebSocketPlugin } from '@pluxel/websocket'
 import type { HttpClient } from '@pluxel/wretch'
 import type { SseChannel } from '@pluxel/hmr/services'
 import {

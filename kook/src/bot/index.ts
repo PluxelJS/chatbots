@@ -1,6 +1,6 @@
 import type { Context } from '@pluxel/hmr'
 import type { HttpClient } from '@pluxel/wretch'
-import type { WebSocketPlugin } from 'pluxel-plugin-websocket'
+import type { WebSocketPlugin } from '@pluxel/websocket'
 import type { KookChannel } from '../events'
 import type { User } from '../types'
 import { AbstractBot } from './api'

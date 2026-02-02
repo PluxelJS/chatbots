@@ -43,26 +43,9 @@ export class Chatbots extends BasePlugin {
 		this.runtime.bootstrap()
 		this.sandbox = new ChatbotsSandbox(this.runtime, { cmdPrefix: this.config.cmdPrefix })
 
-		// Extensions are best-effort: bot-suite core should still function (commands/permissions)
-		// even when running in environments without package scan context (e.g. @pluxel/test).
-		const safeExt = (name: string, fn: () => void) => {
-			try {
-				fn()
-			} catch (e) {
-				const error = e instanceof Error ? e : new Error(String(e))
-				this.ctx.logger.warn(`Chatbots ${name} extension registration skipped`, { error })
-			}
-		}
-
-		safeExt('UI', () => this.ctx.ext.ui.register({ entryPath: './ui/index.tsx' }))
-		safeExt('RPC', () =>
-			this.ctx.ext.rpc.registerExtension(() => new ChatbotsRpc(this.sandbox, this.runtime.permissions, this.runtime.users)),
-		)
-		safeExt('SSE', () => {
-			if (this.ctx.ext.sse) {
-				this.ctx.ext.sse.registerExtension(() => this.sandbox.createSseHandler())
-			}
-		})
+		this.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })
+		this.ctx.ext.rpc.registerExtension(() => new ChatbotsRpc(this.sandbox, this.runtime.permissions, this.runtime.users))
+		this.ctx.ext.sse.registerExtension(() => this.sandbox.createSseHandler())
 
 		this.registerCatalogUnloadTracking()
 		this.ctx.logger.info('Chatbots initialized')

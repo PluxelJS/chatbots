@@ -4,8 +4,8 @@ import type {
 	RawData,
 	WebSocketFactory,
 	WebSocketLike,
-} from 'pluxel-plugin-websocket'
-import { WSReadyState } from 'pluxel-plugin-websocket'
+} from '@pluxel/websocket'
+import { WSReadyState } from '@pluxel/websocket'
 
 /** —— 信令 —— */
 enum Sig {

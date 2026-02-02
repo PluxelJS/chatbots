@@ -1,13 +1,12 @@
 import { TelegramBotRpc } from './runtime/rpc'
 import type { TelegramRuntime } from './runtime'
+import type {} from '@pluxel/hmr/services'
+import type { Context } from '@pluxel/core'
 
-export function registerTelegramExtensions(plugin: { ctx: any; runtime: TelegramRuntime }) {
+export function registerTelegramExtensions(plugin: { ctx: Context; runtime: TelegramRuntime }) {
 	if (!plugin.ctx.env.isHmrRuntime) return
 
 	plugin.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })
 	plugin.ctx.ext.rpc.registerExtension(() => new TelegramBotRpc(plugin.runtime))
-
-	if (plugin.ctx.ext.sse) {
-		plugin.ctx.ext.sse.registerExtension(() => plugin.runtime.createSseHandler())
-	}
+	plugin.ctx.ext.sse.registerExtension(() => plugin.runtime.createSseHandler())
 }
