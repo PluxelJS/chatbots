@@ -136,7 +136,7 @@ export class MilkyBot extends AbstractBot {
 		this.abort = new AbortController()
 
 		const cleanup = () => this.stopInternal().catch(() => {})
-		this.ctx.scope.collectEffect(cleanup)
+		this.ctx.effects.defer(cleanup)
 
 		void this.eventLoop(this.abort.signal).catch((e) => {
 			this.updateStatus({

@@ -38,7 +38,7 @@ describe('chatbots cmd rates plugin', () => {
 
 		const owner = {
 			pluginInfo: { id: 'owner' },
-			scope: { collectEffect: (_fn: any) => {} },
+			effects: { defer: (_fn: any) => ({ dispose: async () => {}, cancel: () => {} }) },
 		} as any
 
 	const registry = new CommandRegistry<Ctx>({ caseInsensitive: true })

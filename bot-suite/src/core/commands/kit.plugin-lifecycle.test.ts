@@ -28,39 +28,44 @@ async function withChatbotsHost(
 	await mkdir(dataDir, { recursive: true })
 	const dbName = path.join(dataDir, `chatbots-${randomUUID()}.sqlite`)
 	try {
-		await withHost(async (host) => {
-			const cfg = host.ctx.configService as unknown as { ready?: Promise<void> }
-			if (cfg.ready) await cfg.ready
+		await withHost(
+			async (host) => {
+				const cfg = host.ctx.configService as unknown as { ready?: Promise<void> }
+				if (cfg.ready) await cfg.ready
 
-			host.add([MikroOrmLibsql, KvMemory, BotCore, Chatbots, ...plugins])
+				host.add([MikroOrmLibsql, KvMemory, BotCore, Chatbots, ...plugins])
 
-			host.cfg('MikroOrm').set({ config: { dbName, ensureSchemaOnInit: true } })
-			host.cfg('bot-core').set({
-				config: {
-					bridges: {
-						kook: { enabled: false },
-						milky: { enabled: false },
-						telegram: { enabled: false },
+				host.cfg('MikroOrm').set({ config: { dbName, ensureSchemaOnInit: true } })
+				host.cfg('bot-core').set({
+					config: {
+						bridges: {
+							kook: { enabled: false },
+							milky: { enabled: false },
+							telegram: { enabled: false },
+						},
+						debug: false,
 					},
-					debug: false,
-				},
-			})
-			host.cfg('bot-suite').set({
-				config: {
-					cmdPrefix: '/',
-					debug: false,
-					devCommands: false,
-					registerUserCommands: false,
-					cmdPermDefaultEffect: opts?.cmdPermDefaultEffect ?? 'allow',
-					cmdPermAutoDeclare: true,
-					cmdPermAutoDeclareStars: true,
-				},
-			})
+				})
+				host.cfg('bot-suite').set({
+					config: {
+						cmdPrefix: '/',
+						debug: false,
+						devCommands: false,
+						registerUserCommands: false,
+						cmdPermDefaultEffect: opts?.cmdPermDefaultEffect ?? 'allow',
+						cmdPermAutoDeclare: true,
+						cmdPermAutoDeclareStars: true,
+					},
+				})
 
-			await host.commit()
+				await host.commit()
 
-			await fn({ host, chatbots: host.require(Chatbots) })
-		})
+				await fn({ host, chatbots: host.require(Chatbots) })
+			},
+			// `chatbots` uses `ctx.ext.*` which depends on HMR runtime services.
+			// Provide the minimal required root config to construct HMRService in tests.
+			{ hmrService: { roots: ['.'], entries: [], report: false, warmup: false } } as any,
+		)
 	} finally {
 		await rm(dbName, { force: true })
 	}

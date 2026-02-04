@@ -48,7 +48,7 @@ export class ChatbotsRuntime {
 	public readonly permission: ChatbotsPermissionApi
 	public readonly cmd: ChatbotsCommandKit<ChatbotsCommandContext>
 
-	private readonly registry = new CommandRegistry<ChatbotsCommandContext>({ caseInsensitive: true })
+	private readonly registry: CommandRegistry<ChatbotsCommandContext>
 	private disposed = false
 	private readonly disposeEntities: () => Promise<void>
 
@@ -62,6 +62,10 @@ export class ChatbotsRuntime {
 		permissions: PermissionService,
 		disposeEntities: () => Promise<void>,
 	) {
+		this.registry = new CommandRegistry<ChatbotsCommandContext>({
+			caseInsensitive: true,
+			hostEffects: this.ctx.effects,
+		})
 		this.users = users
 		this.permissions = permissions
 		this.permission = createPermissionApi(this.permissions)
@@ -145,7 +149,7 @@ export class ChatbotsRuntime {
 			void this.dispatchCommand(parsed.input, msg as AnyMessage)
 		})
 
-		this.ctx.scope.collectEffect(stop)
+		this.ctx.effects.defer(stop)
 	}
 
 	private resolveCommandPlatform(msg: AnyMessage): Platform {

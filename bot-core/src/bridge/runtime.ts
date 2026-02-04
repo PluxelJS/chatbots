@@ -47,9 +47,9 @@ const startBridge = <P extends AnyBridgeDefinition>(
 		const detachInstance = toCleanup(def.attach(ctx, instance, dispatch))
 		status?.setAttached(def.platform)
 
-		// 通过平台实例的 scope 自动管理生命周期
+		// 通过平台实例的 effects 自动管理生命周期
 		const anyInstance = instance as any
-		anyInstance?.ctx?.scope?.collectEffect?.(() => {
+		anyInstance?.ctx?.effects?.defer?.(() => {
 			safeRun(ctx, 'bridge detach failed', { platform: def.platform }, detachInstance)
 			status?.setDetached(def.platform)
 		})

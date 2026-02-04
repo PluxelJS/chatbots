@@ -20,6 +20,7 @@ export type RegisteredCommandInfo = {
 
 export class CommandRegistry<C extends ExecCtx> {
 	public readonly router: Router<C>
+	private readonly hostEffects: Context['effects'] | null
 
 	private readonly commandKits = new WeakMap<Context, unknown>()
 	private readonly idsByOwner = new Map<string, Set<string>>()
@@ -27,8 +28,9 @@ export class CommandRegistry<C extends ExecCtx> {
 	private readonly infoById = new Map<string, RegisteredCommandInfo>()
 	private readonly mcpById = new Map<string, McpMeta>()
 
-	constructor(options?: { caseInsensitive?: boolean }) {
+	constructor(options?: { caseInsensitive?: boolean; hostEffects?: Context['effects'] | null }) {
 		this.router = createRouter<C>({ caseInsensitive: options?.caseInsensitive ?? true })
+		this.hostEffects = options?.hostEffects ?? null
 	}
 
 	getOrCreateKit<TKit>(caller: Context, factory: (ctx: Context) => TKit): TKit {
@@ -58,7 +60,7 @@ export class CommandRegistry<C extends ExecCtx> {
 		this.router.add(exec as any)
 
 		this.track(ownerKey, exec.id)
-		owner.scope.collectEffect(() => {
+		const guard = owner.effects.defer(() => {
 			try {
 				this.remove(exec.id)
 			} catch {
@@ -67,6 +69,8 @@ export class CommandRegistry<C extends ExecCtx> {
 				this.untrack(ownerKey, exec.id)
 			}
 		})
+		// If the host plugin unloads first, detach from owner effects to avoid cross-plugin retention.
+		this.hostEffects?.defer(() => guard.cancel())
 
 		// Optional MCP opt-in: keep data-only metadata in registry.
 		if (isMcpExecutable(exec)) this.mcpById.set(exec.id, exec.mcp)
@@ -78,7 +82,7 @@ export class CommandRegistry<C extends ExecCtx> {
 
 		this.remove(exec.id)
 		this.track(ownerKey, exec.id)
-		owner.scope.collectEffect(() => {
+		const guard = owner.effects.defer(() => {
 			try {
 				this.remove(exec.id)
 			} catch {
@@ -87,6 +91,8 @@ export class CommandRegistry<C extends ExecCtx> {
 				this.untrack(ownerKey, exec.id)
 			}
 		})
+		// If the host plugin unloads first, detach from owner effects to avoid cross-plugin retention.
+		this.hostEffects?.defer(() => guard.cancel())
 
 		// Optional MCP opt-in: ops can be MCP tools too.
 		if (isMcpExecutable(exec)) this.mcpById.set(exec.id, exec.mcp)
@@ -100,7 +106,7 @@ export class CommandRegistry<C extends ExecCtx> {
 		this.track(ownerKey, exec.id)
 		this.mcpById.set(exec.id, exec.mcp)
 
-		owner.scope.collectEffect(() => {
+		const guard = owner.effects.defer(() => {
 			try {
 				this.remove(exec.id)
 			} catch {
@@ -109,6 +115,8 @@ export class CommandRegistry<C extends ExecCtx> {
 				this.untrack(ownerKey, exec.id)
 			}
 		})
+		// If the host plugin unloads first, detach from owner effects to avoid cross-plugin retention.
+		this.hostEffects?.defer(() => guard.cancel())
 	}
 
 	/**

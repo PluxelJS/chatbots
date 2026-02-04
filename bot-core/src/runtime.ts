@@ -37,7 +37,7 @@ export class BotCoreRuntime {
 			this.options.bridges,
 			this.status,
 		)
-		this.ctx.scope.collectEffect(unregisterBridges)
+		this.ctx.effects.defer(unregisterBridges)
 	}
 
 	teardown() {

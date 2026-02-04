@@ -26,7 +26,7 @@ describe('chatbots cmdkit mcp opt-in', () => {
 
 		const owner = {
 			pluginInfo: { id: 'owner' },
-			scope: { collectEffect: (_fn: any) => {} },
+			effects: { defer: (_fn: any) => ({ dispose: async () => {}, cancel: () => {} }) },
 		} as any satisfies Context
 
 		const registry = new CommandRegistry<Ctx>({ caseInsensitive: true })

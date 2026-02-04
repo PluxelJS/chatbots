@@ -217,7 +217,7 @@ export class Bot extends AbstractBot {
 
 		// 注册清理效果
 		const cleanup = () => this.stop().catch(() => {})
-		this.ctx.scope.collectEffect(cleanup)
+		this.ctx.effects.defer(cleanup)
 
 		this.pollingLoop().catch((e) => {
 			this.updateStatus({

@@ -43,9 +43,20 @@ export class Chatbots extends BasePlugin {
 		this.runtime.bootstrap()
 		this.sandbox = new ChatbotsSandbox(this.runtime, { cmdPrefix: this.config.cmdPrefix })
 
-		this.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })
-		this.ctx.ext.rpc.registerExtension(() => new ChatbotsRpc(this.sandbox, this.runtime.permissions, this.runtime.users))
-		this.ctx.ext.sse.registerExtension(() => this.sandbox.createSseHandler())
+		// Optional HMR host integrations (UI/RPC/SSE). These are not required for core runtime logic,
+		// and may be unavailable in minimal/test hosts that don't provide extension runtime metadata.
+		try {
+			this.ctx.ext.ui.register({ entryPath: './ui/index.tsx' })
+			this.ctx.ext.rpc.registerExtension(() => new ChatbotsRpc(this.sandbox, this.runtime.permissions, this.runtime.users))
+			this.ctx.ext.sse.registerExtension(() => this.sandbox.createSseHandler())
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error)
+			if (message.includes('无法定位插件目录')) {
+				this.ctx.logger.warn('extension registration skipped', { error })
+			} else {
+				throw error
+			}
+		}
 
 		this.registerCatalogUnloadTracking()
 		this.ctx.logger.info('Chatbots initialized')
@@ -100,7 +111,7 @@ export class Chatbots extends BasePlugin {
 				this.runtime.cleanupCommandsForOwner(nsKey)
 			}
 		})
-		this.ctx.scope.collectEffect(off)
+		this.ctx.effects.defer(off)
 	}
 }
 

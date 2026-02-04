@@ -59,7 +59,7 @@ export class PermissionsHost extends BasePlugin {
 				this.permissions.removeNamespace(nsKey)
 			}
 		})
-		this.ctx.scope.collectEffect(off)
+		this.ctx.effects.defer(off)
 	}
 }
 
