@@ -1,15 +1,15 @@
 # Bot Suite UI
 
-This folder contains the Bot Suite plugin UI pages registered by `bot-suite` (see `chatbots/bot-suite/ui/index.tsx`).
+This folder contains the Bot Suite plugin UI pages registered by `bot-suite` (see `plugins/chatbots/bot-suite/ui/index.tsx`).
 
 ## Permissions Console
 
-Entry: `chatbots/bot-suite/ui/features/permissions/page.tsx`
+Entry: `plugins/chatbots/bot-suite/ui/features/permissions/page.tsx`
 
 ### Roles (权限组)
 
 - A “权限组” is a `Role` in the permissions system.
-- Roles are displayed **sorted by `rank` descending**, then `roleId` ascending (see `chatbots/bot-suite/ui/features/permissions/hooks.ts`).
+- Roles are displayed **sorted by `rank` descending**, then `roleId` ascending (see `plugins/chatbots/bot-suite/ui/features/permissions/hooks.ts`).
 - `rank` defines precedence (higher rank wins first) when multiple roles contribute grants to a user.
 - The Roles list supports quick filtering (search by name/id/rank/parent).
 
@@ -50,7 +50,7 @@ Most edits are staged locally and only persisted on `Commit`:
 
 ## RPC contract notes
 
-The permissions console uses the `bot-suite` RPC extension (implemented in `chatbots/bot-suite/src/core/rpc/chatbots-rpc.ts`).
+The permissions console uses the `bot-suite` RPC extension (implemented in `plugins/chatbots/bot-suite/src/core/rpc/chatbots-rpc.ts`).
 
 - User search RPC is `searchUsersByName(query, limit?)`.
 - Role deletion RPC is `deleteRole(roleId)`.

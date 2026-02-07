@@ -3,7 +3,7 @@
 `pluxel-plugin-bot-core` is the lowest layer in the chatbot stack.
 It provides a cross-platform message model, a small parts/content DSL, and a predictable outbound pipeline.
 
-This doc is an overview. For deeper outbound rules, see `chatbots/bot-core/src/DESIGN.md`.
+This doc is an overview. For deeper outbound rules, see `plugins/chatbots/bot-core/src/DESIGN.md`.
 
 ## Goals
 
@@ -16,19 +16,19 @@ This doc is an overview. For deeper outbound rules, see `chatbots/bot-core/src/D
 
 ### Core runtime plugin
 
-- `BotCore` (`chatbots/bot-core/src/bot-core.ts`): a Pluxel service plugin (`name: 'bot-core'`).
+- `BotCore` (`plugins/chatbots/bot-core/src/bot-core.ts`): a Pluxel service plugin (`name: 'bot-core'`).
 - `BotCore.runtime`: manages bridges, adapter registry, event channel, and status tracking.
 
 ### Message model
 
-- `Message` / `AnyMessage` (`chatbots/bot-core/src/types.ts`): platform-discriminated message type.
+- `Message` / `AnyMessage` (`plugins/chatbots/bot-core/src/types.ts`): platform-discriminated message type.
 - `Part[]` (`MessageContent`): a single message payload.
-- `MessageBatch` (`chatbots/bot-core/parts/content.ts`): explicit “multiple messages” payload.
+- `MessageBatch` (`plugins/chatbots/bot-core/parts/content.ts`): explicit “multiple messages” payload.
 
 ### Parts & content helpers
 
-- `parts\`...\`` + `p.*` builders (`chatbots/bot-core/parts/*`): build `Part[]` safely.
-- `mc.*` (`chatbots/bot-core/parts/content.ts`): small helpers for common cases:
+- `parts\`...\`` + `p.*` builders (`plugins/chatbots/bot-core/parts/*`): build `Part[]` safely.
+- `mc.*` (`plugins/chatbots/bot-core/parts/content.ts`): small helpers for common cases:
   - `mc.text(...)`, `mc.json(...)`, `mc.imageData(...)`, `mc.of(...)`
   - `mc.batch(...)`, `mc.batchBestEffort(...)`
 
@@ -43,14 +43,14 @@ Every `msg` exposes:
 
 ## Directory layout
 
-- `chatbots/bot-core/src/bot-core.ts`: service plugin entrypoint.
-- `chatbots/bot-core/src/types.ts`: public types (Message, AdapterPolicy, ReplyPayload, …).
-- `chatbots/bot-core/src/adapter/`: adapter interface + registry + outbound helpers.
-- `chatbots/bot-core/src/bridge/`: per-platform bridge + normalize + adapter policy.
-- `chatbots/bot-core/src/outbound/`: outbound planning + compile + reply implementation.
-- `chatbots/bot-core/src/media/`: attachment/media collection + resolution utilities.
-- `chatbots/bot-core/src/cmd/` and `chatbots/bot-core/src/chat/`: lightweight command bus + chat command parsing.
-- `chatbots/bot-core/parts/`: Parts DSL, validation, and content helpers.
+- `plugins/chatbots/bot-core/src/bot-core.ts`: service plugin entrypoint.
+- `plugins/chatbots/bot-core/src/types.ts`: public types (Message, AdapterPolicy, ReplyPayload, …).
+- `plugins/chatbots/bot-core/src/adapter/`: adapter interface + registry + outbound helpers.
+- `plugins/chatbots/bot-core/src/bridge/`: per-platform bridge + normalize + adapter policy.
+- `plugins/chatbots/bot-core/src/outbound/`: outbound planning + compile + reply implementation.
+- `plugins/chatbots/bot-core/src/media/`: attachment/media collection + resolution utilities.
+- `plugins/chatbots/bot-core/src/cmd/` and `plugins/chatbots/bot-core/src/chat/`: lightweight command bus + chat command parsing.
+- `plugins/chatbots/bot-core/parts/`: Parts DSL, validation, and content helpers.
 
 ## Key flows
 

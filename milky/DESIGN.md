@@ -10,7 +10,7 @@
 
 ## 目录结构（按领域归属）
 
-- `chatbots/milky/src/api/`：Milky API SDK（纯调用层）
+- `plugins/chatbots/milky/src/api/`：Milky API SDK（纯调用层）
   - `definitions.generated.ts`：生成的 endpoint 列表（含 input/output struct 名称）
   - `definitions.ts`：对外 re-export（endpoint 类型）
   - `endpoints.source.ts`：**macro 入口**（构建期内联 endpoint 列表与 struct index）
@@ -20,17 +20,17 @@
   - `client.ts`：组装 `$raw` 与 schema 解析，产出 `MilkyApi` 实例（并注入 `$tool`）
   - `types.ts`：SDK 类型（`MilkyApi*`、`Result`、schema 推导等）
   - `index.ts`：对外出口（`createMilkyApi` 等）
-- `chatbots/milky/src/bot/`：Bot（把 SDK 注入到 Bot 实例 + 事件连接）
+- `plugins/chatbots/milky/src/bot/`：Bot（把 SDK 注入到 Bot 实例 + 事件连接）
   - `api.ts`：`AbstractBot`（只负责注入 `this.$raw/$tool`，并通过原型链提供 endpoint 方法）
   - `index.ts`：`MilkyBot`（事件流连接、状态维护、`$control` 面）
-- `chatbots/milky/src/runtime/`：运行时编排（多 Bot 管理 + RPC/SSE）
+- `plugins/chatbots/milky/src/runtime/`：运行时编排（多 Bot 管理 + RPC/SSE）
   - `runtime.ts`：`MilkyRuntime`（插件运行时入口：repo/manager/sse 的组合）
   - `bot-manager.ts`：`MilkyBotManager`（Bot 实例管理与状态落库）
   - `bot-registry.ts`：bot 配置与状态持久化（token 由 ctx.vault 管理）
   - `rpc.ts`：`MilkyBotRpc`（UI/RPC 调用入口）
   - `sse.ts`：SSE bridge（推送快照/游标）
   - `index.ts`：runtime 对外出口
-- `chatbots/milky/src/`（其它横切模块）
+- `plugins/chatbots/milky/src/`（其它横切模块）
   - `milky.ts`：插件入口（注册 UI/RPC/SSE 扩展）
   - `extensions.ts`：扩展注册
   - `shared/status.ts`：bot 状态模型（跨 bot/runtime 共用）
@@ -110,5 +110,5 @@ Bot 的生命周期控制与状态读取通过 `bot.$control` 暴露：
 
 ## 生成与更新
 
-- `pnpm -C chatbots/milky gen:api`：生成 `src/api/definitions.generated.ts`
-- （可选）`pnpm -C chatbots/milky update:openapi`：拉取最新 OpenAPI 并刷新 definitions
+- `pnpm -C plugins/chatbots/milky gen:api`：生成 `src/api/definitions.generated.ts`
+- （可选）`pnpm -C plugins/chatbots/milky update:openapi`：拉取最新 OpenAPI 并刷新 definitions

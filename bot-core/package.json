@@ -4,8 +4,6 @@
   "version": "0.1.0",
   "description": "Bot-core runtime and platform adapters.",
   "type": "module",
-  "main": "./dist/index.mjs",
-  "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "files": [
     "dist",

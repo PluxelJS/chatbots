@@ -9,13 +9,13 @@
 
 ## 目录结构
 
-- `chatbots/bot-core/parts/`
+- `plugins/chatbots/bot-core/parts/`
   - `dsl.ts`：构建 Part 的便捷函数（含 `imageData/fileData`）
   - `tag.ts`：`parts\`...\``（类型锚点）
   - `runtime.ts`：`__parts(quasis, exprs) -> Part[]`（transform 后的运行时代码）
-- `chatbots/bot-core/src/outbound/`
+- `plugins/chatbots/bot-core/src/outbound/`
   - `plan.ts`：将 `Part[]` 规划成“发送操作序列”（`reply()` 使用它做稳定拆分）
-- `chatbots/bot-core/src/adapter/`
+- `plugins/chatbots/bot-core/src/adapter/`
   - adapter 接口 + 注册表 + `createReply/createSendHelpers` 发送能力
 
 ## Parts 设计语言
@@ -70,7 +70,7 @@ bot-core 的 Outbound 入口（`reply/sendText` 等）只接受 `Part[]`（相�
 
 ## Adapter 约定（平台实现需要提供的能力）
 
-核心接口定义在 `chatbots/bot-core/src/adapter/index.ts`：
+核心接口定义在 `plugins/chatbots/bot-core/src/adapter/index.ts`：
 
 - `render(parts) -> { text, format }`：把“文本类 Part”渲染为平台格式文本（plain/markdown/html）
 - `policy.outbound.supportedOps`：声明平台支持的 outbound 原子操作（`text/image/audio/video/file`），Outbound 层据此决定“严格报错 vs best-effort 退化”
