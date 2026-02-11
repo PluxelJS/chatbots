@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@saltify/milky-types": "latest",
-    "zod": "^4.1.5"
+    "zod": "^4.3.6"
   },
   "peerDependencies": {
     "@pluxel/wretch": "workspace:*"

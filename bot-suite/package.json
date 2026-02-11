@@ -45,7 +45,7 @@
     "test:perm": "bun test --conditions=@pluxel/hmr src/permissions"
   },
   "dependencies": {
-    "@mikro-orm/libsql": "^6.6.3",
+    "@mikro-orm/libsql": "^6.6.6",
     "@pluxel/cmd": "workspace:*",
     "valibot": "^1.2.0"
   },

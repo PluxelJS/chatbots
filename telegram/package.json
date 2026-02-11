@@ -24,7 +24,7 @@
     "build": "pluxel build"
   },
   "dependencies": {
-    "@grammyjs/types": "^3.6.1"
+    "@grammyjs/types": "^3.24.0"
   },
   "peerDependencies": {
     "@pluxel/wretch": "workspace:*"
