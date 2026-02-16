@@ -1,0 +1,18 @@
+packages:
+  # product plugins
+  - bot-core
+  - bot-suite
+  - kook
+  - milky
+  - telegram
+  - plugins/**
+  # upstream (submodule)
+  - vendor/pluxel-template/packages/**
+  - vendor/pluxel-template/plugins/**
+  - '!vendor/pluxel-template/plugins/native/napi-rs/*__*'
+  - '!vendor/pluxel-template/plugins/chatbots/**'
+  - '!vendor/pluxel-template/plugins/univer/**'
+
+public-hoist-pattern:
+  - '@pluxel/core'
+  - '@pluxel/hmr'

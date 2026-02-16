@@ -1,0 +1,51 @@
+// Downstream workspace config. Upstream lives in vendor/pluxel-template.
+{
+	"version": 1,
+	"profile": "default",
+	"defaults": {
+		"roots": [
+			"vendor/pluxel-template/packages",
+			"vendor/pluxel-template/plugins/ai",
+			"vendor/pluxel-template/plugins/infra",
+			"vendor/pluxel-template/plugins/data",
+			"vendor/pluxel-template/plugins/func",
+			"vendor/pluxel-template/plugins/native",
+			"vendor/pluxel-template/plugins/builtin",
+			"vendor/pluxel-template/plugins/render",
+			"bot-core",
+			"bot-suite",
+			"kook",
+			"milky",
+			"telegram",
+			"plugins"
+		],
+		"exclude": [
+			"**/node_modules/**",
+			"**/dist/**",
+			"**/.turbo/**",
+			"**/*.map",
+			"vendor/pluxel-template/plugins/native/napi-rs/*__*"
+		]
+	},
+	"profiles": {
+		"dev": {
+			"enabled": ["@pluxel/cmd", "@pluxel/toolkit"]
+		},
+		"default": {
+			"enabled": [
+				"@pluxel/cmd",
+				"@pluxel/graphql",
+				"@pluxel/toolkit",
+				"@pluxel/websocket",
+				"@pluxel/wretch",
+				"pluxel-plugin-bot-core",
+				"pluxel-plugin-bot-suite",
+				"pluxel-plugin-kook",
+				"pluxel-plugin-kv",
+				"pluxel-plugin-mikro-orm",
+				"pluxel-plugin-milky",
+				"pluxel-plugin-telegram"
+			]
+		}
+	}
+}

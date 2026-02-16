@@ -287,3 +287,7 @@ build/
 # Local plugin runtime data (not source-controlled)
 bot-suite/data/
 bot-suite/data/*.sqlite
+
+# Local plugin runtime data (Pluxel)
+.pluxel/
+data/

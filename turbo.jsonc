@@ -1,0 +1,25 @@
+{
+	"$schema": "https://turborepo.com/schema.json",
+	"globalDependencies": [
+		"tsconfig*.json",
+		"vitest.config.ts",
+		"pnpm-workspace.yaml",
+		"vendor/pluxel-template/tsconfig*.json",
+		"vendor/pluxel-template/vitest.config.ts",
+		"vendor/pluxel-template/pnpm-workspace.yaml"
+	],
+	"tasks": {
+		"build": {
+			"dependsOn": ["^build"],
+			"outputs": ["dist/**", "public/**"]
+		},
+		"test": {
+			"outputs": []
+		},
+		"dev": {
+			"cache": false,
+			"persistent": true
+		}
+	}
+}
+
