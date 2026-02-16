@@ -11,10 +11,9 @@ import { perm, resolvePermRef, type PermRef } from '../../permissions/ref'
 import type { ChatbotsCommandContext } from '../types'
 import type { CommandRegistry, RegisteredCommandInfo } from '../runtime/command-registry'
 
-import { getDecoratedChatbotsCommands, type DecoratedEntry, type DecoratedPermSpec, type DecoratedTextCommandSpec } from './decorators'
+import type { BuiltCommandDraft, BuiltOpDraft, CommandDraft, OpDraft } from './draft'
 import { cmd as cmdDraft, isBuiltCommandDraft, isBuiltDraft, isBuiltOpDraft, op as opDraft, type BuiltDraft } from './draft'
-
-export type RateScope = 'user' | 'identity' | 'channel' | 'global'
+import type { OpSpec, PermSpecInput, RateScope, TextCommandSpec } from './spec'
 
 type PermSpec = false | { ref: PermRef; message?: string; declare?: { default: PermissionEffect } & PermissionMeta }
 
@@ -27,19 +26,22 @@ type CommonSpec = {
 	mcp?: McpConfig
 }
 
-type TextSpec = CommonSpec & {
-	triggers?: readonly string[]
-	aliases?: readonly string[]
-	usage?: string
-	examples?: string[]
-}
-
 export type CommandKit<C extends ExecCtx = ChatbotsCommandContext> = {
 	group(name: string): CommandKit<C>
 	group(name: string, fn: (kit: CommandKit<C>) => void): void
 
 	scope(prefix: string): CommandKit<C>
 	scope(prefix: string, fn: (kit: CommandKit<C>) => void): void
+
+	/**
+	 * Register a text command.
+	 */
+	command<R>(spec: { localId: string } & TextCommandSpec, factory: (c: CommandDraft<C>) => BuiltCommandDraft<C, R>): void
+	command<R>(spec: { localId: string } & TextCommandSpec, built: BuiltCommandDraft<C, R>): void
+
+	/** Register a non-text op. */
+	op<R>(spec: { localId: string } & OpSpec, factory: (o: OpDraft<C>) => BuiltOpDraft<C, R>): void
+	op<R>(spec: { localId: string } & OpSpec, built: BuiltOpDraft<C, R>): void
 
 	list(): Array<{
 		id: string
@@ -52,8 +54,6 @@ export type CommandKit<C extends ExecCtx = ChatbotsCommandContext> = {
 	}>
 
 	help(group?: string): string
-
-	install(target: object): void
 }
 
 const uniqueStrings = (xs: readonly string[]) => {
@@ -228,8 +228,8 @@ export function createPermissionCommandKit<C extends ChatbotsCommandContext>(
 		if (!exists) perms.declareStar(nsKey, s, def)
 	}
 
-	const normalizePermSpec = (localId: string, spec: DecoratedPermSpec | undefined): PermSpec => {
-		const permSpec: DecoratedPermSpec = spec === undefined ? true : spec
+	const normalizePermSpec = (localId: string, spec: PermSpecInput | undefined): PermSpec => {
+		const permSpec: PermSpecInput = spec === undefined ? true : spec
 		if (permSpec === false) return false
 
 		const permLocal =
@@ -307,17 +307,149 @@ export function createPermissionCommandKit<C extends ChatbotsCommandContext>(
 			registry.setInfo(exec.id, info)
 		}
 
+		function buildFromFactory<R>(
+			kind: 'command',
+			factoryOrBuilt: BuiltCommandDraft<C, R> | ((c: CommandDraft<C>) => BuiltCommandDraft<C, R>),
+		): BuiltCommandDraft<C, R>
+		function buildFromFactory<R>(
+			kind: 'op',
+			factoryOrBuilt: BuiltOpDraft<C, R> | ((o: OpDraft<C>) => BuiltOpDraft<C, R>),
+		): BuiltOpDraft<C, R>
+		function buildFromFactory(kind: 'command' | 'op', factoryOrBuilt: unknown): BuiltDraft<C, unknown> {
+			if (kind === 'command' && isBuiltCommandDraft<C>(factoryOrBuilt)) return factoryOrBuilt
+			if (kind === 'op' && isBuiltOpDraft<C>(factoryOrBuilt)) return factoryOrBuilt
+
+			if (isBuiltDraft<C>(factoryOrBuilt)) {
+				throw new Error(`[chatbots] ${kind}(): got a built draft of the wrong kind`)
+			}
+
+			if (typeof factoryOrBuilt !== 'function') {
+				throw new Error(`[chatbots] ${kind}(): expected a built draft or a factory function`)
+			}
+
+			const d = kind === 'op' ? opDraft<C>() : cmdDraft<C>()
+			const out = (factoryOrBuilt as any)(d)
+			if (kind === 'command' && isBuiltCommandDraft<C>(out)) return out
+			if (kind === 'op' && isBuiltOpDraft<C>(out)) return out
+
+			throw new Error(`[chatbots] ${kind}(): factory must return a built draft (call .handle(...))`)
+		}
+
+		const registerOp = <R,>(spec: { localId: string } & OpSpec, built: BuiltOpDraft<C, R>) => {
+			if (spec.enabled === false) return
+
+			const localId = joinLocalId(scopePrefix, String(spec.localId).trim())
+			if (!localId) return
+			const id = fullId(localId)
+
+			const perm = normalizePermSpec(localId, spec.perm)
+			const common: CommonSpec & { localId: string; group?: string } = {
+				localId,
+				...(spec.title ? { title: spec.title } : {}),
+				...(spec.tags ? { tags: spec.tags } : {}),
+				...(perm === false ? { perm: false } : perm ? { perm } : {}),
+				...(spec.rates ? { rates: spec.rates } : {}),
+				...(spec.mcp ? { mcp: spec.mcp } : {}),
+				...(spec.group ? { group: spec.group } : {}),
+			}
+
+			let b = cmd(id)
+			const applied = built.apply(b)
+			b = applyCommon(applied.builder, common)
+			if (common.mcp) {
+				const m: McpConfig = {
+					...common.mcp,
+					...(common.mcp.name ? {} : { name: defaultMcpName(nsKey, localId) }),
+				}
+				b = b.mcp(m)
+			}
+			const exec = b.build()
+			registry.registerOp(exec, owner)
+		}
+
+		const registerCommand = <R,>(spec: { localId: string } & TextCommandSpec, built: BuiltCommandDraft<C, R>) => {
+			if (spec.enabled === false) return
+
+			const localId = joinLocalId(scopePrefix, String(spec.localId).trim())
+			if (!localId) return
+			const id = fullId(localId)
+
+			const triggers = uniqueStrings([
+				...(spec.triggers?.length ? spec.triggers : [defaultTriggerFromLocalId(localId)]),
+				...(spec.aliases ?? []),
+			])
+			if (!triggers.length) throw new Error(`[chatbots] command("${id}") requires at least one trigger`)
+
+			const perm = normalizePermSpec(localId, spec.perm)
+			const common: CommonSpec & { localId: string; group?: string } = {
+				localId,
+				...(spec.title ? { title: spec.title } : {}),
+				...(spec.tags ? { tags: spec.tags } : {}),
+				...(perm === false ? { perm: false } : perm ? { perm } : {}),
+				...(spec.rates ? { rates: spec.rates } : {}),
+				...(spec.mcp ? { mcp: spec.mcp } : {}),
+				...(spec.group ? { group: spec.group } : {}),
+				...(spec.description ? { description: spec.description } : {}),
+			}
+
+			let b = cmd(id)
+			const applied = built.apply(b)
+			b = applyCommon(applied.builder, common)
+			if (common.mcp) {
+				const m: McpConfig = {
+					...common.mcp,
+					...(common.mcp.name ? {} : { name: defaultMcpName(nsKey, localId) }),
+				}
+				b = b.mcp(m)
+			}
+
+			if (spec.description) b = b.doc({ description: spec.description })
+
+			const partialTextCfg = applied.text as Omit<TextConfig, 'triggers'> | undefined
+			const textCfg: TextConfig = {
+				triggers,
+				...(partialTextCfg ? partialTextCfg : {}),
+			}
+
+			const exec = b.text(textCfg).build()
+
+			const effectiveGroup = common.group ?? group ?? deriveGroupFromLocalId(localId)
+			const info: RegisteredCommandInfo = {
+				name: triggers[0]!,
+				aliases: triggers.slice(1),
+				usage: spec.usage,
+				description: spec.description,
+				group: effectiveGroup,
+				...(perm && perm !== false ? { permNode: perm.ref.node } : {}),
+			}
+
+			registerText(exec, info)
+		}
+
 		return {
-			group(name: string, fn?: (kit: CommandKit<C>) => void): any {
+			group(name: string, fn?: (kit: CommandKit<C>) => void) {
 				const derived = makeKit({ group: name, tags, scopePrefix })
 				if (typeof fn === 'function') return fn(derived)
 				return derived
 			},
 
-			scope(prefix: string, fn?: (kit: CommandKit<C>) => void): any {
+			scope(prefix: string, fn?: (kit: CommandKit<C>) => void) {
 				const derived = makeKit({ group, tags, scopePrefix: joinLocalId(scopePrefix, prefix) })
 				if (typeof fn === 'function') return fn(derived)
 				return derived
+			},
+
+			command<R>(
+				spec: { localId: string } & TextCommandSpec,
+				factoryOrBuilt: BuiltCommandDraft<C, R> | ((c: CommandDraft<C>) => BuiltCommandDraft<C, R>),
+			) {
+				const built = buildFromFactory('command', factoryOrBuilt)
+				registerCommand(spec, built)
+			},
+
+			op<R>(spec: { localId: string } & OpSpec, factoryOrBuilt: BuiltOpDraft<C, R> | ((o: OpDraft<C>) => BuiltOpDraft<C, R>)) {
+				const built = buildFromFactory('op', factoryOrBuilt)
+				registerOp(spec, built)
 			},
 
 			list() {
@@ -358,114 +490,6 @@ export function createPermissionCommandKit<C extends ChatbotsCommandContext>(
 					lines.push(`- ${head}${desc}`)
 				}
 				return lines.join('\n')
-			},
-
-			install(target) {
-				const entries: ReadonlyArray<DecoratedEntry> = getDecoratedChatbotsCommands(target)
-				for (const entry of entries) {
-					const localId = joinLocalId(scopePrefix, String(entry.localId).trim())
-					if (!localId) continue
-
-					const spec = entry.spec
-					if (spec.enabled === false) continue
-					if (typeof spec.enabled === 'function' && !spec.enabled(target)) continue
-
-					const id = fullId(localId)
-					const member = (target as any)[entry.key]
-
-					let built: BuiltDraft<C, any> | undefined
-					if (typeof member === 'function') {
-						const d = entry.kind === 'op' ? opDraft<C>() : cmdDraft<C>()
-						const out = member.call(target, d)
-						if (isBuiltDraft<C>(out)) built = out
-					} else if (isBuiltDraft<C>(member)) {
-						built = member
-					}
-
-					if (!built) {
-						throw new Error(
-							`[chatbots] install(): decorated member "${String(entry.key)}" must return a built draft (call .handle(...))`,
-						)
-					}
-
-					const perm = normalizePermSpec(localId, (spec as any).perm)
-					const common: CommonSpec & { localId: string; group?: string } = {
-						localId,
-						...(spec.title ? { title: spec.title } : {}),
-						...(spec.tags ? { tags: spec.tags } : {}),
-						...(perm === false ? { perm: false } : perm ? { perm } : {}),
-						...(spec.rates ? { rates: spec.rates } : {}),
-						...((spec as any).mcp ? { mcp: (spec as any).mcp } : {}),
-						...(spec.group ? { group: spec.group } : {}),
-						...(entry.kind === 'command' && (spec as any).description ? { description: (spec as any).description } : {}),
-					}
-
-					if (entry.kind === 'op') {
-						if (!isBuiltOpDraft<C>(built)) {
-							throw new Error(`[chatbots] install(): @ChatOp("${localId}") must return an op draft (use op<Ctx>()...)`)
-						}
-						let b = cmd(id)
-						const applied = built.apply(b)
-						b = applyCommon(applied.builder, common)
-						if (common.mcp) {
-							const m: McpConfig = {
-								...common.mcp,
-								...(common.mcp.name ? {} : { name: defaultMcpName(nsKey, localId) }),
-							}
-							b = b.mcp(m)
-						}
-						const exec = b.build()
-						registry.registerOp(exec, owner)
-						continue
-					}
-
-					const textSpec = spec as DecoratedTextCommandSpec
-					const triggers = uniqueStrings([
-						...(textSpec.triggers?.length ? textSpec.triggers : [defaultTriggerFromLocalId(localId)]),
-						...(textSpec.aliases ?? []),
-					])
-					if (!triggers.length) throw new Error(`[chatbots] command("${id}") requires at least one trigger`)
-
-					if (!isBuiltCommandDraft<C>(built)) {
-						throw new Error(`[chatbots] install(): @ChatCommand("${localId}") must return a command draft (use cmd<Ctx>()...)`)
-					}
-
-					let b = cmd(id)
-					const applied = built.apply(b)
-					b = applyCommon(applied.builder, common)
-					if (common.mcp) {
-						const m: McpConfig = {
-							...common.mcp,
-							...(common.mcp.name ? {} : { name: defaultMcpName(nsKey, localId) }),
-						}
-						b = b.mcp(m)
-					}
-
-					if (spec.title || textSpec.description || textSpec.usage || textSpec.examples) {
-						// cmdkit doc is intentionally minimal; keep rich UI fields in registry info.
-						if (textSpec.description) b = b.doc({ description: textSpec.description })
-					}
-
-					const argvCfg = (applied.text as Omit<TextConfig, 'triggers' | 'tokenize'> | undefined) ?? undefined
-					const textCfg: TextConfig = {
-						triggers,
-						...(argvCfg ? argvCfg : {}),
-					}
-
-					const exec = b.text(textCfg).build()
-
-					const effectiveGroup = common.group ?? group ?? deriveGroupFromLocalId(localId)
-					const info: RegisteredCommandInfo = {
-						name: triggers[0]!,
-						aliases: triggers.slice(1),
-						usage: textSpec.usage,
-						description: textSpec.description,
-						group: effectiveGroup,
-						...(perm && perm !== false ? { permNode: perm.ref.node } : {}),
-					}
-
-					registerText(exec, info)
-				}
 			},
 		}
 	}

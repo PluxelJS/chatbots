@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { CommandRegistry } from '../runtime/command-registry'
 import { createPermissionCommandKit } from './kit'
 import { Decision } from '../../permissions/decision'
-import { ChatCommand } from './decorators'
 
 type Ctx = {
 	user: { id: number }
@@ -18,8 +17,12 @@ describe('chatbots cmd rates plugin', () => {
 		const perms = {
 			registry: { getNamespaceEpoch: (_nsIndex: number) => 1 },
 			resolver: {
-				resolve: (node: string) => (declaredExact.has(node) ? ({ nsIndex: 0, path: new Uint32Array([1]), ver: 1 } as any) : null),
-				resolveGrant: (node: string) => (declaredStar.has(node) ? ({ nsIndex: 0, path: new Uint32Array([1]), ver: 1, kind: 'star', local: 'cmd', nsKey: 'owner' } as any) : null),
+				resolve: (node: string) =>
+					declaredExact.has(node) ? ({ nsIndex: 0, path: new Uint32Array([1]), ver: 1 } as any) : null,
+				resolveGrant: (node: string) =>
+					declaredStar.has(node)
+						? ({ nsIndex: 0, path: new Uint32Array([1]), ver: 1, kind: 'star', local: 'cmd', nsKey: 'owner' } as any)
+						: null,
 			},
 			declareExact: (nsKey: string, local: string) => void declaredExact.add(`${nsKey}.${local}`),
 			declareStar: (nsKey: string, localPrefix: string) => void declaredStar.add(`${nsKey}.${localPrefix}.*`),
@@ -41,20 +44,12 @@ describe('chatbots cmd rates plugin', () => {
 			effects: { defer: (_fn: any) => ({ dispose: async () => {}, cancel: () => {} }) },
 		} as any
 
-	const registry = new CommandRegistry<Ctx>({ caseInsensitive: true })
-	const kit = createPermissionCommandKit(registry as any, perms, { owner, scopeKey: 'owner', rates })
+		const registry = new CommandRegistry<Ctx>({ caseInsensitive: true })
+		const kit = createPermissionCommandKit(registry as any, perms, { owner, scopeKey: 'owner', rates })
 
-	class P {
-		@ChatCommand({
-			triggers: ['ping'],
-			rates: { rule: { type: 'cooldown', ttlMs: 1000 } },
-		})
-		ping(c: any) {
-			return c.argv().handle(() => 'pong')
-		}
-	}
-
-	kit.install(new P())
+		kit.command({ localId: 'ping', triggers: ['ping'], rates: { rule: { type: 'cooldown', ttlMs: 1000 } } }, (c) =>
+			c.handle(() => 'pong'),
+		)
 
 		const ctx: Ctx = {
 			user: { id: 1 },
@@ -75,3 +70,4 @@ describe('chatbots cmd rates plugin', () => {
 		}
 	})
 })
+

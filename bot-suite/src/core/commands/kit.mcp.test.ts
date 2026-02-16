@@ -4,8 +4,6 @@ import type { Context } from '@pluxel/hmr'
 
 import { CommandRegistry } from '../runtime/command-registry'
 import { createPermissionCommandKit } from './kit'
-import { ChatCommand, ChatOp } from './decorators'
-import { cmd, op } from './draft'
 import { Decision } from '../../permissions/decision'
 
 type Ctx = {
@@ -24,27 +22,23 @@ describe('chatbots cmdkit mcp opt-in', () => {
 			authorizeUserFast: async () => Decision.Allow,
 		} as any
 
-		const owner = {
-			pluginInfo: { id: 'owner' },
-			effects: { defer: (_fn: any) => ({ dispose: async () => {}, cancel: () => {} }) },
-		} as any satisfies Context
+			const owner = {
+				pluginInfo: { id: 'owner' },
+				effects: { defer: (_fn: any) => ({ dispose: async () => {}, cancel: () => {} }) },
+			} as any satisfies Context
 
-		const registry = new CommandRegistry<Ctx>({ caseInsensitive: true })
-		const kit = createPermissionCommandKit(registry as any, perms, { owner, scopeKey: 'owner' })
+			const registry = new CommandRegistry<Ctx>({ caseInsensitive: true })
+			const kit = createPermissionCommandKit(registry as any, perms, { owner, scopeKey: 'owner' })
 
-		class P {
-			@ChatCommand({ triggers: ['ping'], mcp: { title: 'Ping', description: 'Ping command' }, perm: false })
-			ping = cmd<Ctx>().argv().handle(() => 'pong')
+			kit.command(
+				{ localId: 'ping', triggers: ['ping'], mcp: { title: 'Ping', description: 'Ping command' }, perm: false },
+				(c) => c.handle(() => 'pong'),
+			)
+			kit.op({ localId: 'health', mcp: { title: 'Health', description: 'Health op' } }, (o) => o.handle(() => 'ok'))
 
-			@ChatOp({ localId: 'health', mcp: { title: 'Health', description: 'Health op' } })
-			health = op<Ctx>().handle(() => 'ok')
-		}
-
-		kit.install(new P())
-
-		const mcp = registry.listMcpTools()
-		expect(mcp.some((x) => x.id === 'owner.cmd.ping')).toBe(true)
-		expect(mcp.some((x) => x.id === 'owner.cmd.health')).toBe(true)
-		expect(mcp.find((x) => x.id === 'owner.cmd.ping')?.mcp.name).toBe('owner.ping')
+			const mcp = registry.listMcpTools()
+			expect(mcp.some((x) => x.id === 'owner.cmd.ping')).toBe(true)
+			expect(mcp.some((x) => x.id === 'owner.cmd.health')).toBe(true)
+			expect(mcp.find((x) => x.id === 'owner.cmd.ping')?.mcp.name).toBe('owner.ping')
+		})
 	})
-})

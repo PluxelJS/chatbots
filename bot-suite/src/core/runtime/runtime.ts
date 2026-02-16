@@ -16,17 +16,15 @@ import type {
 	Platform,
 	SandboxSession,
 } from 'pluxel-plugin-bot-core'
-import { CmdError, isErr } from '@pluxel/cmd'
+import { CmdError, Type, isErr } from '@pluxel/cmd'
 
 import { UserDirectory } from '../users/directory'
 import { PermissionService } from '../../permissions/service'
 import { createPermissionCommandKit, type CommandKit as ChatbotsCommandKit } from '../commands/kit'
-import { ChatCommand } from '../commands/decorators'
 import { createPermissionApi, type ChatbotsPermissionApi } from '../../permissions/permission'
 import type { ChatbotsCommandContext } from '../types'
 import { CommandRegistry } from './command-registry'
 import type { RatesApi } from 'pluxel-plugin-kv'
-import * as v from 'valibot'
 import type { CommandDraft } from '../commands/draft'
 
 export interface ChatbotsRuntimeOptions {
@@ -301,26 +299,98 @@ export class ChatbotsRuntime {
 	}
 
 	private registerBuiltinCommands() {
-		this.cmd.install(this)
+		const core = this.cmd.group('core')
+		core.command(
+			{
+				localId: 'help',
+				usage: 'help [command]',
+				description: '查看帮助',
+				perm: false,
+			},
+			(c) => this.defineCoreHelp(c),
+		)
+		core.command(
+			{
+				localId: 'info',
+				aliases: ['about', 'status'],
+				usage: 'info [platform]',
+				description: '当前平台抽象信息',
+				perm: false,
+			},
+			(c) => this.defineCoreInfo(c),
+		)
+
+		if (this.options.devCommands) {
+			const dev = this.cmd.group('dev')
+			dev.command(
+				{
+					localId: 'echo',
+					usage: 'echo',
+					description: '原样复读当前消息（parts）',
+					perm: false,
+				},
+				(c) => this.defineDevEcho(c),
+			)
+			dev.command(
+				{
+					localId: 'parts',
+					usage: 'parts [ref|msg]',
+					description: '返回解析后的 parts JSON（默认优先引用消息）',
+					perm: false,
+				},
+				(c) => this.defineDevParts(c),
+			)
+			dev.command(
+				{
+					localId: 'meta',
+					usage: 'meta',
+					description: '返回基础元信息/附件摘要',
+					perm: false,
+				},
+				(c) => this.defineDevMeta(c),
+			)
+			dev.command(
+				{
+					localId: 'say',
+					usage: 'say [...text]',
+					description: '直接回复文本',
+					perm: false,
+				},
+				(c) => this.defineDevSay(c),
+			)
+		}
+
+		if (this.options.registerUserCommands) {
+			const user = this.cmd.scope('user').group('user')
+			user.command(
+				{
+					localId: 'me',
+					usage: 'user me',
+					description: '查看当前跨平台用户信息',
+					perm: false,
+				},
+				(c) => this.defineUserMe(c),
+			)
+			user.command(
+				{
+					localId: 'link',
+					usage: 'user link [CODE]',
+					description: '生成/使用绑定码，用于跨平台绑定同一用户',
+					perm: false,
+				},
+				(c) => this.defineUserLink(c),
+			)
+		}
 	}
 
-	@ChatCommand({
-		localId: 'help',
-		group: 'core',
-		triggers: ['help'],
-		usage: 'help [command]',
-		description: '查看帮助',
-		perm: false,
-	})
 	private defineCoreHelp(c: CommandDraft<ChatbotsCommandContext>) {
 		return c
-			.input(v.object({ command: v.optional(v.string()) }))
-			.argv((p) => ({ command: p._[0] }))
-			.handle(({ command }) => {
+			.input(Type.String())
+			.handle((command) => {
 				const prefix = this.getCmdPrefix()
 				const list = this.cmd.list()
-				if (!command) return this.formatHelp(prefix)
-				const normalized = command.trim().toLowerCase()
+				const normalized = String(command ?? '').trim().toLowerCase()
+				if (!normalized) return this.formatHelp(prefix)
 				const found = list.find(
 					(c) => c.name.toLowerCase() === normalized || c.aliases.some((a) => a.toLowerCase() === normalized),
 				)
@@ -331,21 +401,13 @@ export class ChatbotsRuntime {
 			})
 	}
 
-	@ChatCommand({
-		localId: 'info',
-		group: 'core',
-		triggers: ['info', 'about', 'status'],
-		usage: 'info [platform]',
-		description: '当前平台抽象信息',
-		perm: false,
-	})
 	private defineCoreInfo(c: CommandDraft<ChatbotsCommandContext>) {
 		return c
-			.input(v.object({ platform: v.optional(v.string()) }))
-			.argv((p) => ({ platform: p._[0] }))
-			.handle(({ platform }, ctx) => {
+			.input(Type.String())
+			.handle((platform, ctx) => {
 				const prefix = this.getCmdPrefix()
-				const target = String(platform ?? ctx.msg.platform)
+				const raw = String(platform ?? '').trim()
+				const target = raw || String(ctx.msg.platform)
 				const adapterList = this.bot.adapters.list()
 				const adapters = adapterList.map((a) => ({
 					platform: a.name,
@@ -385,33 +447,14 @@ export class ChatbotsRuntime {
 			})
 	}
 
-	@ChatCommand({
-		localId: 'echo',
-		group: 'dev',
-		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
-		triggers: ['echo'],
-		usage: 'echo',
-		description: '原样复读当前消息（parts）',
-		perm: false,
-	})
 	private defineDevEcho(c: CommandDraft<ChatbotsCommandContext>) {
-		return c.argv().handle((_input, ctx) => (ctx.msg.parts.length ? ctx.msg.parts : ctx.msg.text || '[empty]'))
+		return c.handle((_input, ctx) => (ctx.msg.parts.length ? ctx.msg.parts : ctx.msg.text || '[empty]'))
 	}
 
-	@ChatCommand({
-		localId: 'parts',
-		group: 'dev',
-		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
-		triggers: ['parts'],
-		usage: 'parts [ref|msg]',
-		description: '返回解析后的 parts JSON（默认优先引用消息）',
-		perm: false,
-	})
 	private defineDevParts(c: CommandDraft<ChatbotsCommandContext>) {
 		return c
-			.input(v.object({ scope: v.optional(v.string()) }))
-			.argv((p) => ({ scope: p._[0] }))
-			.handle(({ scope }, ctx) => {
+			.input(Type.String())
+			.handle((scope, ctx) => {
 				const mode = String(scope ?? '').trim().toLowerCase()
 				const hasRef = Boolean(ctx.msg.reference?.parts?.length)
 				const useRef = mode ? mode === 'ref' : hasRef
@@ -431,69 +474,32 @@ export class ChatbotsRuntime {
 			})
 	}
 
-	@ChatCommand({
-		localId: 'meta',
-		group: 'dev',
-		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
-		triggers: ['meta'],
-		usage: 'meta',
-		description: '返回基础元信息/附件摘要',
-		perm: false,
-	})
 	private defineDevMeta(c: CommandDraft<ChatbotsCommandContext>) {
-		return c.argv().handle((_input, ctx) => this.buildJsonBlock(this.summarizeMessage(ctx.msg)))
+		return c.handle((_input, ctx) => this.buildJsonBlock(this.summarizeMessage(ctx.msg)))
 	}
 
-	@ChatCommand({
-		localId: 'say',
-		group: 'dev',
-		enabled: (rt) => (rt as ChatbotsRuntime).options.devCommands,
-		triggers: ['say'],
-		usage: 'say [...text]',
-		description: '直接回复文本',
-		perm: false,
-	})
 	private defineDevSay(c: CommandDraft<ChatbotsCommandContext>) {
-		return c
-			.input(v.object({ text: v.array(v.string()) }))
-			.argv((p) => ({ text: p._ }))
-			.handle(({ text }) => {
-				if (!text?.length) return undefined
-				return text.join(' ')
-			})
+		return c.input(Type.String()).handle((text) => {
+			const s = String(text ?? '').trim()
+			if (!s) return undefined
+			return s
+		})
 	}
 
-	@ChatCommand({
-		localId: 'user.me',
-		group: 'user',
-		enabled: (rt) => (rt as ChatbotsRuntime).options.registerUserCommands,
-		triggers: ['user me'],
-		usage: 'user me',
-		description: '查看当前跨平台用户信息',
-		perm: false,
-	})
 	private defineUserMe(c: CommandDraft<ChatbotsCommandContext>) {
-		return c.argv().handle((_input, ctx) => {
+		return c.handle((_input, ctx) => {
 			const pairs = ctx.user.identities.map((i) => `${i.platform}:${i.platformUserId}`).join(', ')
 			return `uid=${ctx.user.id}\nidentities=${pairs || '[none]'}`
 		})
 	}
 
-	@ChatCommand({
-		localId: 'user.link',
-		group: 'user',
-		enabled: (rt) => (rt as ChatbotsRuntime).options.registerUserCommands,
-		triggers: ['user link'],
-		usage: 'user link [CODE]',
-		description: '生成/使用绑定码，用于跨平台绑定同一用户',
-		perm: false,
-	})
 	private defineUserLink(c: CommandDraft<ChatbotsCommandContext>) {
 		return c
-			.input(v.object({ code: v.optional(v.string()) }))
-			.argv((p) => ({ code: p._[0] }))
-			.handle(async ({ code }, ctx) => {
-				if (!code) {
+			.input(Type.String())
+			.handle(async (code, ctx) => {
+				const raw = String(code ?? '').trim()
+				const first = raw ? raw.split(/\s+/g)[0]! : ''
+				if (!first) {
 					const { code: created, expiresAt } = await this.users.createLinkToken(
 						ctx.user.id,
 						this.options.linkTokenTtlSeconds,
@@ -503,7 +509,7 @@ export class ChatbotsRuntime {
 				}
 
 				const res = await this.users.consumeLinkToken(
-					String(code).trim().toUpperCase(),
+					first.trim().toUpperCase(),
 					ctx.identity.platform,
 					ctx.identity.platformUserId,
 				)

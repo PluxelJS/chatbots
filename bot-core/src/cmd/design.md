@@ -13,7 +13,8 @@ bot-core 的 `src/cmd` 仅 re-export `@pluxel/cmd`（cmdkit）。命令核心设
 - `input(schema)` 是“规范 input”（候选值会被校验/转换），未设置时默认是严格 `{}`。
 - `.text({ triggers, ... })` 是“文本入口开关”：
   - 不调用 `.text()`：该 executable 不可被 text router 触发
-  - `.text()` 默认使用 `type-flag` 解析 tokens，并在未显式提供 `flags` 时从 `input(schema)` best-effort 推导 flags
+  - `.text()` 会基于 `input(schema)` 的 JSON Schema 自动派生参数解析（`--k=v` / `--k v` / `-k v` / `--no-k` 等）
+  - 如需 positional 语法（“剩余文本”），使用 `.text({ tail })` + ParseBox 将 tail 映射成 input patch（仍会走 schema 校验）
 
 ## Chat 集成
 

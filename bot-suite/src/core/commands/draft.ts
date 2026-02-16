@@ -1,5 +1,7 @@
-import type { ExecCtx, Interceptor } from '@pluxel/cmd'
-import type { AnyStdSchema, CmdBuilder, TextConfig, VSchema } from '@pluxel/cmd'
+import { defaultTokenizer, textTail } from '@pluxel/cmd'
+import type { ExecCtx, Infer, Interceptor, Schema } from '@pluxel/cmd'
+import type { CmdBuilder, TextConfig } from '@pluxel/cmd'
+import { Runtime } from '@sinclair/parsebox'
 
 type Awaitable<T> = T | Promise<T>
 
@@ -8,14 +10,11 @@ type HandledState<S extends BuilderState> = { hasHandle: true; hasText: S['hasTe
 
 const DRAFT_BUILT = Symbol.for('pluxel:chatbots:cmd-draft')
 
-type InferOut<S extends AnyStdSchema> =
-	NonNullable<S['~standard']['types']> extends { output: infer O } ? O : unknown
-
 export type BuiltCommandDraft<Ctx extends ExecCtx, R> = {
 	readonly [DRAFT_BUILT]: 'command'
 	readonly apply: <S extends BuilderState>(
 		b: CmdBuilder<any, any, S>,
-	) => { builder: CmdBuilder<any, any, HandledState<S>>; text?: Omit<TextConfig, 'triggers' | 'tokenize'> }
+	) => { builder: CmdBuilder<any, any, HandledState<S>>; text?: Omit<TextConfig, 'triggers'> }
 }
 
 export type BuiltOpDraft<Ctx extends ExecCtx, R> = {
@@ -41,38 +40,57 @@ export function isBuiltOpDraft<Ctx extends ExecCtx = ExecCtx>(value: unknown): v
 
 type Step = (b: any) => any
 
-export type CommandDraft<Ctx extends ExecCtx, SIn extends AnyStdSchema = VSchema> = {
-	input<S extends AnyStdSchema>(schema: S): CommandDraft<Ctx, S>
-	output<SOut extends AnyStdSchema>(schema: SOut): CommandDraft<Ctx, SIn>
-	intercept<TState>(itc: Interceptor<TState>): CommandDraft<Ctx, SIn>
+const argsTail = (map: (args: string[]) => Record<string, unknown>) =>
+	textTail(
+		new Runtime.Module({
+			Main: Runtime.Until(['\n'], (s) => {
+				const raw = String(s ?? '').trim()
+				const tokens = raw ? defaultTokenizer(raw) : []
+				const args = tokens.map((t) => t.value)
+				const patch = map(args)
+				if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return {}
+				const out: Record<string, unknown> = {}
+				for (const [k, v] of Object.entries(patch)) {
+					if (v === undefined) continue
+					out[k] = v
+				}
+				return out
+			}),
+		}),
+		'Main',
+	)
+
+export type CommandDraft<Ctx extends ExecCtx, I = unknown> = {
+	input<S extends Schema>(schema: S): CommandDraft<Ctx, Infer<S>>
+	output<SOut extends Schema>(schema: SOut): CommandDraft<Ctx, I>
+	intercept<TState>(itc: Interceptor<TState>): CommandDraft<Ctx, I>
+
+	/** Configure cmd text execution (tail DSL only; triggers are provided by `kit.command(...)`). */
+	text(cfg?: Omit<TextConfig, 'triggers'>): CommandDraft<Ctx, I>
 
 	/**
-	 * Configure text argv parsing for this command.
+	 * Convenience for positional args mapping.
 	 *
-	 * - `.argv()` keeps the default (type-flag; derive flags from input schema)
-	 * - `.argv(map)` maps parsed argv into input candidate (positionals, custom flags, ...)
-	 * - `.argv({ ... })` provides full argv config
+	 * This compiles to `text({ tail })` and maps the tail string into a validated object input.
 	 */
-	argv(): CommandDraft<Ctx, SIn>
-	argv(map: NonNullable<TextConfig['map']>): CommandDraft<Ctx, SIn>
-	argv(cfg: Omit<TextConfig, 'triggers' | 'tokenize'>): CommandDraft<Ctx, SIn>
+	args(map: (args: string[]) => Record<string, unknown>): CommandDraft<Ctx, I>
 
-	handle<R>(fn: (input: InferOut<SIn>, ctx: Ctx) => Awaitable<R>): BuiltCommandDraft<Ctx, R>
+	handle<R>(fn: (input: I, ctx: Ctx) => Awaitable<R>): BuiltCommandDraft<Ctx, R>
 }
 
-export type OpDraft<Ctx extends ExecCtx, SIn extends AnyStdSchema = VSchema> = {
-	input<S extends AnyStdSchema>(schema: S): OpDraft<Ctx, S>
-	output<SOut extends AnyStdSchema>(schema: SOut): OpDraft<Ctx, SIn>
-	intercept<TState>(itc: Interceptor<TState>): OpDraft<Ctx, SIn>
-	handle<R>(fn: (input: InferOut<SIn>, ctx: Ctx) => Awaitable<R>): BuiltOpDraft<Ctx, R>
+export type OpDraft<Ctx extends ExecCtx, I = unknown> = {
+	input<S extends Schema>(schema: S): OpDraft<Ctx, Infer<S>>
+	output<SOut extends Schema>(schema: SOut): OpDraft<Ctx, I>
+	intercept<TState>(itc: Interceptor<TState>): OpDraft<Ctx, I>
+	handle<R>(fn: (input: I, ctx: Ctx) => Awaitable<R>): BuiltOpDraft<Ctx, R>
 }
 
-function createCommandDraft<Ctx extends ExecCtx, SIn extends AnyStdSchema>(
+function createCommandDraft<Ctx extends ExecCtx, I>(
 	steps: readonly Step[],
-	text: Omit<TextConfig, 'triggers' | 'tokenize'> | undefined,
-): CommandDraft<Ctx, SIn> {
-	const push = (step: Step, nextText?: Omit<TextConfig, 'triggers' | 'tokenize'> | undefined) =>
-		createCommandDraft<Ctx, SIn>([...steps, step], nextText === undefined ? text : nextText)
+	text: Omit<TextConfig, 'triggers'> | undefined,
+): CommandDraft<Ctx, I> {
+	const push = (step: Step, nextText?: Omit<TextConfig, 'triggers'> | undefined) =>
+		createCommandDraft<Ctx, I>([...steps, step], nextText === undefined ? text : nextText)
 
 	return {
 		input(schema: any) {
@@ -84,11 +102,11 @@ function createCommandDraft<Ctx extends ExecCtx, SIn extends AnyStdSchema>(
 		intercept(itc: any) {
 			return push((b) => b.intercept(itc))
 		},
-		argv(arg?: any) {
-			// `.argv()` is a semantic marker; default argv config is handled by cmdkit when `.text()` is applied.
-			if (arguments.length === 0) return push((b) => b, text)
-			if (typeof arg === 'function') return push((b) => b, { map: arg })
-			return push((b) => b, arg)
+		text(cfg?: any) {
+			return push((b) => b, cfg === undefined ? text : cfg)
+		},
+		args(map: any) {
+			return push((b) => b, { tail: argsTail(map) })
 		},
 		handle(fn) {
 			const snapSteps = [...steps]
@@ -106,8 +124,8 @@ function createCommandDraft<Ctx extends ExecCtx, SIn extends AnyStdSchema>(
 	}
 }
 
-function createOpDraft<Ctx extends ExecCtx, SIn extends AnyStdSchema>(steps: readonly Step[]): OpDraft<Ctx, SIn> {
-	const push = (step: Step) => createOpDraft<Ctx, SIn>([...steps, step])
+function createOpDraft<Ctx extends ExecCtx, I>(steps: readonly Step[]): OpDraft<Ctx, I> {
+	const push = (step: Step) => createOpDraft<Ctx, I>([...steps, step])
 
 	return {
 		input(schema: any) {
@@ -134,10 +152,10 @@ function createOpDraft<Ctx extends ExecCtx, SIn extends AnyStdSchema>(steps: rea
 	}
 }
 
-export function cmd<Ctx extends ExecCtx>(): CommandDraft<Ctx, VSchema> {
+export function cmd<Ctx extends ExecCtx>(): CommandDraft<Ctx, unknown> {
 	return createCommandDraft<Ctx, any>([], undefined) as any
 }
 
-export function op<Ctx extends ExecCtx>(): OpDraft<Ctx, VSchema> {
+export function op<Ctx extends ExecCtx>(): OpDraft<Ctx, unknown> {
 	return createOpDraft<Ctx, any>([]) as any
 }

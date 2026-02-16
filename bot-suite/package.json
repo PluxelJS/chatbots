@@ -31,8 +31,6 @@
     },
     "./package.json": "./package.json"
   },
-  "main": "./dist/index.mjs",
-  "module": "./dist/index.mjs",
   "types": "./dist/index.d.mts",
   "files": [
     "dist",
@@ -47,7 +45,7 @@
   "dependencies": {
     "@mikro-orm/libsql": "^6.6.6",
     "@pluxel/cmd": "workspace:*",
-    "valibot": "^1.2.0"
+    "@sinclair/parsebox": "^0.11.1"
   },
   "peerDependencies": {
     "pluxel-plugin-bot-core": "workspace:*",

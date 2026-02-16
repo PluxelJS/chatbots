@@ -13,9 +13,6 @@ import { CmdError } from '@pluxel/cmd'
 
 import { Chatbots } from '../plugin'
 import type { ChatbotsCommandContext } from '../types'
-import { ChatCommand } from './decorators'
-import { InstallChatCommands } from './install'
-import { cmd } from './draft'
 
 type HostCtx = { host: Host; chatbots: Chatbots }
 
@@ -97,17 +94,15 @@ function makeCtx(): ChatbotsCommandContext {
 describe('chatbots cmdkit (plugin lifecycle integration)', () => {
 	it('registers text command, dispatches, and cleans up on plugin unload', async () => {
 		@Plugin({ name: 'cmd-test-a', type: 'service' })
-		class CmdTestA extends BasePlugin {
-			constructor(private readonly chatbots: Chatbots) {
-				super()
+			class CmdTestA extends BasePlugin {
+				constructor(private readonly chatbots: Chatbots) {
+					super()
+				}
+
+				async init(_abort: AbortSignal): Promise<void> {
+					this.chatbots.cmd.command({ localId: 'ping', triggers: ['ping'], perm: false }, (c) => c.handle(() => 'pong'))
+				}
 			}
-
-			@InstallChatCommands()
-			async init(_abort: AbortSignal): Promise<void> {}
-
-			@ChatCommand({ localId: 'ping', triggers: ['ping'], perm: false })
-			ping = cmd<ChatbotsCommandContext>().argv().handle(() => 'pong')
-		}
 
 		await withChatbotsHost([CmdTestA], async ({ host, chatbots }) => {
 			const registry = getRuntimeRegistry(chatbots)
@@ -134,30 +129,26 @@ describe('chatbots cmdkit (plugin lifecycle integration)', () => {
 
 	it('supports plugin replace without leaking duplicate commands', async () => {
 		@Plugin({ name: 'cmd-test-a', type: 'service' })
-		class CmdTestA_v1 extends BasePlugin {
-			constructor(private readonly chatbots: Chatbots) {
-				super()
+			class CmdTestA_v1 extends BasePlugin {
+				constructor(private readonly chatbots: Chatbots) {
+					super()
+				}
+
+				async init(_abort: AbortSignal): Promise<void> {
+					this.chatbots.cmd.command({ localId: 'ping', triggers: ['ping'], perm: false }, (c) => c.handle(() => 'v1'))
+				}
 			}
-
-			@InstallChatCommands()
-			async init(_abort: AbortSignal): Promise<void> {}
-
-			@ChatCommand({ localId: 'ping', triggers: ['ping'], perm: false })
-			ping = cmd<ChatbotsCommandContext>().argv().handle(() => 'v1')
-		}
 
 		@Plugin({ name: 'cmd-test-a', type: 'service' })
-		class CmdTestA_v2 extends BasePlugin {
-			constructor(private readonly chatbots: Chatbots) {
-				super()
+			class CmdTestA_v2 extends BasePlugin {
+				constructor(private readonly chatbots: Chatbots) {
+					super()
+				}
+
+				async init(_abort: AbortSignal): Promise<void> {
+					this.chatbots.cmd.command({ localId: 'ping', triggers: ['ping'], perm: false }, (c) => c.handle(() => 'v2'))
+				}
 			}
-
-			@InstallChatCommands()
-			async init(_abort: AbortSignal): Promise<void> {}
-
-			@ChatCommand({ localId: 'ping', triggers: ['ping'], perm: false })
-			ping = cmd<ChatbotsCommandContext>().argv().handle(() => 'v2')
-		}
 
 		await withChatbotsHost([CmdTestA_v1], async ({ host, chatbots }) => {
 			const registry = getRuntimeRegistry(chatbots)
@@ -184,17 +175,15 @@ describe('chatbots cmdkit (plugin lifecycle integration)', () => {
 
 	it('respects cmdPermDefaultEffect for undeclared commands', async () => {
 		@Plugin({ name: 'cmd-test-perm', type: 'service' })
-		class CmdPermTest extends BasePlugin {
-			constructor(private readonly chatbots: Chatbots) {
-				super()
+			class CmdPermTest extends BasePlugin {
+				constructor(private readonly chatbots: Chatbots) {
+					super()
+				}
+
+				async init(_abort: AbortSignal): Promise<void> {
+					this.chatbots.cmd.command({ localId: 'secure', triggers: ['secure'] }, (c) => c.handle(() => 'ok'))
+				}
 			}
-
-			@InstallChatCommands()
-			async init(_abort: AbortSignal): Promise<void> {}
-
-			@ChatCommand({ localId: 'secure', triggers: ['secure'] })
-			secure = cmd<ChatbotsCommandContext>().argv().handle(() => 'ok')
-		}
 
 		// allow => should pass without grants
 		await withChatbotsHost([CmdPermTest], async ({ chatbots }) => {
@@ -218,30 +207,26 @@ describe('chatbots cmdkit (plugin lifecycle integration)', () => {
 
 	it('infers permission namespace from caller plugin id', async () => {
 		@Plugin({ name: 'cmd-test-ns-a', type: 'service' })
-		class CmdNsA extends BasePlugin {
-			constructor(private readonly chatbots: Chatbots) {
-				super()
+			class CmdNsA extends BasePlugin {
+				constructor(private readonly chatbots: Chatbots) {
+					super()
+				}
+
+				async init(_abort: AbortSignal): Promise<void> {
+					this.chatbots.cmd.command({ localId: 'secure', triggers: ['secure'], perm: true }, (c) => c.handle(() => 'ok'))
+				}
 			}
-
-			@InstallChatCommands()
-			async init(_abort: AbortSignal): Promise<void> {}
-
-			@ChatCommand({ localId: 'secure', triggers: ['secure'], perm: true })
-			secure = cmd<ChatbotsCommandContext>().argv().handle(() => 'ok')
-		}
 
 		@Plugin({ name: 'cmd-test-ns-b', type: 'service' })
-		class CmdNsB extends BasePlugin {
-			constructor(private readonly chatbots: Chatbots) {
-				super()
+			class CmdNsB extends BasePlugin {
+				constructor(private readonly chatbots: Chatbots) {
+					super()
+				}
+
+				async init(_abort: AbortSignal): Promise<void> {
+					this.chatbots.cmd.command({ localId: 'secure', triggers: ['secure2'], perm: true }, (c) => c.handle(() => 'ok'))
+				}
 			}
-
-			@InstallChatCommands()
-			async init(_abort: AbortSignal): Promise<void> {}
-
-			@ChatCommand({ localId: 'secure', triggers: ['secure2'], perm: true })
-			secure = cmd<ChatbotsCommandContext>().argv().handle(() => 'ok')
-		}
 
 		await withChatbotsHost([CmdNsA, CmdNsB], async ({ chatbots }) => {
 			const perms = chatbots.runtime.permissions

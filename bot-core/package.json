@@ -20,8 +20,7 @@
     "@pluxel/cmd": "workspace:^",
     "pluxel-plugin-kook": "workspace:^",
     "pluxel-plugin-milky": "workspace:^",
-    "pluxel-plugin-telegram": "workspace:^",
-    "valibot": "^1.2.0"
+    "pluxel-plugin-telegram": "workspace:^"
   },
   "exports": {
     ".": {

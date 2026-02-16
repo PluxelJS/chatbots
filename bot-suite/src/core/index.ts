@@ -10,6 +10,4 @@ export * from './users'
 
 export * from '../permissions/permission'
 
-export * from './commands/decorators'
-export * from './commands/install'
-export * from './commands/draft'
+export * from './commands/spec'
