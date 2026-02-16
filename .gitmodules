@@ -1,3 +1,4 @@
 [submodule "vendor/pluxel-template"]
 	path = vendor/pluxel-template
 	url = https://github.com/ahdg6/pluxel-template.git
+	branch = main

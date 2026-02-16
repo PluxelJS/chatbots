@@ -1,0 +1,21 @@
+{
+	"folders": [
+		{
+			"name": "🤖 pluxel-chatbots",
+			"path": "."
+		},
+		{
+			"name": "🌱 upstream: pluxel-template",
+			"path": "vendor/pluxel-template"
+		}
+	],
+	"settings": {
+		"files.exclude": {
+			"**/.turbo": true,
+			"**/node_modules": true,
+			"vendor/pluxel-template/.turbo": true,
+			"vendor/pluxel-template/node_modules": true
+		}
+	}
+}
+
