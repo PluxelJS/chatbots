@@ -291,3 +291,6 @@ bot-suite/data/*.sqlite
 # Local plugin runtime data (Pluxel)
 .pluxel/
 data/
+
+# Workspace-only: vendor is linked from pluxel-workspace/pluxel-template
+vendor/pluxel-template

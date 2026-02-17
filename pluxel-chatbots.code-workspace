@@ -6,16 +6,13 @@
 		},
 		{
 			"name": "🌱 upstream: pluxel-template",
-			"path": "vendor/pluxel-template"
+			"path": "../pluxel-template"
 		}
 	],
 	"settings": {
 		"files.exclude": {
 			"**/.turbo": true,
-			"**/node_modules": true,
-			"vendor/pluxel-template/.turbo": true,
-			"vendor/pluxel-template/node_modules": true
+			"**/node_modules": true
 		}
 	}
 }
-

@@ -4,19 +4,23 @@ set -eu
 cmd="${1:-}"
 shift || true
 
+if [ ! -d "../pluxel-template/.git" ] && [ ! -f "../pluxel-template/.git" ]; then
+	echo "[template] missing ../pluxel-template (requires pluxel-workspace layout)" >&2
+	exit 2
+fi
+
 case "$cmd" in
 	status)
-		git -C vendor/pluxel-template status -sb
+		git -C ../pluxel-template status -sb
 		;;
 	pull)
-		git -C vendor/pluxel-template pull --ff-only
+		git -C ../pluxel-template pull --ff-only
 		;;
 	update)
-		git submodule update --remote --merge vendor/pluxel-template
+		git -C ../pluxel-template pull --ff-only
 		;;
 	*)
 		echo "Usage: scripts/template.sh <status|pull|update>" >&2
 		exit 2
 		;;
 esac
-

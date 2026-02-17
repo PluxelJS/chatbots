@@ -5,7 +5,7 @@
 	"version": "0.1.0",
 	"description": "Chatbots product workspace (downstream of pluxel-template).",
 	"scripts": {
-		"bootstrap": "sh ./vendor/pluxel-template/scripts/bootstrap.sh",
+		"bootstrap": "sh ../scripts/bootstrap-product.sh",
 		"dev": "node --conditions=@pluxel/hmr src/host.ts",
 		"hmr:doctor": "pluxel hmr doctor",
 		"template:status": "sh ./scripts/template.sh status",
