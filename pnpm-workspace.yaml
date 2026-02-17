@@ -6,7 +6,7 @@ packages:
   - milky
   - telegram
   - plugins/**
-  # upstream (symlink: vendor/pluxel-template -> ../../pluxel-template)
+  # upstream (thin vendor: vendor/pluxel-template/{packages,plugins,agents} -> ../../../pluxel-template/{...})
   - vendor/pluxel-template/packages/**
   - vendor/pluxel-template/plugins/**
   - '!vendor/pluxel-template/plugins/native/napi-rs/*__*'
