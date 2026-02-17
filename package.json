@@ -8,9 +8,6 @@
 		"bootstrap": "sh ../scripts/bootstrap-product.sh",
 		"dev": "node --conditions=@pluxel/hmr src/host.ts",
 		"hmr:doctor": "pluxel hmr doctor",
-		"template:status": "sh ./scripts/template.sh status",
-		"template:pull": "sh ./scripts/template.sh pull",
-		"template:update": "sh ./scripts/template.sh update",
 		"build": "turbo build",
 		"test": "turbo run test --affected --concurrency=1 --output-logs=new-only",
 		"test:full": "vitest run"
