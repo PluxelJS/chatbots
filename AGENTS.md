@@ -1,8 +1,7 @@
 <INSTRUCTIONS>
 本仓库要求在 `pluxel-workspace/` 多仓布局下使用：
 
-- 源码依赖：`vendor/pluxel-template/{packages,plugins,agents}` 会由 `sh ../scripts/link-template.sh` 自动生成（thin symlink tree）。
-- 若 vendor 缺失：直接运行 `pnpm run bootstrap`（会自动补齐链接）。
+- 源码依赖：`vendor/pluxel-template/{packages,plugins,agents}`（thin vendor mount，由工作区工具维护）。
 - Codex/LLM 工作流与 skills 以模板仓库为准（不要在本仓库复制一套）。
 
 入口与规则请直接看：
