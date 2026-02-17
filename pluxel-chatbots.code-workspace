@@ -10,9 +10,14 @@
 		}
 	],
 	"settings": {
+		"git.ignoredRepositories": [
+			"vendor/pluxel-template",
+			"vendor/pluxel"
+		],
 		"files.exclude": {
 			"**/.turbo": true,
-			"**/node_modules": true
+			"**/node_modules": true,
+			"**/vendor": true
 		}
 	}
 }

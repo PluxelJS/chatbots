@@ -294,3 +294,4 @@ data/
 
 # Workspace-only: vendor is linked from pluxel-workspace/pluxel-template
 vendor/pluxel-template
+vendor/pluxel

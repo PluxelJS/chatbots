@@ -5,7 +5,7 @@
 	"version": "0.1.0",
 	"description": "Chatbots product workspace (downstream of pluxel-template).",
 	"scripts": {
-		"bootstrap": "sh ../ws.sh bootstrap-product",
+		"bootstrap": "node ./setup.mjs bootstrap",
 		"dev": "node --conditions=@pluxel/hmr src/host.ts",
 		"hmr:doctor": "pluxel hmr doctor",
 		"build": "turbo build",
@@ -13,9 +13,9 @@
 		"test:full": "vitest run"
 	},
 	"dependencies": {
-		"@pluxel/cli": "link:../pluxel/packages/cli",
-		"@pluxel/core": "link:../pluxel/packages/core",
-		"@pluxel/hmr": "link:../pluxel/packages/hmr"
+		"@pluxel/cli": "link:./vendor/pluxel/packages/cli",
+		"@pluxel/core": "link:./vendor/pluxel/packages/core",
+		"@pluxel/hmr": "link:./vendor/pluxel/packages/hmr"
 	},
 	"devDependencies": {
 		"@biomejs/biome": "^2.3.14",

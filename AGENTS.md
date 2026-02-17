@@ -1,10 +1,10 @@
 <INSTRUCTIONS>
-本仓库要求在 `pluxel-workspace/` 多仓布局下使用：
+下游仓库只做一件事：通过 symlink vendor 复用上游源码。
 
-- 源码依赖：`vendor/pluxel-template/{packages,plugins,agents}`（thin vendor mount，由工作区工具维护）。
-- Codex/LLM 工作流与 skills 以模板仓库为准（不要在本仓库复制一套）。
+- 自举：`pnpm run bootstrap`（= `node setup.mjs bootstrap`）
+- 上游挂载：`vendor/pluxel-template/*`（本地生成，默认 gitignore）
+- 引擎挂载：`vendor/pluxel/*`（本地生成）
+- 找不到上游时：设置 `PLUXEL_TEMPLATE_DIR` / `PLUXEL_DIR`
 
-入口与规则请直接看：
-- `vendor/pluxel-template/AGENTS.md`
-- `vendor/pluxel-template/agents/skills/<skill>/SKILL.md`
+LLM/Codex 规则以模板为准：`vendor/pluxel-template/AGENTS.md`
 </INSTRUCTIONS>
